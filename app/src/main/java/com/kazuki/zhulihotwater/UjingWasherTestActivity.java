@@ -210,7 +210,7 @@ public class UjingWasherTestActivity extends Activity {
             }
             int modelId = Integer.parseInt(washModelInput.getText().toString().trim());
             int temperatureId = Integer.parseInt(temperatureInput.getText().toString().trim());
-            order = api.createOrder(session, programInfo, modelId, temperatureId);
+            order = api.createOrder(session, programInfo, modelId, temperatureId, null, null);
             JSONObject detail = api.getOrderDetail(session, order.orderId);
             return "订单已创建\norderId：" + order.orderId
                     + "\n设备号：" + detail.optString("deviceNo")

@@ -59,6 +59,8 @@ data class LocalDeviceShortcut(
     val deviceType: LocalDeviceType,
     val qrUrl: String? = null,
     val cd: String? = null,
+    val deviceNo: String? = null,
+    val storeName: String? = null,
     val lastStatus: String? = null,
     val sortOrder: Int = 0
 )
@@ -94,7 +96,20 @@ data class WasherModelUi(
     val id: Int,
     val name: String,
     val priceFen: Int,
-    val timeMinutes: Int
+    val timeMinutes: Int,
+    val additionGroups: List<WasherAdditionGroupUi> = emptyList()
+)
+
+data class WasherAdditionGroupUi(
+    val key: String,
+    val name: String,
+    val options: List<WasherAdditionOptionUi>
+)
+
+data class WasherAdditionOptionUi(
+    val id: Int,
+    val name: String,
+    val priceFen: Int
 )
 
 data class WasherOrderUi(
@@ -192,7 +207,7 @@ interface ShuiRuntimeActions {
     fun checkUjingStatus()
     fun scanWasherWithCamera()
     fun scanWasher(qrCode: String)
-    fun createWasherOrder(washModelId: Int, temperatureId: Int)
+    fun createWasherOrder(washModelId: Int, temperatureId: Int, detergentGearId: Int?, disinfectantGearId: Int?)
     fun refreshCurrentWasherOrder()
     fun createWasherOrder()
     fun payCurrentWasherOrderWithAlipay()
@@ -204,6 +219,7 @@ interface ShuiRuntimeActions {
     fun createDrinkingWaterOrder()
     fun refreshCurrentDrinkingWaterOrder()
     fun refreshLocalDevices()
+    fun addPresetWasherDevice(name: String, qrCode: String)
     fun renameLocalDevice(deviceId: String, name: String)
     fun deleteLocalDevice(deviceId: String)
 }
@@ -490,7 +506,7 @@ class ShuiRuntimeController private constructor(
         }
     }
 
-    override fun createWasherOrder(washModelId: Int, temperatureId: Int) {
+    override fun createWasherOrder(washModelId: Int, temperatureId: Int, detergentGearId: Int?, disinfectantGearId: Int?) {
         if (state.washerOrder.state == RuntimeTaskState.Loading) return
 
         runUjingAction(
@@ -499,7 +515,7 @@ class ShuiRuntimeController private constructor(
             failure = { message -> copy(washerOrder = RuntimeActionStatus(RuntimeTaskState.Failure, message)) },
             autoSuccess = false
         ) {
-            val detail = ujing.createOrder(washModelId, temperatureId).toUi()
+            val detail = ujing.createOrder(washModelId, temperatureId, detergentGearId, disinfectantGearId).toUi()
             postState {
                 state = state.copy(
                     currentWasherOrder = detail,
@@ -532,7 +548,7 @@ class ShuiRuntimeController private constructor(
             state = state.copy(washerOrder = RuntimeActionStatus(RuntimeTaskState.Failure, "请先扫描洗衣机并选择套餐"))
             return
         }
-        createWasherOrder(modelId, 1)
+        createWasherOrder(modelId, 1, null, null)
     }
 
     override fun payCurrentWasherOrderWithAlipay() {
@@ -746,12 +762,68 @@ class ShuiRuntimeController private constructor(
     }
 
     override fun refreshLocalDevices() {
-        val devices = loadLocalDevices()
-        val now = formatRefreshTime(System.currentTimeMillis())
-        prefs.edit().putString("local_devices_last_refreshed", now).apply()
+        if (state.washerScan.state == RuntimeTaskState.Loading) return
+        runUjingAction(
+            loading = { copy(washerScan = RuntimeActionStatus(RuntimeTaskState.Loading, "正在刷新设备状态")) },
+            success = { this },
+            failure = { message -> copy(washerScan = RuntimeActionStatus(RuntimeTaskState.Failure, message)) },
+            autoSuccess = false
+        ) {
+            val currentDevices = loadLocalDevices()
+            val refreshedDevices = currentDevices.map { device ->
+                if (device.deviceType != LocalDeviceType.Washer || device.qrUrl.isNullOrBlank()) {
+                    device
+                } else {
+                    try {
+                        val program = ujing.refreshWasherStatus(device.qrUrl).toUi()
+                        device.copy(
+                            id = program.deviceId.ifBlank { device.id },
+                            deviceNo = program.deviceNo.ifBlank { device.deviceNo.orEmpty() }.ifBlank { null },
+                            storeName = program.storeName.ifBlank { device.storeName.orEmpty() }.ifBlank { null },
+                            lastStatus = washerProgramStatusText(program)
+                        )
+                    } catch (e: Exception) {
+                        device.copy(lastStatus = readableError(e))
+                    }
+                }
+            }
+            val now = formatRefreshTime(System.currentTimeMillis())
+            saveLocalDevices(refreshedDevices)
+            prefs.edit().putString("local_devices_last_refreshed", now).apply()
+            postState {
+                state = state.copy(
+                    localDevices = refreshedDevices,
+                    localDevicesLastRefreshed = now,
+                    washerScan = RuntimeActionStatus(RuntimeTaskState.Success, "设备状态已刷新")
+                )
+            }
+        }
+    }
+
+    override fun addPresetWasherDevice(name: String, qrCode: String) {
+        val normalizedName = name.trim()
+        val normalizedQr = qrCode.trim()
+        if (normalizedName.isEmpty() || normalizedQr.isEmpty()) return
+        val id = washerUuid(normalizedQr) ?: "preset-${normalizedQr.hashCode()}"
+        val existing = state.localDevices.firstOrNull { it.id == id || it.qrUrl == normalizedQr }
+        val shortcut = LocalDeviceShortcut(
+            id = existing?.id ?: id,
+            customName = normalizedName,
+            deviceType = LocalDeviceType.Washer,
+            qrUrl = normalizedQr,
+            deviceNo = existing?.deviceNo,
+            storeName = existing?.storeName,
+            lastStatus = existing?.lastStatus ?: "待刷新",
+            sortOrder = existing?.sortOrder ?: state.localDevices.size
+        )
+        val devices = state.localDevices
+            .filterNot { it.id == shortcut.id || it.qrUrl == normalizedQr }
+            .plus(shortcut)
+            .sortedBy { it.sortOrder }
+        saveLocalDevices(devices)
         state = state.copy(
             localDevices = devices,
-            localDevicesLastRefreshed = now
+            washerScan = RuntimeActionStatus(RuntimeTaskState.Success, "已添加 $normalizedName")
         )
     }
 
@@ -776,18 +848,20 @@ class ShuiRuntimeController private constructor(
     }
 
     private fun upsertWasherShortcut(program: WasherProgramUi, qrCode: String): List<LocalDeviceShortcut> {
-        val existing = state.localDevices.firstOrNull { it.id == program.deviceId }
+        val existing = state.localDevices.firstOrNull { it.id == program.deviceId || it.qrUrl == qrCode }
         val shortcut = LocalDeviceShortcut(
             id = program.deviceId,
             customName = existing?.customName?.takeIf { it.isNotBlank() }
                 ?: program.deviceNo.ifBlank { "洗衣机 ${program.deviceId}" },
             deviceType = LocalDeviceType.Washer,
             qrUrl = qrCode,
+            deviceNo = program.deviceNo.ifBlank { existing?.deviceNo.orEmpty() }.ifBlank { null },
+            storeName = program.storeName.ifBlank { existing?.storeName.orEmpty() }.ifBlank { null },
             lastStatus = if (program.createOrderEnabled) "可下单" else program.reason.ifBlank { "不可下单" },
             sortOrder = existing?.sortOrder ?: state.localDevices.size
         )
         return state.localDevices
-            .filterNot { it.id == program.deviceId }
+            .filterNot { it.id == program.deviceId || it.qrUrl == qrCode }
             .plus(shortcut)
             .sortedBy { it.sortOrder }
     }
@@ -822,6 +896,33 @@ class ShuiRuntimeController private constructor(
         }
     }
 
+    private fun washerUuid(qrCode: String): String? {
+        val raw = qrCode.trim()
+        if (raw.isBlank()) return null
+        return try {
+            Uri.parse(raw).getQueryParameter("uuid")?.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun washerProgramStatusText(program: WasherProgramUi): String {
+        if (program.createOrderEnabled) return "可下单"
+        return program.reason.ifBlank {
+            when (program.status) {
+                "0" -> "可下单"
+                "1" -> "使用中"
+                "2" -> "暂停中"
+                "3" -> "故障"
+                else -> "不可下单"
+            }
+        }
+    }
+
+    private fun readableError(error: Exception): String {
+        return error.message?.takeIf { it.isNotBlank() }?.take(24) ?: "刷新失败"
+    }
+
     private fun loadLocalDevices(): List<LocalDeviceShortcut> {
         val raw = prefs.getString("local_devices", "") ?: ""
         if (raw.isBlank()) return emptyList()
@@ -838,6 +939,8 @@ class ShuiRuntimeController private constructor(
                                 .getOrDefault(LocalDeviceType.Unknown),
                             qrUrl = row.optString("qrUrl").ifBlank { null },
                             cd = row.optString("cd").ifBlank { null },
+                            deviceNo = row.optString("deviceNo").ifBlank { null },
+                            storeName = row.optString("storeName").ifBlank { null },
                             lastStatus = row.optString("lastStatus").ifBlank { null },
                             sortOrder = row.optInt("sortOrder", i)
                         )
@@ -859,6 +962,8 @@ class ShuiRuntimeController private constructor(
                     .put("deviceType", device.deviceType.name)
                     .put("qrUrl", device.qrUrl ?: "")
                     .put("cd", device.cd ?: "")
+                    .put("deviceNo", device.deviceNo ?: "")
+                    .put("storeName", device.storeName ?: "")
                     .put("lastStatus", device.lastStatus ?: "")
                     .put("sortOrder", device.sortOrder)
             )
@@ -1154,7 +1259,20 @@ class ShuiRuntimeController private constructor(
                     id = model.id,
                     name = model.name,
                     priceFen = model.price,
-                    timeMinutes = model.time
+                    timeMinutes = model.time,
+                    additionGroups = model.additions.map { addition ->
+                        WasherAdditionGroupUi(
+                            key = addition.key,
+                            name = addition.name,
+                            options = addition.options.map { option ->
+                                WasherAdditionOptionUi(
+                                    id = option.id,
+                                    name = option.name,
+                                    priceFen = option.price
+                                )
+                            }
+                        )
+                    }
                 )
             }
         )
@@ -1231,7 +1349,7 @@ object PreviewShuiRuntimeActions : ShuiRuntimeActions {
     override fun checkUjingStatus() = Unit
     override fun scanWasherWithCamera() = Unit
     override fun scanWasher(qrCode: String) = Unit
-    override fun createWasherOrder(washModelId: Int, temperatureId: Int) = Unit
+    override fun createWasherOrder(washModelId: Int, temperatureId: Int, detergentGearId: Int?, disinfectantGearId: Int?) = Unit
     override fun refreshCurrentWasherOrder() = Unit
     override fun createWasherOrder() = Unit
     override fun payCurrentWasherOrderWithAlipay() = Unit
@@ -1243,6 +1361,7 @@ object PreviewShuiRuntimeActions : ShuiRuntimeActions {
     override fun createDrinkingWaterOrder() = Unit
     override fun refreshCurrentDrinkingWaterOrder() = Unit
     override fun refreshLocalDevices() = Unit
+    override fun addPresetWasherDevice(name: String, qrCode: String) = Unit
     override fun renameLocalDevice(deviceId: String, name: String) = Unit
     override fun deleteLocalDevice(deviceId: String) = Unit
 }

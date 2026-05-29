@@ -1,9 +1,12 @@
 package com.kazuki.zhulihotwater.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
@@ -16,6 +19,7 @@ import androidx.compose.animation.fadeOut
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -86,6 +90,7 @@ import com.kazuki.zhulihotwater.runtime.ScanRouting
 import com.kazuki.zhulihotwater.runtime.ShuiRuntimeActions
 import com.kazuki.zhulihotwater.runtime.ShuiRuntimeProvider
 import com.kazuki.zhulihotwater.runtime.ShuiRuntimeState
+import com.kazuki.zhulihotwater.runtime.WasherProgramUi
 import com.kazuki.zhulihotwater.runtime.classifyScanRouting
 import com.kazuki.zhulihotwater.runtime.homeTasks
 import org.json.JSONArray
@@ -117,12 +122,31 @@ private enum class AccountKind {
 fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
     var route by remember { mutableStateOf<ShuiRoute>(ShuiRoute.Tab(MainTab.Home)) }
     var showAddWasher by remember { mutableStateOf(false) }
+    var showPresetWasherPicker by remember { mutableStateOf(false) }
     var selectedMenuDevice by remember { mutableStateOf<LocalDeviceShortcut?>(null) }
     var editingDevice by remember { mutableStateOf<LocalDeviceShortcut?>(null) }
     var scannerMessage by remember { mutableStateOf<String?>(null) }
     var openingVisible by remember { mutableStateOf(true) }
     val runtimeState = runtime.state
     val context = LocalContext.current
+    val permissionPrefs = remember(context) { context.getSharedPreferences("shui_permissions", Context.MODE_PRIVATE) }
+    var showPermissionIntro by remember {
+        mutableStateOf(!permissionPrefs.getBoolean("first_launch_permissions_requested", false))
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permissionPrefs.edit().putBoolean("first_launch_permissions_requested", true).apply()
+        showPermissionIntro = false
+    }
+    val requestAllRuntimePermissions = {
+        val missing = shuiRuntimePermissions()
+            .filter { permission -> ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED }
+            .toTypedArray()
+        permissionPrefs.edit().putBoolean("first_launch_permissions_requested", true).apply()
+        showPermissionIntro = false
+        if (missing.isNotEmpty()) {
+            permissionLauncher.launch(missing)
+        }
+    }
     LaunchedEffect(Unit) {
         delay(ShuiMotion.Opening.toLong())
         openingVisible = false
@@ -167,8 +191,10 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
         is ShuiRoute.Tab -> (route as ShuiRoute.Tab).tab
     }
 
-    BackHandler(enabled = showAddWasher || selectedMenuDevice != null || editingDevice != null || route !is ShuiRoute.Tab) {
+    BackHandler(enabled = showPermissionIntro || showPresetWasherPicker || showAddWasher || selectedMenuDevice != null || editingDevice != null || route !is ShuiRoute.Tab) {
         when {
+            showPermissionIntro -> requestAllRuntimePermissions()
+            showPresetWasherPicker -> showPresetWasherPicker = false
             editingDevice != null -> editingDevice = null
             selectedMenuDevice != null -> selectedMenuDevice = null
             showAddWasher -> showAddWasher = false
@@ -285,7 +311,19 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
             AnimatedVisibility(visible = showAddWasher, enter = shuiDialogEnter(), exit = shuiDialogExit()) {
                 AddWasherDialog(
                     onDismiss = { showAddWasher = false },
-                    onScan = launchWasherScanner
+                    onScan = launchWasherScanner,
+                    onPreset = { showPresetWasherPicker = true }
+                )
+            }
+            AnimatedVisibility(visible = showPresetWasherPicker, enter = shuiDialogEnter(), exit = shuiDialogExit()) {
+                PresetWasherDeviceDialog(
+                    onDismiss = { showPresetWasherPicker = false },
+                    onSelect = { device ->
+                        runtime.actions.addPresetWasherDevice(device.name, device.qrCode)
+                        scannerMessage = "已添加 ${device.name}"
+                        showPresetWasherPicker = false
+                        showAddWasher = false
+                    }
                 )
             }
             AnimatedVisibility(visible = selectedMenuDevice != null, enter = shuiDialogEnter(), exit = shuiDialogExit()) {
@@ -330,6 +368,9 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
             ) {
                 OpeningMotionOverlay()
             }
+            AnimatedVisibility(visible = showPermissionIntro, enter = shuiDialogEnter(), exit = shuiDialogExit()) {
+                FirstLaunchPermissionDialog(onConfirm = requestAllRuntimePermissions)
+            }
         }
     }
 }
@@ -344,6 +385,138 @@ private fun backRouteFor(route: ShuiRoute): ShuiRoute.Tab {
         ShuiRoute.MoreOptions -> ShuiRoute.Tab(MainTab.Profile)
         is ShuiRoute.DrinkingWater -> ShuiRoute.Tab(MainTab.Devices)
         is ShuiRoute.Tab -> route
+    }
+}
+
+private data class PresetWasherDevice(val name: String, val qrCode: String)
+
+private val haiqiPresetWashers = listOf(
+    PresetWasherDevice("海七-二楼左", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007107"),
+    PresetWasherDevice("海七-二楼中", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007129"),
+    PresetWasherDevice("海七-二楼右", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007119"),
+    PresetWasherDevice("海七-三楼左", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007230"),
+    PresetWasherDevice("海七-三楼中", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007196"),
+    PresetWasherDevice("海七-三楼右", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A0007604202108140003053"),
+    PresetWasherDevice("海七-四楼左", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A0007604202108140002704"),
+    PresetWasherDevice("海七-四楼中", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007239"),
+    PresetWasherDevice("海七-四楼右", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A0007604202108140002884"),
+    PresetWasherDevice("海七-五楼左", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A0007604202108140003091"),
+    PresetWasherDevice("海七-五楼中", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A0007604202108140003074"),
+    PresetWasherDevice("海七-五楼右", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007226"),
+    PresetWasherDevice("海七-六楼左", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007220"),
+    PresetWasherDevice("海七-六楼中", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007382"),
+    PresetWasherDevice("海七-六楼右", "http://app.littleswan.com/u_download.html?type=Ujing&uuid=0000000000000A1234567202208070007189")
+)
+
+private fun shuiRuntimePermissions(): List<String> {
+    return buildList {
+        add(Manifest.permission.CAMERA)
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            add(Manifest.permission.BLUETOOTH_SCAN)
+            add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+}
+
+@Composable
+private fun FirstLaunchPermissionDialog(onConfirm: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = .46f)),
+        contentAlignment = Alignment.Center
+    ) {
+        SectionCard(
+            modifier = Modifier.padding(horizontal = 28.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                DecorativeImage(R.drawable.sleep, Modifier.size(108.dp))
+                Spacer(Modifier.height(8.dp))
+                Text("先给小助手一点权限吧", color = ShuiColors.DeepText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "扫码、热水蓝牙、状态通知都需要系统权限。点一下我就会一次性申请，之后就不用反复打扰你啦。",
+                    color = ShuiColors.MutedText,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
+                PrimaryGradientButton("好，开启权限", Modifier.fillMaxWidth(), onClick = onConfirm)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresetWasherDeviceDialog(
+    onDismiss: () -> Unit,
+    onSelect: (PresetWasherDevice) -> Unit
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = .48f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        SectionCard(
+            modifier = Modifier
+                .padding(horizontal = 18.dp)
+                .clickable(enabled = false) {},
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(Modifier.weight(1f))
+                    Text("选择海七已有设备", color = ShuiColors.DeepText, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    Text("×", color = ShuiColors.PrimaryLight, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onDismiss))
+                }
+                Spacer(Modifier.height(12.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    haiqiPresetWashers.chunked(3).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            row.forEach { device ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(58.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.White.copy(alpha = .82f))
+                                        .border(1.dp, ShuiColors.CardBorder, RoundedCornerShape(12.dp))
+                                        .shuiPressable(onClick = { onSelect(device) }),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        device.name,
+                                        color = ShuiColors.DeepText,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("只保存到本地列表，不会绑定到官方账号", color = ShuiColors.MutedText, fontSize = 12.sp)
+            }
+        }
     }
 }
 
@@ -426,7 +599,7 @@ private fun PrimaryPageScaffold(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp)
-                    .padding(bottom = if (bottomCharacter) 138.dp else 68.dp)
+                    .padding(bottom = if (bottomCharacter) 124.dp else 68.dp)
             ) {
                 content()
             }
@@ -436,8 +609,9 @@ private fun PrimaryPageScaffold(
                 R.drawable.order_bottom_character,
                 Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 58.dp)
-                    .size(126.dp)
+                    .padding(bottom = 48.dp)
+                    .offset(x = 14.dp, y = 6.dp)
+                    .size(132.dp)
             )
         }
         WavyBottomBar(
@@ -883,6 +1057,73 @@ private fun ShadowedImage(resId: Int, modifier: Modifier) {
 }
 
 @Composable
+private fun WasherRuntimeInfoCard(program: WasherProgramUi?, localDevices: List<LocalDeviceShortcut>) {
+    val matchedDevice = program?.let { current ->
+        localDevices.firstOrNull { it.id == current.deviceId }
+    }
+    val title = matchedDevice?.customName?.takeIf { it.isNotBlank() }
+        ?: program?.deviceNo?.takeIf { it.isNotBlank() }
+        ?: program?.deviceTypeName?.takeIf { it.isNotBlank() }
+        ?: "未选择洗衣机"
+    val statusText = when {
+        program == null -> "未选择"
+        program.createOrderEnabled -> "可下单"
+        program.reason.isNotBlank() -> program.reason
+        else -> "不可下单"
+    }
+    val statusColor = when {
+        program?.createOrderEnabled == true -> ShuiColors.Green
+        program == null -> ShuiColors.Orange
+        else -> ShuiColors.Orange
+    }
+    val deviceNo = program?.deviceNo?.takeIf { it.isNotBlank() }
+        ?: matchedDevice?.deviceNo?.takeIf { it.isNotBlank() }
+        ?: program?.deviceId?.takeIf { it.isNotBlank() }
+        ?: "未选择"
+    val storeName = program?.storeName?.takeIf { it.isNotBlank() }
+        ?: matchedDevice?.storeName?.takeIf { it.isNotBlank() }
+        ?: "选择或扫描设备后显示真实地址"
+
+    SectionCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            DecorativeImage(R.drawable.washer_machine, Modifier.size(74.dp))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        title,
+                        color = ShuiColors.DeepText,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    StatusPill(statusText, statusColor, Modifier.widthIn(max = 96.dp), filled = true)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "设备号：$deviceNo",
+                    color = ShuiColors.Brown,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "地址：$storeName",
+                    color = ShuiColors.Brown,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun WasherOrderScreen(
     runtimeState: ShuiRuntimeState,
     runtimeActions: ShuiRuntimeActions,
@@ -893,8 +1134,23 @@ private fun WasherOrderScreen(
         mutableStateOf(program?.defaultWashModelId ?: 0)
     }
     var selectedTemperatureId by remember(program?.deviceId) { mutableStateOf(1) }
+    var selectedDetergentGearId by remember(program?.deviceId, selectedModelId) { mutableStateOf<Int?>(null) }
+    var selectedDisinfectantGearId by remember(program?.deviceId, selectedModelId) { mutableStateOf<Int?>(null) }
     val modelOptions = program?.models.orEmpty()
     val selectedModel = modelOptions.firstOrNull { it.id == selectedModelId }
+    val detergentOptions = selectedModel?.additionGroups
+        ?.firstOrNull { it.key == "wp_detergentGearId" }
+        ?.options
+        .orEmpty()
+    val disinfectantOptions = selectedModel?.additionGroups
+        ?.firstOrNull { it.key == "wp_disinfectantGearId" }
+        ?.options
+        .orEmpty()
+    val selectedDetergent = detergentOptions.firstOrNull { it.id == selectedDetergentGearId }
+    val selectedDisinfectant = disinfectantOptions.firstOrNull { it.id == selectedDisinfectantGearId }
+    val totalPriceFen = (selectedModel?.priceFen ?: 0) +
+        (selectedDetergent?.priceFen ?: 0) +
+        (selectedDisinfectant?.priceFen ?: 0)
     val orderLoading = runtimeState.washerOrder.state == RuntimeTaskState.Loading
 
     Column(Modifier.fillMaxSize().background(ShuiColors.Background)) {
@@ -907,7 +1163,7 @@ private fun WasherOrderScreen(
                 .padding(top = 8.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            WasherInfoCard()
+            WasherRuntimeInfoCard(program = program, localDevices = runtimeState.localDevices)
             if (program == null) {
                 RuntimeStatusBanner("请先扫描洗衣机二维码，识别设备后再创建订单", RuntimeTaskState.LoginRequired)
             } else {
@@ -945,16 +1201,34 @@ private fun WasherOrderScreen(
                 compact = true,
                 onSelected = { index -> selectedTemperatureId = temperatureOptions[index].second }
             )
-            OptionSection("▱", "洗衣液选择", "请选择洗衣液用量", listOf(
-                Triple("不添加", null, "no_bottle"),
-                Triple("标准量", null, "bottle"),
-                Triple("大量", null, "bottles")
-            ), selected = 0, compact = true)
-            OptionSection("▱", "除菌液选择", "请选择除菌液用量", listOf(
-                Triple("不添加", null, "no_shield"),
-                Triple("标准量", null, "shield"),
-                Triple("大量", null, "shields")
-            ), selected = 0, compact = true)
+            if (detergentOptions.isNotEmpty()) {
+                val options = listOf(Triple("不添加", null, "no_bottle")) + detergentOptions.mapIndexed { index, option ->
+                    Triple(option.name, formatFenAmount(option.priceFen), if (index == 0) "bottle" else "bottles")
+                }
+                OptionSection(
+                    "▱",
+                    "洗衣液选择",
+                    "请选择洗衣液用量",
+                    options,
+                    selected = detergentOptions.indexOfFirst { it.id == selectedDetergentGearId }.let { if (it >= 0) it + 1 else 0 },
+                    compact = true,
+                    onSelected = { index -> selectedDetergentGearId = if (index == 0) null else detergentOptions.getOrNull(index - 1)?.id }
+                )
+            }
+            if (disinfectantOptions.isNotEmpty()) {
+                val options = listOf(Triple("不添加", null, "no_shield")) + disinfectantOptions.mapIndexed { index, option ->
+                    Triple(option.name, formatFenAmount(option.priceFen), if (index == 0) "shield" else "shields")
+                }
+                OptionSection(
+                    "▱",
+                    "除菌液选择",
+                    "请选择除菌液用量",
+                    options,
+                    selected = disinfectantOptions.indexOfFirst { it.id == selectedDisinfectantGearId }.let { if (it >= 0) it + 1 else 0 },
+                    compact = true,
+                    onSelected = { index -> selectedDisinfectantGearId = if (index == 0) null else disinfectantOptions.getOrNull(index - 1)?.id }
+                )
+            }
             AutoCreateCard()
             runtimeState.washerOrder.message?.let { message ->
                 RuntimeStatusBanner(message, runtimeState.washerOrder.state)
@@ -963,10 +1237,10 @@ private fun WasherOrderScreen(
                 CurrentWasherOrderPaymentCard(runtimeState, runtimeActions)
             }
             PriceBar(
-                amount = selectedModel?.let { formatFenAmount(it.priceFen) } ?: "¥0.00",
+                amount = formatFenAmount(totalPriceFen),
                 enabled = program != null && selectedModelId != 0 && !orderLoading,
                 buttonText = if (orderLoading) "创建中" else "创建订单",
-                onCreate = { runtimeActions.createWasherOrder(selectedModelId, selectedTemperatureId) },
+                onCreate = { runtimeActions.createWasherOrder(selectedModelId, selectedTemperatureId, selectedDetergentGearId, selectedDisinfectantGearId) },
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -1337,6 +1611,7 @@ private fun OrdersScreen(
             device = "热水设备 ${record.deviceId}",
             amount = "¥${record.amount}",
             status = record.status,
+            iconRes = R.drawable.shui_reshui,
             icon = "♨",
             color = when {
                 record.status.contains("使用") -> ShuiColors.Blue
@@ -1352,6 +1627,7 @@ private fun OrdersScreen(
             device = "洗衣机 ${order.deviceNo}",
             amount = formatDisplayAmount(order.payPrice),
             status = order.statusText,
+            iconRes = R.drawable.shui_yifu,
             icon = "衣",
             color = ShuiColors.Orange
         )
@@ -1363,6 +1639,7 @@ private fun OrdersScreen(
             device = "饮水机 ${order.deviceNo.ifBlank { order.orderId }}",
             amount = String.format(java.util.Locale.CHINA, "¥%.2f", order.payment),
             status = order.statusRemark.ifBlank { order.orderStatusName },
+            iconRes = R.drawable.shui_jieshui,
             icon = "水",
             color = ShuiColors.Blue
         )
@@ -1376,6 +1653,7 @@ private fun OrdersScreen(
                 device = "饮水机 ${order.deviceNo.ifBlank { order.orderId }}",
                 amount = String.format(java.util.Locale.CHINA, "¥%.2f", order.payment),
                 status = order.status,
+                iconRes = R.drawable.shui_jieshui,
                 icon = "水",
                 color = ShuiColors.Blue
             )
@@ -1392,24 +1670,27 @@ private fun OrdersScreen(
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CategoryChip(
-                    "♨ 热水",
+                    "热水",
                     selectedCategory == OrderCategory.Hotwater,
                     ShuiColors.Primary,
                     Modifier.weight(1f),
+                    iconRes = R.drawable.shui_reshui,
                     onClick = { selectedCategory = OrderCategory.Hotwater }
                 )
                 CategoryChip(
-                    "♧ 饮水",
+                    "饮水",
                     selectedCategory == OrderCategory.Drinking,
                     ShuiColors.Blue,
                     Modifier.weight(1f),
+                    iconRes = R.drawable.shui_jieshui,
                     onClick = { selectedCategory = OrderCategory.Drinking }
                 )
                 CategoryChip(
-                    "▰ 洗衣",
+                    "洗衣",
                     selectedCategory == OrderCategory.Washer,
                     ShuiColors.Orange,
                     Modifier.weight(1f),
+                    iconRes = R.drawable.shui_yifu,
                     onClick = { selectedCategory = OrderCategory.Washer }
                 )
             }
@@ -1529,6 +1810,7 @@ private fun CategoryChip(
     selected: Boolean,
     color: Color,
     modifier: Modifier,
+    iconRes: Int? = null,
     onClick: () -> Unit = {}
 ) {
     Box(
@@ -1540,7 +1822,13 @@ private fun CategoryChip(
             .shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = if (selected) Color.White else ShuiColors.DeepText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            if (iconRes != null) {
+                DecorativeImage(iconRes, Modifier.size(22.dp))
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(text, color = if (selected) Color.White else ShuiColors.DeepText, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
     }
 }
 
@@ -1649,10 +1937,10 @@ private fun DevicesScreen(
                 DeviceListItem(
                     device = DeviceUi(
                         name = deviceDisplayName(device, index),
-                        id = shortDeviceId(device.id),
+                        id = device.deviceNo ?: shortDeviceId(device.id),
                         type = when (device.deviceType) {
                             LocalDeviceType.DrinkingWater -> "饮水快捷入口"
-                            LocalDeviceType.Washer -> "洗衣快捷入口"
+                            LocalDeviceType.Washer -> device.storeName ?: "洗衣快捷入口"
                             LocalDeviceType.Unknown -> "本地快捷入口"
                         },
                         status = device.lastStatus ?: "未知",

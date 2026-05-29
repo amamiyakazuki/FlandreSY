@@ -72,12 +72,25 @@ public final class UjingRuntimeAdapter {
         return new WasherProgram(currentDevice, currentProgram);
     }
 
-    public WasherOrderDetail createOrder(int washModelId, int temperatureId) throws Exception {
+    public WasherProgram refreshWasherStatus(String qrCode) throws Exception {
+        if (qrCode == null || qrCode.trim().isEmpty()) {
+            throw new IllegalStateException("洗衣机二维码为空");
+        }
+        UjingApi.UjingSession session = requireSession();
+        UjingApi.WasherDevice device = api.scanWasher(session, qrCode.trim());
+        UjingApi.ProgramInfo program = null;
+        if (device.createOrderEnabled) {
+            program = api.getProgramInfo(session, device);
+        }
+        return new WasherProgram(device, program);
+    }
+
+    public WasherOrderDetail createOrder(int washModelId, int temperatureId, Integer detergentGearId, Integer disinfectantGearId) throws Exception {
         UjingApi.UjingSession session = requireSession();
         if (currentProgram == null) {
             throw new IllegalStateException("请先扫描洗衣机并获取套餐");
         }
-        currentOrder = api.createOrder(session, currentProgram, washModelId, temperatureId);
+        currentOrder = api.createOrder(session, currentProgram, washModelId, temperatureId, detergentGearId, disinfectantGearId);
         saveCurrentOrderId(currentOrder.orderId);
         return loadOrderDetail(currentOrder.orderId);
     }
@@ -467,7 +480,7 @@ public final class UjingRuntimeAdapter {
                 models = new WashModel[program.models.size()];
                 for (int i = 0; i < program.models.size(); i++) {
                     UjingApi.WashModel model = program.models.get(i);
-                    models[i] = new WashModel(model.id, model.name, model.price, model.time);
+                    models[i] = new WashModel(model.id, model.name, model.price, model.time, model.additions);
                 }
             }
         }
@@ -478,12 +491,46 @@ public final class UjingRuntimeAdapter {
         public final String name;
         public final int price;
         public final int time;
+        public final AdditionDevice[] additions;
 
-        WashModel(int id, String name, int price, int time) {
+        WashModel(int id, String name, int price, int time, java.util.List<UjingApi.AdditionDevice> sourceAdditions) {
             this.id = id;
             this.name = name;
             this.price = price;
             this.time = time;
+            additions = new AdditionDevice[sourceAdditions.size()];
+            for (int i = 0; i < sourceAdditions.size(); i++) {
+                UjingApi.AdditionDevice addition = sourceAdditions.get(i);
+                additions[i] = new AdditionDevice(addition.key, addition.name, addition.options);
+            }
+        }
+    }
+
+    public static final class AdditionDevice {
+        public final String key;
+        public final String name;
+        public final AdditionOption[] options;
+
+        AdditionDevice(String key, String name, java.util.List<UjingApi.AdditionOption> sourceOptions) {
+            this.key = key;
+            this.name = name;
+            options = new AdditionOption[sourceOptions.size()];
+            for (int i = 0; i < sourceOptions.size(); i++) {
+                UjingApi.AdditionOption option = sourceOptions.get(i);
+                options[i] = new AdditionOption(option.id, option.name, option.price);
+            }
+        }
+    }
+
+    public static final class AdditionOption {
+        public final int id;
+        public final String name;
+        public final int price;
+
+        AdditionOption(int id, String name, int price) {
+            this.id = id;
+            this.name = name;
+            this.price = price;
         }
     }
 

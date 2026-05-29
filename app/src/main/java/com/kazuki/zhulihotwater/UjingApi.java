@@ -144,6 +144,29 @@ final class UjingApi {
                 model.name = item.optString("workModelName");
                 model.price = item.optInt("basePrice");
                 model.time = item.optInt("time");
+                JSONArray additions = item.optJSONArray("additionDevices");
+                if (additions != null) {
+                    for (int j = 0; j < additions.length(); j++) {
+                        JSONObject additionJson = additions.getJSONObject(j);
+                        AdditionDevice addition = new AdditionDevice();
+                        addition.key = additionJson.optString("key");
+                        addition.name = additionJson.optString("name");
+                        JSONArray options = additionJson.optJSONArray("options");
+                        if (options != null) {
+                            for (int k = 0; k < options.length(); k++) {
+                                JSONObject optionJson = options.getJSONObject(k);
+                                AdditionOption option = new AdditionOption();
+                                option.id = optionJson.optInt("id");
+                                option.name = optionJson.optString("name");
+                                option.price = optionJson.optInt("price");
+                                addition.options.add(option);
+                            }
+                        }
+                        if (!addition.key.isEmpty()) {
+                            model.additions.add(addition);
+                        }
+                    }
+                }
                 info.models.add(model);
                 if (model.id == 1) {
                     info.defaultWashModelId = 1;
@@ -156,7 +179,7 @@ final class UjingApi {
         return info;
     }
 
-    WasherOrder createOrder(UjingSession session, ProgramInfo info, int washModelId, int temperatureId) throws Exception {
+    WasherOrder createOrder(UjingSession session, ProgramInfo info, int washModelId, int temperatureId, Integer detergentGearId, Integer disinfectantGearId) throws Exception {
         if (info.storeId == null || info.storeId.isEmpty()) {
             throw new IllegalStateException("套餐信息没有 storeId，不能创建订单");
         }
@@ -166,6 +189,12 @@ final class UjingApi {
         body.put("deviceId", info.deviceId);
         body.put("deviceWashModelId", washModelId);
         body.put("storeId", info.storeId);
+        if (detergentGearId != null) {
+            body.put("wp_detergentGearId", detergentGearId);
+        }
+        if (disinfectantGearId != null) {
+            body.put("wp_disinfectantGearId", disinfectantGearId);
+        }
         body.put("washTemperatureId", temperatureId);
         JSONObject resp = post("orders/create", body, "BA", "1.1.68", session);
         ensureOk(resp);
@@ -480,6 +509,19 @@ final class UjingApi {
         String name;
         int price;
         int time;
+        final List<AdditionDevice> additions = new ArrayList<>();
+    }
+
+    static final class AdditionDevice {
+        String key;
+        String name;
+        final List<AdditionOption> options = new ArrayList<>();
+    }
+
+    static final class AdditionOption {
+        int id;
+        String name;
+        int price;
     }
 
     static final class WasherOrder {

@@ -68,6 +68,7 @@ data class OrderUi(
     val amount: String,
     val status: String,
     val color: Color = ShuiColors.Primary,
+    @DrawableRes val iconRes: Int? = null,
     val icon: String = "♨"
 )
 
@@ -471,6 +472,8 @@ fun StatusPill(
         color = color,
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(if (filled) color.copy(alpha = .13f) else Color.White.copy(alpha = .9f))
@@ -637,7 +640,11 @@ fun OrderListItem(order: OrderUi, onClick: () -> Unit) {
     SectionCard(contentPadding = PaddingValues(14.dp), modifier = Modifier.shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onClick)) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(order.icon, color = order.color, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                if (order.iconRes != null) {
+                    DecorativeImage(order.iconRes, Modifier.size(28.dp))
+                } else {
+                    Text(order.icon, color = order.color, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                }
                 Spacer(Modifier.width(8.dp))
                 Text(order.type, color = ShuiColors.DeepText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
@@ -669,7 +676,7 @@ fun DeviceListItem(device: DeviceUi, onMenu: () -> Unit, onOpen: () -> Unit) {
             DecorativeImage(device.imageRes, Modifier.size(58.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(device.name, color = ShuiColors.DeepText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(device.name, color = ShuiColors.DeepText, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(5.dp))
                 Text(
                     "设备号：${device.id}",
@@ -679,10 +686,10 @@ fun DeviceListItem(device: DeviceUi, onMenu: () -> Unit, onOpen: () -> Unit) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(5.dp))
-                Text(device.type, color = ShuiColors.DeepText, fontSize = 12.sp)
+                Text(device.type, color = ShuiColors.DeepText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Column(horizontalAlignment = Alignment.End) {
-                StatusPill(device.status, device.statusColor, filled = true)
+                StatusPill(device.status, device.statusColor, Modifier.widthIn(max = 86.dp), filled = true)
                 Spacer(Modifier.height(18.dp))
                 Box(
                     Modifier
@@ -845,46 +852,6 @@ fun MoreOptionsCard(onLegacyHotwater: () -> Unit = {}) {
 }
 
 @Composable
-fun WasherInfoCard() {
-    SectionCard(contentPadding = PaddingValues(horizontal = 14.dp, vertical = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            DecorativeImage(R.drawable.washer_machine, Modifier.size(74.dp))
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("3号洗衣机", color = ShuiColors.DeepText, fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(8.dp))
-                    StatusPill("空闲中", ShuiColors.Green, filled = true)
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("设备号： WASH-003", color = ShuiColors.Brown, fontSize = 15.sp)
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LocationPin(ShuiColors.PrimaryLight, Modifier.size(17.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("芙兰公寓 2楼 洗衣房A区", color = ShuiColors.Brown, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            Box(Modifier.size(76.dp), contentAlignment = Alignment.Center) {
-                Canvas(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .width(58.dp)
-                        .height(16.dp)
-                ) {
-                    drawOval(
-                        color = ShuiColors.Primary.copy(alpha = .12f),
-                        topLeft = Offset(size.width * .10f, size.height * .20f),
-                        size = androidx.compose.ui.geometry.Size(size.width * .80f, size.height * .48f)
-                    )
-                }
-                DecorativeImage(R.drawable.wing_decoration, Modifier.size(72.dp))
-            }
-        }
-    }
-}
-
-@Composable
 private fun LocationPin(color: Color, modifier: Modifier = Modifier) {
     Canvas(modifier) {
         val w = size.width
@@ -902,7 +869,7 @@ private fun LocationPin(color: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun AddWasherDialog(onDismiss: () -> Unit, onScan: () -> Unit) {
+fun AddWasherDialog(onDismiss: () -> Unit, onScan: () -> Unit, onPreset: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
@@ -933,6 +900,19 @@ fun AddWasherDialog(onDismiss: () -> Unit, onScan: () -> Unit) {
                 )
                 Spacer(Modifier.height(20.dp))
                 PrimaryGradientButton("开始扫码", Modifier.fillMaxWidth(), icon = "⌗", onClick = onScan)
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(45.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = .86f))
+                        .border(1.dp, ShuiColors.Primary.copy(alpha = .28f), RoundedCornerShape(12.dp))
+                        .clickable(onClick = onPreset),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("选择海七已有设备", color = ShuiColors.Primary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
                 Spacer(Modifier.height(10.dp))
                 Box(
                     modifier = Modifier
