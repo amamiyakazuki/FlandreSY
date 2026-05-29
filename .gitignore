@@ -43,3 +43,6 @@ tmp_ujing_flows.jsonl
 Thumbs.db
 refer/
 openspec/
+release-key.jks
+keystore.properties
+.vscode/

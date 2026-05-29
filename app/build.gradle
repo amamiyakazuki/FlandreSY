@@ -3,6 +3,18 @@ plugins {
     id "org.jetbrains.kotlin.android"
 }
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { stream ->
+        keystoreProperties.load(stream)
+    }
+}
+def hasReleaseSigning = keystorePropertiesFile.exists() &&
+        ["storeFile", "storePassword", "keyAlias", "keyPassword"].every { key ->
+            keystoreProperties[key]
+        }
+
 android {
     namespace "com.kazuki.zhulihotwater"
     compileSdk 36
@@ -13,6 +25,25 @@ android {
         targetSdk 36
         versionCode 1
         versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile rootProject.file(keystoreProperties["storeFile"])
+                storePassword keystoreProperties["storePassword"]
+                keyAlias keystoreProperties["keyAlias"]
+                keyPassword keystoreProperties["keyPassword"]
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
     }
 
     buildFeatures {
