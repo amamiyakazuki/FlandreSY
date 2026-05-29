@@ -142,7 +142,7 @@ fun TopHeader(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(start = 14.dp)
-                    .clickable(onClick = onBack)
+                    .shuiPressable(onClick = onBack)
             )
         }
         if (showSettings) {
@@ -165,7 +165,7 @@ fun TopHeader(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 24.dp)
-                    .clickable(onClick = onAdd)
+                    .shuiPressable(onClick = onAdd)
             )
         }
         DecorativeImage(R.drawable.shui_heart, Modifier.align(Alignment.CenterStart).padding(start = 78.dp, bottom = 18.dp).size(24.dp), alpha = .58f)
@@ -246,7 +246,7 @@ fun BottomNavBar(
                         .weight(1f)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(18.dp))
-                        .clickable { onTabSelected(tab) },
+                        .shuiPressable(scale = ShuiMotion.SoftPressedScale) { onTabSelected(tab) },
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -497,7 +497,7 @@ fun PrimaryGradientButton(
             .height(48.dp)
             .clip(RoundedCornerShape(13.dp))
             .background(brush)
-            .clickable(enabled = enabled, onClick = onClick)
+            .shuiPressable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
@@ -634,7 +634,7 @@ fun DecorativeImage(
 
 @Composable
 fun OrderListItem(order: OrderUi, onClick: () -> Unit) {
-    SectionCard(contentPadding = PaddingValues(14.dp), modifier = Modifier.clickable(onClick = onClick)) {
+    SectionCard(contentPadding = PaddingValues(14.dp), modifier = Modifier.shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onClick)) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(order.icon, color = order.color, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -664,7 +664,7 @@ fun OrderListItem(order: OrderUi, onClick: () -> Unit) {
 
 @Composable
 fun DeviceListItem(device: DeviceUi, onMenu: () -> Unit, onOpen: () -> Unit) {
-    SectionCard(modifier = Modifier.clickable(onClick = onOpen), contentPadding = PaddingValues(12.dp)) {
+    SectionCard(modifier = Modifier.shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onOpen), contentPadding = PaddingValues(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             DecorativeImage(device.imageRes, Modifier.size(58.dp))
             Spacer(Modifier.width(12.dp))
@@ -689,7 +689,7 @@ fun DeviceListItem(device: DeviceUi, onMenu: () -> Unit, onOpen: () -> Unit) {
                         .size(18.dp)
                         .clip(CircleShape)
                         .border(1.2.dp, ShuiColors.Primary, CircleShape)
-                        .clickable(onClick = onMenu)
+                        .shuiPressable(onClick = onMenu)
                 )
             }
         }
@@ -715,7 +715,7 @@ fun AccountCard(
     onOpen: () -> Unit = {}
 ) {
     SectionCard(
-        modifier = modifier.clickable(onClick = onOpen),
+        modifier = modifier.shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onOpen),
         borderColor = accent.copy(alpha = .28f),
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
     ) {

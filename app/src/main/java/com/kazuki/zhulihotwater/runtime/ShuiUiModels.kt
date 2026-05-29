@@ -51,7 +51,7 @@ val ShuiRuntimeState.homeTasks: List<HomeTaskUi>
                 )
             )
         }
-        currentWaterOrder?.let { order ->
+        currentWaterOrder?.takeUnless { it.isTerminalWaterOrder }?.let { order ->
             add(
                 HomeTaskUi(
                     id = "drinking",
@@ -113,6 +113,12 @@ private fun washerTaskExtra(order: WasherOrderUi): String {
 
 private val WasherOrderUi.isTerminalWasherOrder: Boolean
     get() = status == "50" || statusText.contains("完成") || statusText.contains("取消")
+
+private val WaterOrderUi.isTerminalWaterOrder: Boolean
+    get() = orderStatus == "50" ||
+        orderStatusName.contains("完成") ||
+        statusRemark.contains("完成") ||
+        statusRemark.contains("结束")
 
 fun classifyScanRouting(qrCode: String): ScanRouting {
     val raw = qrCode.trim()

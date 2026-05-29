@@ -140,6 +140,16 @@ data class WaterOrderUi(
     val payFlag: Int
 )
 
+data class WaterOrderHistoryUi(
+    val orderId: String,
+    val deviceNo: String,
+    val status: String,
+    val payment: Double,
+    val warmWaterMl: Int,
+    val waterSeconds: Int,
+    val completedAt: String
+)
+
 data class ShuiRuntimeState(
     val hotwaterLogin: RuntimeActionStatus = RuntimeActionStatus(RuntimeTaskState.LoginRequired),
     val hotwaterStart: RuntimeActionStatus = RuntimeActionStatus(),
@@ -161,6 +171,7 @@ data class ShuiRuntimeState(
     val currentWaterReady: WaterReadyUi? = null,
     val waterOrder: RuntimeActionStatus = RuntimeActionStatus(),
     val currentWaterOrder: WaterOrderUi? = null,
+    val waterOrderHistoryRecords: List<WaterOrderHistoryUi> = emptyList(),
     val localDevices: List<LocalDeviceShortcut> = emptyList(),
     val localDevicesLastRefreshed: String = "",
     val paymentMode: PaymentMode = PaymentMode.AlipayOnly,
@@ -188,6 +199,7 @@ interface ShuiRuntimeActions {
     fun startCurrentWasherOrder()
     fun cancelCurrentWasherOrder()
     fun stopCurrentWasherOrder()
+    fun scanDrinkingWaterAndCreateOrder(qrCodeOrCd: String)
     fun prepareDrinkingWater(qrCodeOrCd: String)
     fun createDrinkingWaterOrder()
     fun refreshCurrentDrinkingWaterOrder()
@@ -446,13 +458,10 @@ class ShuiRuntimeController private constructor(
 
         val drinkingCd = drinkingWaterCd(qrCode)
         if (drinkingCd != null) {
-            val devices = upsertDrinkingWaterShortcut(drinkingCd, qrCode.trim())
-            saveLocalDevices(devices)
             state = state.copy(
-                localDevices = devices,
                 washerScan = RuntimeActionStatus(
                     RuntimeTaskState.Success,
-                    "已保存饮水机快捷入口"
+                    "已识别饮水机，请继续接水流程"
                 )
             )
             return
@@ -610,6 +619,58 @@ class ShuiRuntimeController private constructor(
         }
     }
 
+    override fun scanDrinkingWaterAndCreateOrder(qrCodeOrCd: String) {
+        if (state.waterScan.state == RuntimeTaskState.Loading || state.waterOrder.state == RuntimeTaskState.Loading) return
+        val cd = drinkingWaterCd(qrCodeOrCd) ?: qrCodeOrCd.trim()
+        if (cd.isBlank()) {
+            state = state.copy(
+                waterScan = RuntimeActionStatus(RuntimeTaskState.Failure, "没有识别到饮水设备码"),
+                userNotice = "没有识别到饮水设备码"
+            )
+            return
+        }
+        val qrOrCd = qrCodeOrCd.trim().ifBlank { cd }
+        runUjingAction(
+            loading = {
+                copy(
+                    waterScan = RuntimeActionStatus(RuntimeTaskState.Loading, "正在识别饮水机"),
+                    waterOrder = RuntimeActionStatus(RuntimeTaskState.Loading, "正在创建接水订单"),
+                    userNotice = "正在创建接水订单"
+                )
+            },
+            success = { this },
+            failure = { message ->
+                copy(
+                    waterScan = RuntimeActionStatus(RuntimeTaskState.Failure, message),
+                    waterOrder = RuntimeActionStatus(RuntimeTaskState.Failure, message),
+                    userNotice = message
+                )
+            },
+            autoSuccess = false
+        ) {
+            val ready = ujing.prepareWater(qrOrCd).toUi()
+            if (ready.balanceFen <= 0) {
+                throw IllegalStateException("余额不足，请先在官方 App 充值")
+            }
+            val detail = ujing.createWaterOrder().toUi()
+            postState {
+                state = state.copy(
+                    currentWaterReady = ready,
+                    currentWaterOrder = detail,
+                    waterScan = RuntimeActionStatus(
+                        RuntimeTaskState.Success,
+                        "饮水机已识别：${ready.serviceSubjectName.ifBlank { ready.cd }}"
+                    ),
+                    waterOrder = RuntimeActionStatus(
+                        RuntimeTaskState.Success,
+                        "接水订单已创建，请在饮水机上按按钮开始/停止接水"
+                    ),
+                    userNotice = "接水订单已创建，请在饮水机上按按钮开始/停止接水"
+                )
+            }
+        }
+    }
+
     override fun prepareDrinkingWater(qrCodeOrCd: String) {
         if (state.waterScan.state == RuntimeTaskState.Loading) return
         val cd = drinkingWaterCd(qrCodeOrCd) ?: qrCodeOrCd.trim()
@@ -626,11 +687,8 @@ class ShuiRuntimeController private constructor(
         ) {
             val ready = ujing.prepareWater(qrOrCd).toUi()
             postState {
-                val devices = upsertDrinkingWaterShortcut(ready.cd, qrOrCd)
-                saveLocalDevices(devices)
                 state = state.copy(
                     currentWaterReady = ready,
-                    localDevices = devices,
                     waterScan = RuntimeActionStatus(
                         RuntimeTaskState.Success,
                         "饮水机已确认：${ready.serviceSubjectName.ifBlank { ready.cd }}"
@@ -672,9 +730,16 @@ class ShuiRuntimeController private constructor(
         ) {
             val detail = ujing.loadCurrentWaterOrderDetail().toUi()
             postState {
+                val finished = detail.isTerminalWaterOrder
+                val history = if (finished) appendWaterHistory(detail) else state.waterOrderHistoryRecords
                 state = state.copy(
-                    currentWaterOrder = detail,
-                    waterOrder = RuntimeActionStatus(RuntimeTaskState.Success, "接水订单已刷新：${detail.statusRemark.ifBlank { detail.orderStatusName }}")
+                    currentWaterOrder = if (finished) null else detail,
+                    waterOrderHistoryRecords = history,
+                    waterOrder = RuntimeActionStatus(
+                        RuntimeTaskState.Success,
+                        if (finished) "接水已完成，已加入订单统计" else "接水订单已刷新：${detail.statusRemark.ifBlank { detail.orderStatusName }}"
+                    ),
+                    userNotice = if (finished) "接水已完成，已加入订单统计" else state.userNotice
                 )
             }
         }
@@ -799,6 +864,66 @@ class ShuiRuntimeController private constructor(
             )
         }
         prefs.edit().putString("local_devices", rows.toString()).apply()
+    }
+
+    private fun loadWaterHistory(): List<WaterOrderHistoryUi> {
+        val raw = prefs.getString("water_order_history", "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return try {
+            val rows = JSONArray(raw)
+            buildList {
+                for (i in 0 until rows.length()) {
+                    val row = rows.getJSONObject(i)
+                    add(
+                        WaterOrderHistoryUi(
+                            orderId = row.optString("orderId"),
+                            deviceNo = row.optString("deviceNo"),
+                            status = row.optString("status"),
+                            payment = row.optDouble("payment", 0.0),
+                            warmWaterMl = row.optInt("warmWaterMl", 0),
+                            waterSeconds = row.optInt("waterSeconds", 0),
+                            completedAt = row.optString("completedAt")
+                        )
+                    )
+                }
+            }.filter { it.orderId.isNotBlank() }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveWaterHistory(records: List<WaterOrderHistoryUi>) {
+        val rows = JSONArray()
+        records.forEach { record ->
+            rows.put(
+                JSONObject()
+                    .put("orderId", record.orderId)
+                    .put("deviceNo", record.deviceNo)
+                    .put("status", record.status)
+                    .put("payment", record.payment)
+                    .put("warmWaterMl", record.warmWaterMl)
+                    .put("waterSeconds", record.waterSeconds)
+                    .put("completedAt", record.completedAt)
+            )
+        }
+        prefs.edit().putString("water_order_history", rows.toString()).apply()
+    }
+
+    private fun appendWaterHistory(order: WaterOrderUi): List<WaterOrderHistoryUi> {
+        val record = WaterOrderHistoryUi(
+            orderId = order.orderId,
+            deviceNo = order.deviceNo,
+            status = order.statusRemark.ifBlank { order.orderStatusName.ifBlank { "已完成" } },
+            payment = order.payment,
+            warmWaterMl = order.warmWaterMl,
+            waterSeconds = order.waterSeconds,
+            completedAt = formatRefreshTime(System.currentTimeMillis())
+        )
+        val records = state.waterOrderHistoryRecords
+            .filterNot { it.orderId == order.orderId }
+            .plus(record)
+        saveWaterHistory(records)
+        return records
     }
 
     private fun formatRefreshTime(timestamp: Long): String {
@@ -970,6 +1095,7 @@ class ShuiRuntimeController private constructor(
     private fun initialState(): ShuiRuntimeState {
         val cached = ujing.loadCachedSession()
         val localDevices = loadLocalDevices()
+        val waterHistory = loadWaterHistory()
         val refreshedAt = prefs.getString("local_devices_last_refreshed", "") ?: ""
         val hotwaterPhone = prefs.getString("phone", "") ?: ""
         val hotwaterDeviceCode = prefs.getString("device_id", "") ?: ""
@@ -983,6 +1109,7 @@ class ShuiRuntimeController private constructor(
                     RuntimeActionStatus(RuntimeTaskState.Success, "已缓存住理生活：$hotwaterPhone")
                 },
                 localDevices = localDevices,
+                waterOrderHistoryRecords = waterHistory,
                 localDevicesLastRefreshed = refreshedAt
             )
         } else {
@@ -997,6 +1124,7 @@ class ShuiRuntimeController private constructor(
                 ujingAccount = cached.toUi(),
                 washerLogin = RuntimeActionStatus(RuntimeTaskState.Success, "已缓存 U净登录：${cached.mobile}"),
                 localDevices = localDevices,
+                waterOrderHistoryRecords = waterHistory,
                 localDevicesLastRefreshed = refreshedAt
             )
         }
@@ -1082,6 +1210,12 @@ class ShuiRuntimeController private constructor(
             payFlag = payFlag
         )
     }
+
+    private val WaterOrderUi.isTerminalWaterOrder: Boolean
+        get() = orderStatus == "50" ||
+            orderStatusName.contains("完成") ||
+            statusRemark.contains("完成") ||
+            statusRemark.contains("结束")
 }
 
 object PreviewShuiRuntimeActions : ShuiRuntimeActions {
@@ -1104,6 +1238,7 @@ object PreviewShuiRuntimeActions : ShuiRuntimeActions {
     override fun startCurrentWasherOrder() = Unit
     override fun cancelCurrentWasherOrder() = Unit
     override fun stopCurrentWasherOrder() = Unit
+    override fun scanDrinkingWaterAndCreateOrder(qrCodeOrCd: String) = Unit
     override fun prepareDrinkingWater(qrCodeOrCd: String) = Unit
     override fun createDrinkingWaterOrder() = Unit
     override fun refreshCurrentDrinkingWaterOrder() = Unit

@@ -6,6 +6,13 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
@@ -80,6 +89,7 @@ import com.kazuki.zhulihotwater.runtime.ShuiRuntimeState
 import com.kazuki.zhulihotwater.runtime.classifyScanRouting
 import com.kazuki.zhulihotwater.runtime.homeTasks
 import org.json.JSONArray
+import kotlinx.coroutines.delay
 
 private sealed class ShuiRoute {
     data class Tab(val tab: MainTab) : ShuiRoute()
@@ -110,8 +120,13 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
     var selectedMenuDevice by remember { mutableStateOf<LocalDeviceShortcut?>(null) }
     var editingDevice by remember { mutableStateOf<LocalDeviceShortcut?>(null) }
     var scannerMessage by remember { mutableStateOf<String?>(null) }
+    var openingVisible by remember { mutableStateOf(true) }
     val runtimeState = runtime.state
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        delay(ShuiMotion.Opening.toLong())
+        openingVisible = false
+    }
     val scannerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val qr = result.data?.getStringExtra(QrScannerActivity.EXTRA_QR_RESULT).orEmpty()
@@ -123,8 +138,9 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
                         route = ShuiRoute.WasherOrder
                     }
                     is ScanRouting.DrinkingWater -> {
+                        runtime.actions.scanDrinkingWaterAndCreateOrder(scan.cd)
                         showAddWasher = false
-                        route = ShuiRoute.DrinkingWater(scan.cd)
+                        route = ShuiRoute.Tab(MainTab.Home)
                     }
                     is ScanRouting.Unknown -> {
                         scannerMessage = scan.reason
@@ -162,110 +178,118 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
 
     AdaptivePhoneContainer {
         Box(Modifier.fillMaxSize()) {
-            when (route) {
-                is ShuiRoute.Tab -> when ((route as ShuiRoute.Tab).tab) {
-                    MainTab.Home -> HomeScreen(
+            AnimatedContent(
+                targetState = route,
+                transitionSpec = { shuiPageTransform(this) },
+                label = "shuiRouteMotion"
+            ) { targetRoute ->
+                when (targetRoute) {
+                    is ShuiRoute.Tab -> when (targetRoute.tab) {
+                        MainTab.Home -> HomeScreen(
+                            selectedTab = selectedTab,
+                            runtimeState = runtimeState,
+                            runtimeActions = runtime.actions,
+                            onTabSelected = { route = ShuiRoute.Tab(it) },
+                            onOpenWasherOrder = launchWasherScanner,
+                            onOpenHotwaterDetail = { route = ShuiRoute.HotwaterDetail },
+                            onOpenWasherDetail = { route = ShuiRoute.OrderDetail },
+                            onOpenDrinkingDetail = { route = ShuiRoute.DrinkingWater(runtimeState.currentWaterReady?.cd.orEmpty()) },
+                            onOpenDevices = { route = ShuiRoute.Tab(MainTab.Devices) }
+                        )
+
+                        MainTab.Orders -> OrdersScreen(
+                            selectedTab = selectedTab,
+                            runtimeState = runtimeState,
+                            runtimeActions = runtime.actions,
+                            onTabSelected = { route = ShuiRoute.Tab(it) },
+                            onOpenDetail = { route = ShuiRoute.OrderDetail },
+                            onOpenDrinking = { route = ShuiRoute.DrinkingWater(runtimeState.currentWaterReady?.cd.orEmpty()) }
+                        )
+
+                        MainTab.Devices -> DevicesScreen(
+                            selectedTab = selectedTab,
+                            runtimeState = runtimeState,
+                            runtimeActions = runtime.actions,
+                            onTabSelected = { route = ShuiRoute.Tab(it) },
+                            onOpenOrder = { route = ShuiRoute.WasherOrder },
+                            onAdd = { showAddWasher = true },
+                            onMenu = { selectedMenuDevice = it },
+                            onOpenDrinking = { device ->
+                                val qrOrCd = device.qrUrl ?: device.cd.orEmpty()
+                                route = ShuiRoute.DrinkingWater(qrOrCd)
+                            },
+                            onOpenEmpty = { route = ShuiRoute.EmptyDevices }
+                        )
+
+                        MainTab.Profile -> ProfileScreen(
+                            selectedTab = selectedTab,
+                            runtimeState = runtimeState,
+                            onTabSelected = { route = ShuiRoute.Tab(it) },
+                            onOpenZhuliAccount = { route = ShuiRoute.AccountDetail(AccountKind.Zhuli) },
+                            onOpenUjingAccount = { route = ShuiRoute.AccountDetail(AccountKind.Ujing) },
+                            onOpenMoreOptions = { route = ShuiRoute.MoreOptions }
+                        )
+                    }
+
+                    ShuiRoute.WasherOrder -> WasherOrderScreen(
+                        runtimeState = runtimeState,
+                        runtimeActions = runtime.actions,
+                        onBack = { route = ShuiRoute.Tab(MainTab.Devices) }
+                    )
+                    ShuiRoute.OrderDetail -> OrderDetailScreen(
                         selectedTab = selectedTab,
                         runtimeState = runtimeState,
                         runtimeActions = runtime.actions,
-                        onTabSelected = { route = ShuiRoute.Tab(it) },
-                        onOpenWasherOrder = launchWasherScanner,
-                        onOpenHotwaterDetail = { route = ShuiRoute.HotwaterDetail },
-                        onOpenWasherDetail = { route = ShuiRoute.OrderDetail },
-                        onOpenDrinkingDetail = { route = ShuiRoute.DrinkingWater(runtimeState.currentWaterReady?.cd.orEmpty()) },
-                        onOpenDevices = { route = ShuiRoute.Tab(MainTab.Devices) }
+                        onBack = { route = ShuiRoute.Tab(MainTab.Orders) },
+                        onTabSelected = { route = ShuiRoute.Tab(it) }
                     )
 
-                    MainTab.Orders -> OrdersScreen(
+                    ShuiRoute.EmptyDevices -> EmptyDevicesScreen(
                         selectedTab = selectedTab,
-                        runtimeState = runtimeState,
-                        runtimeActions = runtime.actions,
-                        onTabSelected = { route = ShuiRoute.Tab(it) },
-                        onOpenDetail = { route = ShuiRoute.OrderDetail },
-                        onOpenDrinking = { route = ShuiRoute.DrinkingWater(runtimeState.currentWaterReady?.cd.orEmpty()) }
-                    )
-
-                    MainTab.Devices -> DevicesScreen(
-                        selectedTab = selectedTab,
-                        runtimeState = runtimeState,
-                        runtimeActions = runtime.actions,
-                        onTabSelected = { route = ShuiRoute.Tab(it) },
-                        onOpenOrder = { route = ShuiRoute.WasherOrder },
+                        onBack = { route = ShuiRoute.Tab(MainTab.Devices) },
                         onAdd = { showAddWasher = true },
-                        onMenu = { selectedMenuDevice = it },
-                        onOpenDrinking = { device ->
-                            val qrOrCd = device.qrUrl ?: device.cd.orEmpty()
-                            route = ShuiRoute.DrinkingWater(qrOrCd)
-                        },
-                        onOpenEmpty = { route = ShuiRoute.EmptyDevices }
+                        onTabSelected = { route = ShuiRoute.Tab(it) }
                     )
-
-                    MainTab.Profile -> ProfileScreen(
+                    ShuiRoute.HotwaterDetail -> HotwaterDetailScreen(
                         selectedTab = selectedTab,
                         runtimeState = runtimeState,
-                        onTabSelected = { route = ShuiRoute.Tab(it) },
-                        onOpenZhuliAccount = { route = ShuiRoute.AccountDetail(AccountKind.Zhuli) },
-                        onOpenUjingAccount = { route = ShuiRoute.AccountDetail(AccountKind.Ujing) },
-                        onOpenMoreOptions = { route = ShuiRoute.MoreOptions }
+                        runtimeActions = runtime.actions,
+                        onBack = { route = ShuiRoute.Tab(MainTab.Home) },
+                        onTabSelected = { route = ShuiRoute.Tab(it) }
+                    )
+                    is ShuiRoute.AccountDetail -> AccountDetailScreen(
+                        selectedTab = selectedTab,
+                        kind = targetRoute.kind,
+                        runtimeState = runtimeState,
+                        runtimeActions = runtime.actions,
+                        onBack = { route = ShuiRoute.Tab(MainTab.Profile) },
+                        onTabSelected = { route = ShuiRoute.Tab(it) }
+                    )
+                    ShuiRoute.MoreOptions -> MoreOptionsScreen(
+                        selectedTab = selectedTab,
+                        runtimeActions = runtime.actions,
+                        onBack = { route = ShuiRoute.Tab(MainTab.Profile) },
+                        onTabSelected = { route = ShuiRoute.Tab(it) }
+                    )
+                    is ShuiRoute.DrinkingWater -> DrinkingWaterScreen(
+                        selectedTab = selectedTab,
+                        cd = targetRoute.cd,
+                        runtimeState = runtimeState,
+                        runtimeActions = runtime.actions,
+                        onBack = { route = ShuiRoute.Tab(MainTab.Devices) },
+                        onCompleted = { route = ShuiRoute.Tab(MainTab.Home) },
+                        onTabSelected = { route = ShuiRoute.Tab(it) }
                     )
                 }
-
-                ShuiRoute.WasherOrder -> WasherOrderScreen(
-                    runtimeState = runtimeState,
-                    runtimeActions = runtime.actions,
-                    onBack = { route = ShuiRoute.Tab(MainTab.Devices) }
-                )
-                ShuiRoute.OrderDetail -> OrderDetailScreen(
-                    selectedTab = selectedTab,
-                    runtimeState = runtimeState,
-                    runtimeActions = runtime.actions,
-                    onBack = { route = ShuiRoute.Tab(MainTab.Orders) },
-                    onTabSelected = { route = ShuiRoute.Tab(it) }
-                )
-
-                ShuiRoute.EmptyDevices -> EmptyDevicesScreen(
-                    selectedTab = selectedTab,
-                    onBack = { route = ShuiRoute.Tab(MainTab.Devices) },
-                    onAdd = { showAddWasher = true },
-                    onTabSelected = { route = ShuiRoute.Tab(it) }
-                )
-                ShuiRoute.HotwaterDetail -> HotwaterDetailScreen(
-                    selectedTab = selectedTab,
-                    runtimeState = runtimeState,
-                    runtimeActions = runtime.actions,
-                    onBack = { route = ShuiRoute.Tab(MainTab.Home) },
-                    onTabSelected = { route = ShuiRoute.Tab(it) }
-                )
-                is ShuiRoute.AccountDetail -> AccountDetailScreen(
-                    selectedTab = selectedTab,
-                    kind = (route as ShuiRoute.AccountDetail).kind,
-                    runtimeState = runtimeState,
-                    runtimeActions = runtime.actions,
-                    onBack = { route = ShuiRoute.Tab(MainTab.Profile) },
-                    onTabSelected = { route = ShuiRoute.Tab(it) }
-                )
-                ShuiRoute.MoreOptions -> MoreOptionsScreen(
-                    selectedTab = selectedTab,
-                    runtimeActions = runtime.actions,
-                    onBack = { route = ShuiRoute.Tab(MainTab.Profile) },
-                    onTabSelected = { route = ShuiRoute.Tab(it) }
-                )
-                is ShuiRoute.DrinkingWater -> DrinkingWaterScreen(
-                    selectedTab = selectedTab,
-                    cd = (route as ShuiRoute.DrinkingWater).cd,
-                    runtimeState = runtimeState,
-                    runtimeActions = runtime.actions,
-                    onBack = { route = ShuiRoute.Tab(MainTab.Devices) },
-                    onTabSelected = { route = ShuiRoute.Tab(it) }
-                )
             }
-            if (showAddWasher) {
+            AnimatedVisibility(visible = showAddWasher, enter = shuiDialogEnter(), exit = shuiDialogExit()) {
                 AddWasherDialog(
                     onDismiss = { showAddWasher = false },
                     onScan = launchWasherScanner
                 )
             }
-            selectedMenuDevice?.let { device ->
+            AnimatedVisibility(visible = selectedMenuDevice != null, enter = shuiDialogEnter(), exit = shuiDialogExit()) {
+                val device = selectedMenuDevice ?: return@AnimatedVisibility
                 DeviceActionPopup(
                     onDismiss = { selectedMenuDevice = null },
                     onEdit = {
@@ -278,7 +302,8 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
                     }
                 )
             }
-            editingDevice?.let { device ->
+            AnimatedVisibility(visible = editingDevice != null, enter = shuiDialogEnter(), exit = shuiDialogExit()) {
+                val device = editingDevice ?: return@AnimatedVisibility
                 EditDeviceNameDialog(
                     device = device,
                     onDismiss = { editingDevice = null },
@@ -288,7 +313,8 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
                     }
                 )
             }
-            scannerMessage?.let { message ->
+            AnimatedVisibility(visible = scannerMessage != null, enter = shuiStatusEnter(), exit = shuiStatusExit()) {
+                val message = scannerMessage ?: return@AnimatedVisibility
                 ScannerMessageBanner(
                     message = message,
                     onDismiss = { scannerMessage = null },
@@ -296,6 +322,13 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 12.dp, vertical = 78.dp)
                 )
+            }
+            AnimatedVisibility(
+                visible = openingVisible,
+                enter = fadeIn(tween(ShuiMotion.Quick)),
+                exit = fadeOut(tween(ShuiMotion.Normal, easing = ShuiMotion.EaseOut))
+            ) {
+                OpeningMotionOverlay()
             }
         }
     }
@@ -317,7 +350,7 @@ private fun backRouteFor(route: ShuiRoute): ShuiRoute.Tab {
 @Composable
 private fun ScannerMessageBanner(message: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     SectionCard(
-        modifier = modifier.clickable(onClick = onDismiss),
+        modifier = modifier.shuiPressable(onClick = onDismiss),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Text(
@@ -328,6 +361,34 @@ private fun ScannerMessageBanner(message: String, onDismiss: () -> Unit, modifie
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+@Composable
+private fun OpeningMotionOverlay() {
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { started = true }
+    val markScale by animateFloatAsState(
+        targetValue = if (started) 1f else 0f,
+        animationSpec = tween(ShuiMotion.Opening, easing = ShuiMotion.EaseOut),
+        label = "openingMarkScale"
+    )
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(ShuiColors.Background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            DecorativeImage(
+                R.drawable.home_top_character,
+                modifier = Modifier
+                    .size(116.dp)
+                    .scale(0.92f + markScale * 0.08f)
+            )
+            Text("芙兰水衣", color = ShuiColors.Primary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text("水、衣、热水，轻轻开始", color = ShuiColors.MutedText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 
@@ -418,10 +479,27 @@ private fun HomeScreen(
     ) {
         Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             OngoingCard(runtimeState.homeTasks, onOpenHotwaterDetail, onOpenWasherDetail, onOpenDrinkingDetail)
+            homeWaterMessage(runtimeState)?.let { (state, message) ->
+                RuntimeStatusBanner(message, state)
+            }
             HotWaterCard(runtimeState.hotwaterStart, runtimeState.hotwaterStop, runtimeActions)
             ScanCard(onClick = onOpenWasherOrder)
             WasherDeviceSummaryCard(runtimeState.localDevices, onOpenDevices)
         }
+    }
+}
+
+private fun homeWaterMessage(runtimeState: ShuiRuntimeState): Pair<RuntimeTaskState, String>? {
+    return when {
+        runtimeState.waterScan.state == RuntimeTaskState.Failure ->
+            runtimeState.waterScan.state to (runtimeState.waterScan.message ?: "饮水扫码失败")
+        runtimeState.waterOrder.state == RuntimeTaskState.Failure ->
+            runtimeState.waterOrder.state to (runtimeState.waterOrder.message ?: "接水订单创建失败")
+        runtimeState.waterOrder.state == RuntimeTaskState.Loading ->
+            runtimeState.waterOrder.state to (runtimeState.waterOrder.message ?: "正在创建接水订单")
+        runtimeState.waterOrder.state == RuntimeTaskState.Success && runtimeState.waterOrder.message != null ->
+            runtimeState.waterOrder.state to runtimeState.waterOrder.message
+        else -> null
     }
 }
 
@@ -436,23 +514,29 @@ private fun OngoingCard(
         Column {
             HomeSectionTitle(R.drawable.shui_fire, "进行中")
             Spacer(Modifier.height(6.dp))
-            if (tasks.isEmpty()) {
-                RunningStatusEmpty()
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    tasks.take(3).forEach { task ->
-                        RunningStatusCard(
-                            task = task,
-                            modifier = Modifier.weight(1f),
-                            onClick = when (task.target) {
-                                HomeTaskTarget.HotwaterDetail -> onOpenHotwaterDetail
-                                HomeTaskTarget.WasherOrderDetail -> onOpenWasherDetail
-                                HomeTaskTarget.DrinkingWaterDetail -> onOpenDrinkingDetail
-                            }
-                        )
-                    }
-                    repeat((3 - tasks.size.coerceAtMost(3)).coerceAtLeast(0)) {
-                        Spacer(Modifier.weight(1f))
+            AnimatedContent(
+                targetState = tasks,
+                transitionSpec = { shuiPageTransform(this) },
+                label = "ongoingTasksMotion"
+            ) { animatedTasks ->
+                if (animatedTasks.isEmpty()) {
+                    RunningStatusEmpty()
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        animatedTasks.take(3).forEach { task ->
+                            RunningStatusCard(
+                                task = task,
+                                modifier = Modifier.weight(1f),
+                                onClick = when (task.target) {
+                                    HomeTaskTarget.HotwaterDetail -> onOpenHotwaterDetail
+                                    HomeTaskTarget.WasherOrderDetail -> onOpenWasherDetail
+                                    HomeTaskTarget.DrinkingWaterDetail -> onOpenDrinkingDetail
+                                }
+                            )
+                        }
+                        repeat((3 - animatedTasks.size.coerceAtMost(3)).coerceAtLeast(0)) {
+                            Spacer(Modifier.weight(1f))
+                        }
                     }
                 }
             }
@@ -524,7 +608,7 @@ private fun RunningStatusCard(task: HomeTaskUi, modifier: Modifier, onClick: () 
             .clip(RoundedCornerShape(12.dp))
             .background(taskColor(task).copy(alpha = .05f))
             .border(1.dp, taskColor(task).copy(alpha = .58f), RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
+            .shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onClick)
             .padding(horizontal = 5.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -681,7 +765,7 @@ private fun ScanCard(onClick: () -> Unit) {
                     .fillMaxWidth()
                     .height(104.dp)
                     .padding(top = 6.dp)
-                    .clickable(onClick = onClick),
+                    .shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onClick),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -754,7 +838,7 @@ private fun WasherDeviceSummaryCard(localDevices: List<LocalDeviceShortcut>, onO
                 modifier = Modifier
                     .width(154.dp)
                     .height(108.dp)
-                    .clickable(onClick = onOpenDevices)
+                    .shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onOpenDevices)
             ) {
                 DecorativeImage(
                     R.drawable.washer_character,
@@ -980,7 +1064,7 @@ private fun OptionSection(
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 options.forEachIndexed { index, option ->
-                    Box(Modifier.weight(1f).clickable { onSelected(index) }) {
+                    Box(Modifier.weight(1f).shuiPressable(scale = ShuiMotion.SoftPressedScale) { onSelected(index) }) {
                         OptionCard(
                             title = option.first,
                             subtitle = option.second,
@@ -1126,7 +1210,7 @@ private fun ProfileScreen(
 @Composable
 private fun MoreOptionsEntry(onOpen: () -> Unit) {
     SectionCard(
-        modifier = Modifier.clickable(onClick = onOpen),
+        modifier = Modifier.shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onOpen),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1283,6 +1367,19 @@ private fun OrdersScreen(
             color = ShuiColors.Blue
         )
     }
+    val drinkingOrders = listOfNotNull(drinkingOrder) + runtimeState.waterOrderHistoryRecords
+        .asReversed()
+        .map { order ->
+            OrderUi(
+                type = "饮水",
+                time = order.completedAt,
+                device = "饮水机 ${order.deviceNo.ifBlank { order.orderId }}",
+                amount = String.format(java.util.Locale.CHINA, "¥%.2f", order.payment),
+                status = order.status,
+                icon = "水",
+                color = ShuiColors.Blue
+            )
+        }
     val historyMessage = runtimeState.hotwaterHistory.message
 
     PrimaryPageScaffold(
@@ -1328,10 +1425,13 @@ private fun OrdersScreen(
                     }
                 }
                 OrderCategory.Drinking -> {
-                    if (drinkingOrder == null) {
+                    if (drinkingOrders.isEmpty()) {
                         EmptyDrinkingOrderState(runtimeState.waterOrder.state)
                     } else {
-                        OrderListItem(drinkingOrder, onOpenDrinking)
+                        drinkingOrders.forEachIndexed { index, order ->
+                            val openOrder: () -> Unit = if (index == 0 && drinkingOrder != null) onOpenDrinking else ({})
+                            OrderListItem(order, openOrder)
+                        }
                     }
                 }
                 OrderCategory.Washer -> {
@@ -1358,14 +1458,20 @@ private fun RuntimeStatusBanner(message: String, state: RuntimeTaskState) {
         else -> ShuiColors.Primary
     }
     SectionCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 9.dp)) {
-        Text(
-            text = message,
-            color = color,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        AnimatedContent(
+            targetState = message to color,
+            transitionSpec = { shuiPageTransform(this) },
+            label = "runtimeStatusBannerMotion"
+        ) { (animatedMessage, animatedColor) ->
+            Text(
+                text = animatedMessage,
+                color = animatedColor,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -1431,7 +1537,7 @@ private fun CategoryChip(
             .clip(RoundedCornerShape(9.dp))
             .background(if (selected) color else Color.White.copy(alpha = .65f))
             .border(1.dp, color.copy(alpha = .3f), RoundedCornerShape(9.dp))
-            .clickable(onClick = onClick),
+            .shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(text, color = if (selected) Color.White else ShuiColors.DeepText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -1577,7 +1683,7 @@ private fun DevicesScreen(
                 )
             }
             Spacer(Modifier.height(10.dp))
-            Box(Modifier.fillMaxWidth().height(44.dp).clickable(onClick = onOpenEmpty))
+            Box(Modifier.fillMaxWidth().height(44.dp).shuiPressable(onClick = onOpenEmpty))
         }
     }
 }
@@ -1606,7 +1712,7 @@ private fun RefreshBar(
             .clip(RoundedCornerShape(10.dp))
             .background(ShuiColors.WeakPink.copy(alpha = .55f))
             .border(1.dp, ShuiColors.CardBorder.copy(alpha = .45f), RoundedCornerShape(10.dp))
-            .clickable(onClick = onRefresh)
+            .shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onRefresh)
             .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1953,7 +2059,7 @@ private fun MoreOptionsScreen(
 @Composable
 private fun MoreOptionRow(title: String, subtitle: String, onClick: () -> Unit) {
     SectionCard(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.shuiPressable(scale = ShuiMotion.SoftPressedScale, onClick = onClick),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 13.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1973,17 +2079,26 @@ private fun DrinkingWaterScreen(
     runtimeState: ShuiRuntimeState,
     runtimeActions: ShuiRuntimeActions,
     onBack: () -> Unit,
+    onCompleted: () -> Unit,
     onTabSelected: (MainTab) -> Unit
 ) {
-    LaunchedEffect(cd) {
-        if (cd.isNotBlank() && runtimeState.currentWaterReady?.cd != cd) {
-            runtimeActions.prepareDrinkingWater(cd)
-        }
-    }
     val ready = runtimeState.currentWaterReady
     val order = runtimeState.currentWaterOrder
-    val busy = runtimeState.waterScan.state == RuntimeTaskState.Loading ||
-        runtimeState.waterOrder.state == RuntimeTaskState.Loading
+    val busy = runtimeState.waterOrder.state == RuntimeTaskState.Loading
+    LaunchedEffect(order?.orderId) {
+        if (order != null) {
+            runtimeActions.refreshCurrentDrinkingWaterOrder()
+        }
+    }
+    LaunchedEffect(runtimeState.waterOrder.state, runtimeState.currentWaterOrder, runtimeState.waterOrder.message) {
+        if (
+            runtimeState.waterOrder.state == RuntimeTaskState.Success &&
+            runtimeState.currentWaterOrder == null &&
+            runtimeState.waterOrder.message?.contains("已完成") == true
+        ) {
+            onCompleted()
+        }
+    }
     PrimaryPageScaffold(
         title = "饮水接单",
         selectedTab = selectedTab,
@@ -2016,22 +2131,7 @@ private fun DrinkingWaterScreen(
                     if ((ready?.balanceFen ?: 0) <= 0 && ready != null) {
                         Text("余额不足，请先在官方 App 充值", color = ShuiColors.Orange, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PrimaryGradientButton(
-                            "确认设备",
-                            Modifier.weight(1f),
-                            enabled = !busy && (ready?.cd ?: cd).isNotBlank()
-                        ) {
-                            runtimeActions.prepareDrinkingWater(ready?.cd ?: cd)
-                        }
-                        PrimaryGradientButton(
-                            "创建接水订单",
-                            Modifier.weight(1f),
-                            enabled = !busy && ready != null && order == null && ready.balanceFen > 0
-                        ) {
-                            runtimeActions.createDrinkingWaterOrder()
-                        }
-                    }
+                    Text("扫码后会自动创建接水订单；请在饮水机上按按钮开始或停止接水。", color = ShuiColors.MutedText, fontSize = 13.sp, lineHeight = 19.sp)
                 }
             }
             SectionCard(contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
