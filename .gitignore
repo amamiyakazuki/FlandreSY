@@ -1,0 +1,44 @@
+# Android / Gradle
+.gradle/
+build/
+**/build/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+
+# Local config
+local.properties
+
+# Generated APK/AAB and packaging outputs
+*.apk
+*.aab
+*.ap_
+outputs/
+
+# Logs, dumps, temp files
+*.log
+*.tmp
+*.temp
+*.hprof
+java_pid*.hprof
+
+# Kotlin / Java / Android Studio caches
+*.kotlin_metadata
+.cxx/
+
+# Workspace-only review artifacts
+.codex/
+P_PLAN/
+screenshots/
+tmp_ujing_flows.jsonl
+
+# OS noise
+.DS_Store
+Thumbs.db
+refer/
