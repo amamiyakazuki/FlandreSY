@@ -37,9 +37,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.paddingFromBaseline
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +51,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -103,6 +106,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import android.graphics.BitmapFactory
+import android.util.Base64
 
 private sealed class ShuiRoute {
     data class Tab(val tab: MainTab) : ShuiRoute()
@@ -123,7 +128,8 @@ private enum class OrderCategory {
 
 private enum class AccountKind {
     Zhuli,
-    Ujing
+    Ujing,
+    Shower798
 }
 
 private data class VersionCheckResult(
@@ -272,6 +278,7 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
                             onTabSelected = { route = ShuiRoute.Tab(it) },
                             onOpenZhuliAccount = { route = ShuiRoute.AccountDetail(AccountKind.Zhuli) },
                             onOpenUjingAccount = { route = ShuiRoute.AccountDetail(AccountKind.Ujing) },
+                            onOpenShower798Account = { route = ShuiRoute.AccountDetail(AccountKind.Shower798) },
                             onOpenMoreOptions = { route = ShuiRoute.MoreOptions }
                         )
                     }
@@ -680,7 +687,7 @@ private fun HomeScreen(
             homeWaterMessage(runtimeState)?.let { (state, message) ->
                 RuntimeStatusBanner(message, state)
             }
-            HotWaterCard(runtimeState.hotwaterStart, runtimeState.hotwaterStop, runtimeActions)
+            HotWaterCard(runtimeState, runtimeActions)
             ScanCard(onClick = onOpenWasherOrder)
             WasherDeviceSummaryCard(runtimeState.localDevices, onOpenDevices)
         }
@@ -845,10 +852,12 @@ private fun RunningStatusCard(iconRes: Int, title: String, sub: String, color: C
 
 @Composable
 private fun HotWaterCard(
-    startStatus: RuntimeActionStatus,
-    stopStatus: RuntimeActionStatus,
+    runtimeState: ShuiRuntimeState,
     actions: ShuiRuntimeActions
 ) {
+    val using798 = runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()
+    val startStatus = if (using798) runtimeState.shower798Start else runtimeState.hotwaterStart
+    val stopStatus = if (using798) runtimeState.shower798Stop else runtimeState.hotwaterStop
     val isStarting = startStatus.state == RuntimeTaskState.Loading
     val isStopping = stopStatus.state == RuntimeTaskState.Loading
     val visibleStatus = when {
@@ -887,16 +896,20 @@ private fun HotWaterCard(
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         PrimaryGradientButton(
-                            if (isStarting) "启动中" else "开热水",
+                            if (isStarting) "启动中" else if (using798) "开始洗浴" else "开热水",
                             Modifier.weight(1f),
                             enabled = !isStarting && !isStopping,
-                            onClick = { actions.startHotwater() }
+                            onClick = {
+                                if (using798) actions.startShower798() else actions.startHotwater()
+                            }
                         )
                         PrimaryGradientButton(
-                            if (isStopping) "关闭中" else "关热水",
+                            if (isStopping) "关闭中" else if (using798) "结束洗浴" else "关热水",
                             Modifier.weight(1f),
                             enabled = !isStarting && !isStopping,
-                            onClick = { actions.stopHotwater() }
+                            onClick = {
+                                if (using798) actions.stopShower798() else actions.stopHotwater()
+                            }
                         )
                     }
                 }
@@ -915,7 +928,7 @@ private fun HotWaterCard(
                     Text("⚠", color = ShuiColors.Primary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        visibleStatus.message ?: "当前无错误",
+                        visibleStatus.message ?: if (using798) "当前使用慧生活798设备：${runtimeState.currentShower798DeviceId}" else "当前无错误",
                         color = ShuiColors.Primary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
@@ -1464,6 +1477,7 @@ private fun ProfileScreen(
     onTabSelected: (MainTab) -> Unit,
     onOpenZhuliAccount: () -> Unit = {},
     onOpenUjingAccount: () -> Unit = {},
+    onOpenShower798Account: () -> Unit = {},
     onOpenMoreOptions: () -> Unit = {}
 ) {
     PrimaryPageScaffold(
@@ -1483,21 +1497,10 @@ private fun ProfileScreen(
         }
     ) {
         Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            AccountCard(
-                title = "住理生活账号",
-                accent = ShuiColors.Primary,
-                titleIcon = R.drawable.shui_zhuli,
-                logoRes = R.drawable.shui_zhuli,
-                serviceIcon = R.drawable.shui_red_check,
-                resetIcon = R.drawable.shui_red_reset,
-                unsetIcon = R.drawable.shui_red_unset,
-                statusIcon = R.drawable.shui_red_status,
-                loginHint = "点击登录住理生活账号",
-                serviceText = "检测住理服务",
-                statusTitle = if (runtimeState.hotwaterPhone.isBlank()) "未登录" else "已登录：${runtimeState.hotwaterPhone}",
-                statusSubtitle = "热水设备码：${runtimeState.hotwaterDeviceCode.ifBlank { "未绑定" }}",
-                middleActionText = "绑定设备码",
-                onOpen = onOpenZhuliAccount
+            BathSystemEntryCard(
+                runtimeState = runtimeState,
+                onOpenZhuli = onOpenZhuliAccount,
+                onOpenShower798 = onOpenShower798Account
             )
             AccountCard(
                 title = "U净账号",
@@ -1512,7 +1515,8 @@ private fun ProfileScreen(
                 serviceText = "检测 U净服务",
                 statusTitle = runtimeState.ujingAccount?.mobile?.let { "已登录：$it" } ?: "未登录",
                 statusSubtitle = runtimeState.ujingAccount?.let { "服务：${it.serviceSubjectId}" } ?: "验证码登录 U净",
-                middleActionText = "绑定设备码",
+                loginButtonText = if (runtimeState.ujingAccount != null) "已登录" else "点击登录",
+                middleActionText = if (runtimeState.ujingAccount != null) "已登录" else "验证码登录",
                 onOpen = onOpenUjingAccount
             )
             MoreOptionsEntry(onOpenMoreOptions)
@@ -1520,6 +1524,116 @@ private fun ProfileScreen(
                 DecorativeImage(R.drawable.shui_wode_bottom, Modifier.align(Alignment.BottomCenter).size(258.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun BathSystemEntryCard(
+    runtimeState: ShuiRuntimeState,
+    onOpenZhuli: () -> Unit,
+    onOpenShower798: () -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(0) }
+    val zhuliLoggedIn = runtimeState.hotwaterPhone.isNotBlank()
+    val showerLoggedIn = runtimeState.shower798Account != null
+    val currentTitle = if (selectedTab == 0) "住理生活" else "慧生活798"
+    val currentStatus = if (selectedTab == 0) {
+        if (zhuliLoggedIn) "已登录：${runtimeState.hotwaterPhone}" else "未登录"
+    } else {
+        if (showerLoggedIn) "已登录：${runtimeState.shower798Account?.mobile.orEmpty()}" else "未登录"
+    }
+    val currentSubtitle = if (selectedTab == 0) {
+        "热水设备码：${runtimeState.hotwaterDeviceCode.ifBlank { "未绑定" }}"
+    } else {
+        if (runtimeState.shower798Devices.isEmpty()) "登录后可管理洗浴设备" else "已绑定 ${runtimeState.shower798Devices.size} 台洗浴设备"
+    }
+    val onOpen = if (selectedTab == 0) onOpenZhuli else onOpenShower798
+    val loggedIn = if (selectedTab == 0) zhuliLoggedIn else showerLoggedIn
+
+    SectionCard(
+        borderColor = ShuiColors.Primary.copy(alpha = .30f),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                DecorativeImage(R.drawable.shui_fire, Modifier.size(24.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("洗浴系统", color = ShuiColors.DeepText, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text("  ✦", color = ShuiColors.Primary.copy(alpha = .35f), fontSize = 16.sp)
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.width(82.dp).height(1.dp).background(ShuiColors.Primary.copy(alpha = .16f)))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                BathTabChip("住理生活", selectedTab == 0, Modifier.weight(1f)) { selectedTab = 0 }
+                BathTabChip("慧生活798", selectedTab == 1, Modifier.weight(1f)) { selectedTab = 1 }
+            }
+            SectionCard(
+                borderColor = if (selectedTab == 0) ShuiColors.Primary.copy(alpha = .18f) else ShuiColors.Orange.copy(alpha = .18f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        DecorativeImage(if (selectedTab == 0) R.drawable.shui_zhuli else R.drawable.shui_huisheng_798_logo, Modifier.size(42.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(currentStatus, color = ShuiColors.DeepText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text(currentSubtitle, color = ShuiColors.MutedText, fontSize = 12.sp)
+                        }
+                        PrimaryGradientButton(
+                            if (loggedIn) "已登录" else "点击登录",
+                            Modifier.width(96.dp).height(44.dp),
+                            onClick = onOpen
+                        )
+                    }
+                    AccountServiceRow(
+                        iconRes = if (selectedTab == 0) R.drawable.shui_red_check else R.drawable.shui_blue_check,
+                        text = if (selectedTab == 0) "住理生活热水登录" else "慧生活798 手机验证码登录",
+                        onClick = onOpen
+                    )
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, ShuiColors.CardBorder.copy(alpha = .5f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AccountMiniAction("重新登录", "↻", Modifier.weight(1f), onOpen)
+                        AccountMiniAction(
+                            if (selectedTab == 0) "进入住理登录" else "进入设备与登录",
+                            "⌁",
+                            Modifier.weight(1.4f),
+                            onOpen
+                        )
+                        AccountMiniAction("查看状态", "◫", Modifier.weight(1f), onOpen)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BathTabChip(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) ShuiColors.Primary.copy(alpha = .12f) else Color.White.copy(alpha = .7f))
+            .border(
+                1.dp,
+                if (selected) ShuiColors.Primary.copy(alpha = .55f) else ShuiColors.CardBorder.copy(alpha = .4f),
+                RoundedCornerShape(12.dp)
+            )
+            .shuiPressable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = if (selected) ShuiColors.Primary else ShuiColors.DeepText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1542,6 +1656,144 @@ private fun MoreOptionsEntry(onOpen: () -> Unit) {
 }
 
 @Composable
+private fun Shower798AccountEntryCard(
+    runtimeState: ShuiRuntimeState,
+    onOpen: () -> Unit
+) {
+    val loggedIn = runtimeState.shower798Account != null
+    val title = if (loggedIn) {
+        "已登录：${runtimeState.shower798Account?.mobile.orEmpty()}"
+    } else {
+        "未登录"
+    }
+    val subtitle = if (runtimeState.shower798Devices.isEmpty()) {
+        "登录后可管理洗浴设备"
+    } else {
+        "已绑定 ${runtimeState.shower798Devices.size} 台洗浴设备"
+    }
+
+    SectionCard(
+        borderColor = ShuiColors.Orange.copy(alpha = .30f),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Column {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                DecorativeImage(R.drawable.shui_huisheng_798_logo, Modifier.size(24.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("慧生活798账号", color = ShuiColors.DeepText, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text("  ✦", color = ShuiColors.Orange.copy(alpha = .35f), fontSize = 16.sp)
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.width(82.dp).height(1.dp).background(ShuiColors.Orange.copy(alpha = .16f)))
+            }
+            Spacer(Modifier.height(6.dp))
+            SectionCard(
+                borderColor = ShuiColors.Orange.copy(alpha = .18f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        DecorativeImage(R.drawable.shui_huisheng_798_logo, Modifier.size(42.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(title, color = ShuiColors.DeepText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text(subtitle, color = ShuiColors.MutedText, fontSize = 12.sp)
+                        }
+                        PrimaryGradientButton(
+                            if (loggedIn) "已登录" else "点击登录",
+                            Modifier.width(96.dp).height(44.dp),
+                            onClick = onOpen
+                        )
+                    }
+                    AccountServiceRow(
+                        iconRes = R.drawable.shui_blue_check,
+                        text = "手机号验证码登录",
+                        onClick = onOpen
+                    )
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, ShuiColors.CardBorder.copy(alpha = .5f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AccountMiniAction(
+                            label = "重新登录",
+                            icon = "↻",
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpen
+                        )
+                        AccountMiniAction(
+                            label = "进入登录与设备",
+                            icon = "⌁",
+                            modifier = Modifier.weight(1.4f),
+                            onClick = onOpen
+                        )
+                        AccountMiniAction(
+                            label = "查看状态",
+                            icon = "◫",
+                            modifier = Modifier.weight(1f),
+                            onClick = onOpen
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountServiceRow(
+    iconRes: Int,
+    text: String,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, ShuiColors.CardBorder.copy(alpha = .45f), RoundedCornerShape(14.dp))
+            .shuiPressable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        DecorativeImage(iconRes, Modifier.size(22.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(text, color = ShuiColors.DeepText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        Text("›", color = ShuiColors.MutedText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun AccountMiniAction(
+    label: String,
+    icon: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .shuiPressable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(icon, color = ShuiColors.Blue, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            label,
+            color = ShuiColors.MutedText,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
 private fun UjingAccountRuntimeCard(
     runtimeState: ShuiRuntimeState,
     runtimeActions: ShuiRuntimeActions
@@ -1552,7 +1804,14 @@ private fun UjingAccountRuntimeCard(
     var captcha by remember { mutableStateOf("") }
     val captchaLoading = runtimeState.ujingCaptcha.state == RuntimeTaskState.Loading
     val loginLoading = runtimeState.washerLogin.state == RuntimeTaskState.Loading
+    var captchaCooldown by remember { mutableStateOf(0) }
     val busy = captchaLoading || loginLoading
+    LaunchedEffect(captchaCooldown) {
+        if (captchaCooldown > 0) {
+            delay(1000)
+            captchaCooldown -= 1
+        }
+    }
     val account = runtimeState.ujingAccount
 
     SectionCard(
@@ -1608,10 +1867,17 @@ private fun UjingAccountRuntimeCard(
                             modifier = Modifier.weight(1f)
                         )
                         PrimaryGradientButton(
-                            if (captchaLoading) "发送中" else "验证码",
+                            when {
+                                captchaLoading -> "发送中"
+                                captchaCooldown > 0 -> "${captchaCooldown}s"
+                                else -> "发送验证码"
+                            },
                             Modifier.width(92.dp).height(52.dp),
-                            enabled = !busy,
-                            onClick = { runtimeActions.requestUjingCaptcha(mobile) }
+                            enabled = !busy && captchaCooldown == 0,
+                            onClick = {
+                                runtimeActions.requestUjingCaptcha(mobile)
+                                captchaCooldown = 30
+                            }
                         )
                     }
                     PrimaryGradientButton(
@@ -2006,7 +2272,11 @@ private fun DevicesScreen(
     onOpenDrinking: (LocalDeviceShortcut) -> Unit,
     onOpenEmpty: () -> Unit
 ) {
-    val devices = runtimeState.localDevices.filter { it.deviceType == LocalDeviceType.Washer || it.deviceType == LocalDeviceType.DrinkingWater }
+    val devices = runtimeState.localDevices.filter {
+        it.deviceType == LocalDeviceType.Washer ||
+            it.deviceType == LocalDeviceType.DrinkingWater ||
+            it.deviceType == LocalDeviceType.Shower798
+    }
     val refresh = { runtimeActions.refreshLocalDevices() }
     val lastRefreshed = runtimeState.localDevicesLastRefreshed.ifBlank { "未刷新" }
     PrimaryPageScaffold(
@@ -2048,24 +2318,45 @@ private fun DevicesScreen(
                         type = when (device.deviceType) {
                             LocalDeviceType.DrinkingWater -> "饮水快捷入口"
                             LocalDeviceType.Washer -> device.storeName ?: "洗衣快捷入口"
+                            LocalDeviceType.Shower798 -> "慧生活798设备"
                             LocalDeviceType.Unknown -> "本地快捷入口"
                         },
-                        status = device.lastStatus ?: "未知",
+                        status = if (device.deviceType == LocalDeviceType.Shower798 && runtimeState.currentShower798DeviceId == device.id) {
+                            "已勾选"
+                        } else {
+                            if (device.deviceType == LocalDeviceType.Shower798) "未勾选" else device.lastStatus ?: "未知"
+                        },
                         statusColor = when {
                             device.deviceType == LocalDeviceType.DrinkingWater -> ShuiColors.Blue
+                            device.deviceType == LocalDeviceType.Shower798 && runtimeState.currentShower798DeviceId == device.id -> ShuiColors.Primary
+                            device.deviceType == LocalDeviceType.Shower798 -> ShuiColors.Orange
                             device.lastStatus == "可下单" -> ShuiColors.Green
                             device.lastStatus?.contains("运行") == true -> ShuiColors.Blue
                             else -> ShuiColors.Orange
                         },
                         imageRes = when (device.deviceType) {
                             LocalDeviceType.DrinkingWater -> R.drawable.shui_jieshui
+                            LocalDeviceType.Shower798 -> R.drawable.shui_huisheng_798_logo
                             LocalDeviceType.Washer, LocalDeviceType.Unknown -> R.drawable.washer_machine
-                        }
+                        },
+                        statusFilled = device.deviceType != LocalDeviceType.Shower798 || runtimeState.currentShower798DeviceId == device.id,
+                        actionSelected = device.deviceType == LocalDeviceType.Shower798 && runtimeState.currentShower798DeviceId == device.id,
+                        actionColor = if (device.deviceType == LocalDeviceType.Shower798) ShuiColors.Primary else ShuiColors.Primary
                     ),
-                    onMenu = { onMenu(device) },
+                    onMenu = {
+                        if (device.deviceType == LocalDeviceType.Shower798) {
+                            runtimeActions.selectShower798Device(device.id)
+                        } else {
+                            onMenu(device)
+                        }
+                    },
                     onOpen = {
                         if (device.deviceType == LocalDeviceType.DrinkingWater) {
                             onOpenDrinking(device)
+                            return@DeviceListItem
+                        }
+                        if (device.deviceType == LocalDeviceType.Shower798) {
+                            runtimeActions.selectShower798Device(device.id)
                             return@DeviceListItem
                         }
                         val qr = device.qrUrl
@@ -2085,10 +2376,10 @@ private fun DevicesScreen(
 }
 
 private fun deviceDisplayName(device: LocalDeviceShortcut, index: Int): String {
-    val fallback = if (device.deviceType == LocalDeviceType.DrinkingWater) {
-        "饮水机A-${(index + 1).toString().padStart(2, '0')}"
-    } else {
-        "洗衣机A-${(index + 1).toString().padStart(2, '0')}"
+    val fallback = when (device.deviceType) {
+        LocalDeviceType.DrinkingWater -> "饮水机A-${(index + 1).toString().padStart(2, '0')}"
+        LocalDeviceType.Shower798 -> "慧生活798A-${(index + 1).toString().padStart(2, '0')}"
+        else -> "洗衣机A-${(index + 1).toString().padStart(2, '0')}"
     }
     return device.customName.takeIf { it.isNotBlank() } ?: fallback
 }
@@ -2226,14 +2517,53 @@ private fun HotwaterDetailScreen(
             SectionCard {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     SectionTitle(icon = "hot", title = "当前热水")
-                    RuntimeStatusBanner(runtimeState.hotwaterStart.message ?: "暂无热水任务", runtimeState.hotwaterStart.state)
-                    runtimeState.hotwaterStop.message?.let { RuntimeStatusBanner(it, runtimeState.hotwaterStop.state) }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PrimaryGradientButton("开热水", Modifier.weight(1f), enabled = runtimeState.hotwaterStart.state != RuntimeTaskState.Loading) {
-                            runtimeActions.startHotwater()
+                    RuntimeStatusBanner(
+                        if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) {
+                            runtimeState.shower798Start.message ?: "当前设备：${runtimeState.currentShower798DeviceId}"
+                        } else {
+                            runtimeState.hotwaterStart.message ?: "暂无热水任务"
+                        },
+                        if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) {
+                            runtimeState.shower798Start.state
+                        } else {
+                            runtimeState.hotwaterStart.state
                         }
-                        PrimaryGradientButton("关热水", Modifier.weight(1f), enabled = runtimeState.hotwaterStop.state != RuntimeTaskState.Loading) {
-                            runtimeActions.stopHotwater()
+                    )
+                    if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) {
+                        runtimeState.shower798Stop.message?.let { RuntimeStatusBanner(it, runtimeState.shower798Stop.state) }
+                    } else {
+                        runtimeState.hotwaterStop.message?.let { RuntimeStatusBanner(it, runtimeState.hotwaterStop.state) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryGradientButton(
+                            if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) "开始洗浴" else "开热水",
+                            Modifier.weight(1f),
+                            enabled = if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) {
+                                runtimeState.shower798Start.state != RuntimeTaskState.Loading
+                            } else {
+                                runtimeState.hotwaterStart.state != RuntimeTaskState.Loading
+                            }
+                        ) {
+                            if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) {
+                                runtimeActions.startShower798()
+                            } else {
+                                runtimeActions.startHotwater()
+                            }
+                        }
+                        PrimaryGradientButton(
+                            if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) "结束洗浴" else "关热水",
+                            Modifier.weight(1f),
+                            enabled = if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) {
+                                runtimeState.shower798Stop.state != RuntimeTaskState.Loading
+                            } else {
+                                runtimeState.hotwaterStop.state != RuntimeTaskState.Loading
+                            }
+                        ) {
+                            if (runtimeState.shower798Account != null && runtimeState.currentShower798DeviceId.isNotBlank()) {
+                                runtimeActions.stopShower798()
+                            } else {
+                                runtimeActions.stopHotwater()
+                            }
                         }
                     }
                 }
@@ -2252,16 +2582,20 @@ private fun AccountDetailScreen(
     onTabSelected: (MainTab) -> Unit
 ) {
     PrimaryPageScaffold(
-        title = if (kind == AccountKind.Zhuli) "住理生活" else "U净账号",
+        title = when (kind) {
+            AccountKind.Zhuli -> "住理生活"
+            AccountKind.Ujing -> "U净账号"
+            AccountKind.Shower798 -> "慧生活798"
+        },
         selectedTab = selectedTab,
         onTabSelected = onTabSelected,
         showBack = true,
         onBack = onBack
     ) {
-        if (kind == AccountKind.Zhuli) {
-            ZhuliAccountDetail(runtimeState, runtimeActions)
-        } else {
-            UjingAccountDetail(runtimeState, runtimeActions)
+        when (kind) {
+            AccountKind.Zhuli -> ZhuliAccountDetail(runtimeState, runtimeActions)
+            AccountKind.Ujing -> UjingAccountDetail(runtimeState, runtimeActions)
+            AccountKind.Shower798 -> Shower798AccountDetail(runtimeState, runtimeActions)
         }
     }
 }
@@ -2275,6 +2609,8 @@ private fun ZhuliAccountDetail(
     var password by remember { mutableStateOf("") }
     var deviceCode by remember(runtimeState.hotwaterDeviceCode) { mutableStateOf(runtimeState.hotwaterDeviceCode) }
     val busy = runtimeState.hotwaterLogin.state == RuntimeTaskState.Loading
+    val loggedIn = runtimeState.hotwaterPhone.isNotBlank() &&
+        runtimeState.hotwaterLogin.state != RuntimeTaskState.LoginRequired
     Column(Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionCard {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -2297,7 +2633,7 @@ private fun ZhuliAccountDetail(
                     modifier = Modifier.fillMaxWidth()
                 )
                 PrimaryGradientButton(
-                    if (busy) "登录中" else "点击登录",
+                    if (busy) "登录中" else if (loggedIn) "已登录" else "点击登录",
                     Modifier.fillMaxWidth(),
                     enabled = !busy,
                     onClick = { runtimeActions.loginHotwater(phone, password) }
@@ -2344,7 +2680,16 @@ private fun UjingAccountDetail(
     var captcha by remember { mutableStateOf("") }
     val captchaLoading = runtimeState.ujingCaptcha.state == RuntimeTaskState.Loading
     val loginLoading = runtimeState.washerLogin.state == RuntimeTaskState.Loading
+    var captchaCooldown by remember { mutableStateOf(0) }
     val busy = captchaLoading || loginLoading
+    val loggedIn = runtimeState.ujingAccount != null &&
+        runtimeState.washerLogin.state != RuntimeTaskState.LoginRequired
+    LaunchedEffect(captchaCooldown) {
+        if (captchaCooldown > 0) {
+            delay(1000)
+            captchaCooldown -= 1
+        }
+    }
     Column(Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionCard {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -2369,15 +2714,22 @@ private fun UjingAccountDetail(
                         modifier = Modifier.weight(1f)
                     )
                     PrimaryGradientButton(
-                        if (captchaLoading) "发送中" else "验证码",
+                        when {
+                            captchaLoading -> "发送中"
+                            captchaCooldown > 0 -> "${captchaCooldown}s"
+                            else -> "发送验证码"
+                        },
                         Modifier.width(92.dp).height(52.dp),
-                        enabled = !busy,
-                        onClick = { runtimeActions.requestUjingCaptcha(mobile) }
+                        enabled = !busy && captchaCooldown == 0,
+                        onClick = {
+                            runtimeActions.requestUjingCaptcha(mobile)
+                            captchaCooldown = 30
+                        }
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     PrimaryGradientButton(
-                        if (loginLoading) "登录中" else "点击登录",
+                        if (loginLoading) "登录中" else if (loggedIn) "已登录" else "点击登录",
                         Modifier.weight(1f),
                         enabled = !busy,
                         onClick = { runtimeActions.loginUjing(mobile, captcha) }
@@ -2394,6 +2746,218 @@ private fun UjingAccountDetail(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Shower798AccountDetail(
+    runtimeState: ShuiRuntimeState,
+    runtimeActions: ShuiRuntimeActions
+) {
+    var phone by remember(runtimeState.shower798Account?.mobile) {
+        mutableStateOf(runtimeState.shower798Account?.mobile ?: "")
+    }
+    var imageCaptcha by remember { mutableStateOf("") }
+    var smsCode by remember { mutableStateOf("") }
+    var deviceIdInput by remember { mutableStateOf("") }
+    val captchaBusy = runtimeState.shower798Captcha.state == RuntimeTaskState.Loading
+    val loginBusy = runtimeState.shower798Login.state == RuntimeTaskState.Loading
+    val startBusy = runtimeState.shower798Start.state == RuntimeTaskState.Loading
+    val stopBusy = runtimeState.shower798Stop.state == RuntimeTaskState.Loading
+    var smsCooldown by remember { mutableStateOf(0) }
+    val imageBase64 = runtimeState.shower798CaptchaImageBase64
+    val captchaBitmap = remember(imageBase64) {
+        imageBase64?.let {
+            runCatching {
+                val bytes = Base64.decode(it, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (runtimeState.shower798CaptchaImageBase64 == null) {
+            runtimeActions.requestShower798Captcha()
+        }
+        runtimeActions.checkShower798Status()
+    }
+    LaunchedEffect(smsCooldown) {
+        if (smsCooldown > 0) {
+            delay(1000)
+            smsCooldown -= 1
+        }
+    }
+
+    Column(Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionCard {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionTitle(icon = "hot", title = "慧生活798登录")
+                RuntimeStatusBanner(runtimeState.shower798Login.message ?: "未登录", runtimeState.shower798Login.state)
+                runtimeState.shower798Captcha.message?.let {
+                    RuntimeStatusBanner(it, runtimeState.shower798Captcha.state)
+                }
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("手机号") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("图形验证码", color = ShuiColors.DeepText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(84.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White.copy(alpha = .85f))
+                        .border(1.dp, ShuiColors.CardBorder, RoundedCornerShape(14.dp))
+                        .shuiPressable(onClick = { if (!captchaBusy) runtimeActions.requestShower798Captcha() }),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (captchaBitmap != null) {
+                        Image(
+                            bitmap = captchaBitmap,
+                            contentDescription = "慧生活798 图形验证码",
+                            modifier = Modifier.fillMaxSize().padding(8.dp)
+                        )
+                    } else {
+                        Text("点击刷新图形验证码", color = ShuiColors.MutedText, fontSize = 13.sp)
+                    }
+                }
+                OutlinedTextField(
+                    value = imageCaptcha,
+                    onValueChange = { imageCaptcha = it },
+                    label = { Text("输入图形验证码") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryGradientButton(
+                        when {
+                            captchaBusy -> "发送中"
+                            smsCooldown > 0 -> "等待${smsCooldown}s"
+                            else -> "发送验证码"
+                        },
+                        Modifier.weight(1f),
+                        enabled = !captchaBusy && smsCooldown == 0
+                    ) {
+                        runtimeActions.sendShower798SmsCode(phone, imageCaptcha)
+                        smsCooldown = 30
+                    }
+                    PrimaryGradientButton(
+                        "刷新图片",
+                        Modifier.weight(1f),
+                        enabled = !captchaBusy
+                    ) {
+                        runtimeActions.requestShower798Captcha()
+                    }
+                }
+                OutlinedTextField(
+                    value = smsCode,
+                    onValueChange = { smsCode = it },
+                    label = { Text("短信验证码") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                PrimaryGradientButton(
+                    if (loginBusy) "登录中" else "登录慧生活798",
+                    Modifier.fillMaxWidth(),
+                    enabled = !loginBusy
+                ) {
+                    runtimeActions.loginShower798(phone, smsCode)
+                }
+            }
+        }
+
+        SectionCard {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionTitle(icon = "hot", title = "慧生活798设备")
+                Text(
+                    "登录后会自动刷新设备列表。勾选后热水功能会使用该设备；取消勾选后热水功能不再使用该设备。",
+                    color = ShuiColors.MutedText,
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
+                )
+                OutlinedTextField(
+                    value = deviceIdInput,
+                    onValueChange = { deviceIdInput = it },
+                    label = { Text("输入设备号后添加") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PrimaryGradientButton("添加设备", Modifier.weight(1f), enabled = !loginBusy) {
+                        runtimeActions.addShower798Device(deviceIdInput)
+                        deviceIdInput = ""
+                    }
+                    PrimaryGradientButton("刷新列表", Modifier.weight(1f), enabled = !loginBusy) {
+                        runtimeActions.refreshShower798Devices()
+                    }
+                }
+                if (runtimeState.shower798Devices.isEmpty()) {
+                    Text("暂时还没有慧生活798设备", color = ShuiColors.MutedText, fontSize = 13.sp)
+                } else {
+                    runtimeState.shower798Devices.forEach { device ->
+                        val selected = runtimeState.currentShower798DeviceId == device.id
+                        SectionCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .shuiPressable {
+                                    runtimeActions.selectShower798Device(device.id)
+                                },
+                            borderColor = if (selected) ShuiColors.Orange else ShuiColors.CardBorder.copy(alpha = .45f),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(device.name, color = ShuiColors.DeepText, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "设备号：${device.id} · 状态：${device.lastStatus}",
+                                        color = ShuiColors.MutedText,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                StatusPill(
+                                    if (selected) "已勾选" else "未勾选",
+                                    if (selected) ShuiColors.Primary else ShuiColors.Orange,
+                                    Modifier.widthIn(min = 70.dp),
+                                    filled = selected
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                PrimaryGradientButton(
+                                    if (startBusy && selected) "启动中" else "开始使用",
+                                    Modifier.weight(1f),
+                                    enabled = !startBusy && selected
+                                ) {
+                                    runtimeActions.startShower798()
+                                }
+                                PrimaryGradientButton(
+                                    if (stopBusy && selected) "结束中" else "结束使用",
+                                    Modifier.weight(1f),
+                                    enabled = !stopBusy && selected
+                                ) {
+                                    runtimeActions.stopShower798()
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            PrimaryGradientButton("删除设备", Modifier.fillMaxWidth(), enabled = !loginBusy) {
+                                runtimeActions.deleteShower798Device(device.id)
+                            }
+                        }
+                    }
+                }
+                runtimeState.shower798Start.message?.let {
+                    RuntimeStatusBanner(it, runtimeState.shower798Start.state)
+                }
+                runtimeState.shower798Stop.message?.let {
+                    RuntimeStatusBanner(it, runtimeState.shower798Stop.state)
+                }
             }
         }
     }
