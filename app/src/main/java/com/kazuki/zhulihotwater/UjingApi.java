@@ -7,6 +7,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -22,6 +23,7 @@ import java.util.Map;
 
 final class UjingApi {
     private static final String PREF = "zhuli_hotwater";
+    private static final String PREF_COOKIES = "ujing_cookies";
     private static final String BASE = "https://phoenix.ujing.online/api/v1/";
     private static final String APP_VERSION = "2.4.14";
     private static final String MODEL = "HBN-AL00";
@@ -34,6 +36,7 @@ final class UjingApi {
     UjingApi(Context context, LegacyHotwaterActivity.Logger logger) {
         this.context = context.getApplicationContext();
         this.logger = logger;
+        loadCookies();
     }
 
     void requestCaptcha(String mobile) throws Exception {
@@ -100,7 +103,9 @@ final class UjingApi {
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
                 .edit()
                 .remove("ujing_session")
+                .remove(PREF_COOKIES)
                 .apply();
+        cookies.clear();
     }
 
     WasherDevice scanWasher(UjingSession session, String qrCode) throws Exception {
@@ -322,7 +327,7 @@ final class UjingApi {
 
     JSONObject getWaterOrderDetail(UjingSession session, String orderId) throws Exception {
         JSONObject body = new JSONObject();
-        body.put("orderId", Long.parseLong(orderId));
+        body.put("orderId", parseOrderId(orderId));
         JSONObject resp = post("water/waterOrderDetail", body, "CA", "1.0.102", session);
         ensureOk(resp);
         return resp.getJSONObject("data");
@@ -358,7 +363,7 @@ final class UjingApi {
 
     void cancelOrder(UjingSession session, String orderId) throws Exception {
         JSONObject body = new JSONObject();
-        body.put("orderId", Long.parseLong(orderId));
+        body.put("orderId", parseOrderId(orderId));
         JSONObject resp = post("orders/" + orderId + "/cancel", body, "BA", "1.1.68", session);
         ensureOk(resp);
     }
@@ -425,12 +430,17 @@ final class UjingApi {
         if (headers == null) return;
         List<String> setCookies = headers.get("Set-Cookie");
         if (setCookies == null) return;
+        boolean changed = false;
         for (String item : setCookies) {
             String[] parts = item.split(";", 2);
             String[] kv = parts[0].split("=", 2);
             if (kv.length == 2) {
                 cookies.put(kv[0], kv[1]);
+                changed = true;
             }
+        }
+        if (changed) {
+            saveCookies();
         }
     }
 
@@ -441,6 +451,47 @@ final class UjingApi {
             parts.add(e.getKey() + "=" + e.getValue());
         }
         return String.join("; ", parts);
+    }
+
+    private long parseOrderId(String orderId) throws IOException {
+        try {
+            return Long.parseLong(orderId);
+        } catch (Exception e) {
+            throw new IOException("Invalid orderId format: " + orderId, e);
+        }
+    }
+
+    private void loadCookies() {
+        try {
+            String raw = context.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(PREF_COOKIES, "");
+            if (raw == null || raw.isEmpty()) return;
+            JSONObject json = new JSONObject(raw);
+            JSONArray names = json.names();
+            if (names == null) return;
+            for (int i = 0; i < names.length(); i++) {
+                String key = names.optString(i);
+                String value = json.optString(key);
+                if (!key.isEmpty() && !value.isEmpty()) {
+                    cookies.put(key, value);
+                }
+            }
+        } catch (Exception ignored) {
+            cookies.clear();
+        }
+    }
+
+    private void saveCookies() {
+        try {
+            JSONObject json = new JSONObject();
+            for (Map.Entry<String, String> e : cookies.entrySet()) {
+                json.put(e.getKey(), e.getValue());
+            }
+            context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+                    .edit()
+                    .putString(PREF_COOKIES, json.toString())
+                    .apply();
+        } catch (Exception ignored) {
+        }
     }
 
     private static String query(Map<String, Object> query) throws Exception {

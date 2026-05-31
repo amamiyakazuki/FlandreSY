@@ -119,7 +119,19 @@ data class WasherOrderUi(
     val payPrice: String,
     val status: String,
     val remainTimeSeconds: Int = 0,
-    val countDownSeconds: Int = 0
+    val countDownSeconds: Int = 0,
+    val refreshedAtMillis: Long = System.currentTimeMillis()
+)
+
+data class WasherOrderHistoryUi(
+    val orderId: String,
+    val deviceNo: String,
+    val status: String,
+    val payPrice: String,
+    val updatedAt: String,
+    val remainTimeSeconds: Int = 0,
+    val countDownSeconds: Int = 0,
+    val refreshedAtMillis: Long = System.currentTimeMillis()
 )
 
 data class WasherPaymentUi(
@@ -180,6 +192,7 @@ data class ShuiRuntimeState(
     val washerProgram: WasherProgramUi? = null,
     val washerOrder: RuntimeActionStatus = RuntimeActionStatus(),
     val currentWasherOrder: WasherOrderUi? = null,
+    val washerOrderHistoryRecords: List<WasherOrderHistoryUi> = emptyList(),
     val washerPayment: RuntimeActionStatus = RuntimeActionStatus(),
     val currentWasherPayment: WasherPaymentUi? = null,
     val waterScan: RuntimeActionStatus = RuntimeActionStatus(),
@@ -210,7 +223,7 @@ interface ShuiRuntimeActions {
     fun createWasherOrder(washModelId: Int, temperatureId: Int, detergentGearId: Int?, disinfectantGearId: Int?)
     fun refreshCurrentWasherOrder()
     fun createWasherOrder()
-    fun payCurrentWasherOrderWithAlipay()
+    fun payCurrentWasherOrderWithAlipay(autoStartAfterPayment: Boolean)
     fun startCurrentWasherOrder()
     fun cancelCurrentWasherOrder()
     fun stopCurrentWasherOrder()
@@ -517,8 +530,10 @@ class ShuiRuntimeController private constructor(
         ) {
             val detail = ujing.createOrder(washModelId, temperatureId, detergentGearId, disinfectantGearId).toUi()
             postState {
+                val history = appendWasherHistory(detail)
                 state = state.copy(
                     currentWasherOrder = detail,
+                    washerOrderHistoryRecords = history,
                     washerOrder = RuntimeActionStatus(RuntimeTaskState.Success, "洗衣订单已创建")
                 )
             }
@@ -534,8 +549,10 @@ class ShuiRuntimeController private constructor(
         ) {
             val detail = ujing.loadCurrentOrderDetail().toUi()
             postState {
+                val history = appendWasherHistory(detail)
                 state = state.copy(
-                    currentWasherOrder = detail,
+                    currentWasherOrder = if (detail.isTerminalWasherOrder) null else detail,
+                    washerOrderHistoryRecords = history,
                     washerOrder = RuntimeActionStatus(RuntimeTaskState.Success, "洗衣订单已刷新")
                 )
             }
@@ -551,7 +568,7 @@ class ShuiRuntimeController private constructor(
         createWasherOrder(modelId, 1, null, null)
     }
 
-    override fun payCurrentWasherOrderWithAlipay() {
+    override fun payCurrentWasherOrderWithAlipay(autoStartAfterPayment: Boolean) {
         if (state.washerPayment.state == RuntimeTaskState.PaymentInProgress) return
         if (state.washerOrder.state == RuntimeTaskState.Loading) return
 
@@ -565,16 +582,45 @@ class ShuiRuntimeController private constructor(
             val refreshedOrder = result.refreshedOrder.toUi()
             val paymentState = if (result.paymentSucceeded) RuntimeTaskState.Success else RuntimeTaskState.Failure
             val paymentMessage = if (result.paymentSucceeded) {
-                "支付宝支付已返回成功，订单状态：${refreshedOrder.statusText}"
+                if (autoStartAfterPayment) {
+                    "支付宝支付已成功，3 秒后自动启动洗衣机"
+                } else {
+                    "支付宝支付已成功，已保留预约，请按需手动启动"
+                }
             } else {
                 "支付宝未确认成功(${result.resultStatus.ifBlank { "unknown" }})，订单状态：${refreshedOrder.statusText}"
             }
             postState {
+                val history = appendWasherHistory(refreshedOrder)
                 state = state.copy(
                     currentWasherPayment = result.toUi(),
-                    currentWasherOrder = refreshedOrder,
+                    currentWasherOrder = if (refreshedOrder.isTerminalWasherOrder) null else refreshedOrder,
+                    washerOrderHistoryRecords = history,
                     washerPayment = RuntimeActionStatus(paymentState, paymentMessage)
                 )
+            }
+            if (result.paymentSucceeded && autoStartAfterPayment) {
+                Thread.sleep(3000)
+                postState {
+                    state = state.copy(washerOrder = RuntimeActionStatus(RuntimeTaskState.Loading, "正在自动启动洗衣机"))
+                }
+                try {
+                    val startedOrder = ujing.startCurrentOrder().toUi()
+                    postState {
+                        val history = appendWasherHistory(startedOrder)
+                        state = state.copy(
+                            currentWasherOrder = if (startedOrder.isTerminalWasherOrder) null else startedOrder,
+                            washerOrderHistoryRecords = history,
+                            washerOrder = RuntimeActionStatus(RuntimeTaskState.Success, "洗衣机已自动启动")
+                        )
+                    }
+                } catch (e: Exception) {
+                    val message = e.message ?: "自动启动洗衣机失败"
+                    AppLogStore.append(appContext, "[runtime-ujing-error] auto start washer: ${e.javaClass.simpleName}: $message")
+                    postState {
+                        state = state.copy(washerOrder = RuntimeActionStatus(RuntimeTaskState.Failure, message))
+                    }
+                }
             }
         }
     }
@@ -591,8 +637,10 @@ class ShuiRuntimeController private constructor(
         ) {
             val detail = ujing.startCurrentOrder().toUi()
             postState {
+                val history = appendWasherHistory(detail)
                 state = state.copy(
-                    currentWasherOrder = detail,
+                    currentWasherOrder = if (detail.isTerminalWasherOrder) null else detail,
+                    washerOrderHistoryRecords = history,
                     washerOrder = RuntimeActionStatus(RuntimeTaskState.Success, "洗衣机启动请求已发送")
                 )
             }
@@ -611,8 +659,10 @@ class ShuiRuntimeController private constructor(
         ) {
             val detail = ujing.stopCurrentOrder().toUi()
             postState {
+                val history = appendWasherHistory(detail)
                 state = state.copy(
-                    currentWasherOrder = detail,
+                    currentWasherOrder = if (detail.isTerminalWasherOrder) null else detail,
+                    washerOrderHistoryRecords = history,
                     washerOrder = RuntimeActionStatus(RuntimeTaskState.Success, "洗衣机已提前停止")
                 )
             }
@@ -628,9 +678,16 @@ class ShuiRuntimeController private constructor(
             success = { copy(washerOrder = RuntimeActionStatus(RuntimeTaskState.Success, "洗衣订单已取消")) },
             failure = { message -> copy(washerOrder = RuntimeActionStatus(RuntimeTaskState.Failure, message)) }
         ) {
+            val canceledOrder = state.currentWasherOrder
             ujing.cancelCurrentOrder()
             postState {
-                state = state.copy(currentWasherOrder = null)
+                val history = canceledOrder?.let {
+                    appendWasherHistory(it.copy(statusText = "已取消", status = "cancelled", remainTimeSeconds = 0, countDownSeconds = 0))
+                } ?: state.washerOrderHistoryRecords
+                state = state.copy(
+                    currentWasherOrder = null,
+                    washerOrderHistoryRecords = history
+                )
             }
         }
     }
@@ -770,17 +827,23 @@ class ShuiRuntimeController private constructor(
             autoSuccess = false
         ) {
             val currentDevices = loadLocalDevices()
+            val runningOrders = runCatching { ujing.loadRunningOrderDetails().map { it.toUi() } }.getOrDefault(emptyList())
+            val runningByDeviceNo = runningOrders
+                .filter { it.deviceNo.isNotBlank() }
+                .associateBy { it.deviceNo }
             val refreshedDevices = currentDevices.map { device ->
                 if (device.deviceType != LocalDeviceType.Washer || device.qrUrl.isNullOrBlank()) {
                     device
                 } else {
                     try {
                         val program = ujing.refreshWasherStatus(device.qrUrl).toUi()
+                        val runningOrder = runningByDeviceNo[program.deviceNo]
+                            ?: device.deviceNo?.let { runningByDeviceNo[it] }
                         device.copy(
                             id = program.deviceId.ifBlank { device.id },
                             deviceNo = program.deviceNo.ifBlank { device.deviceNo.orEmpty() }.ifBlank { null },
                             storeName = program.storeName.ifBlank { device.storeName.orEmpty() }.ifBlank { null },
-                            lastStatus = washerProgramStatusText(program)
+                            lastStatus = washerDeviceStatusText(program, runningOrder)
                         )
                     } catch (e: Exception) {
                         device.copy(lastStatus = readableError(e))
@@ -919,6 +982,25 @@ class ShuiRuntimeController private constructor(
         }
     }
 
+    private fun washerDeviceStatusText(program: WasherProgramUi, runningOrder: WasherOrderUi?): String {
+        if (runningOrder != null && (runningOrder.status == "21" || runningOrder.status == "40")) {
+            return estimatedWasherEndText(runningOrder)?.let { "运行中 $it" } ?: "运行中，结束时间未知"
+        }
+        return washerProgramStatusText(program).let { status ->
+            if (status.contains("使用") || status.contains("忙") || status.contains("运行")) {
+                "运行中，结束时间未知"
+            } else {
+                status
+            }
+        }
+    }
+
+    private fun estimatedWasherEndText(order: WasherOrderUi): String? {
+        if (order.remainTimeSeconds <= 0) return null
+        val endAt = order.refreshedAtMillis + order.remainTimeSeconds * 1000L
+        return "预计 ${SimpleDateFormat("HH:mm", Locale.CHINA).format(Date(endAt))} 结束"
+    }
+
     private fun readableError(error: Exception): String {
         return error.message?.takeIf { it.isNotBlank() }?.take(24) ?: "刷新失败"
     }
@@ -970,6 +1052,76 @@ class ShuiRuntimeController private constructor(
         }
         prefs.edit().putString("local_devices", rows.toString()).apply()
     }
+
+    private fun loadWasherHistory(): List<WasherOrderHistoryUi> {
+        val raw = prefs.getString("washer_order_history", "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return try {
+            val rows = JSONArray(raw)
+            buildList {
+                for (i in 0 until rows.length()) {
+                    val row = rows.getJSONObject(i)
+                    add(
+                        WasherOrderHistoryUi(
+                            orderId = row.optString("orderId"),
+                            deviceNo = row.optString("deviceNo"),
+                            status = row.optString("status"),
+                            payPrice = row.optString("payPrice"),
+                            updatedAt = row.optString("updatedAt"),
+                            remainTimeSeconds = row.optInt("remainTimeSeconds", 0),
+                            countDownSeconds = row.optInt("countDownSeconds", 0),
+                            refreshedAtMillis = row.optLong("refreshedAtMillis", 0L).takeIf { it > 0L }
+                                ?: System.currentTimeMillis()
+                        )
+                    )
+                }
+            }.filter { it.orderId.isNotBlank() }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveWasherHistory(records: List<WasherOrderHistoryUi>) {
+        val rows = JSONArray()
+        records.forEach { record ->
+            rows.put(
+                JSONObject()
+                    .put("orderId", record.orderId)
+                    .put("deviceNo", record.deviceNo)
+                    .put("status", record.status)
+                    .put("payPrice", record.payPrice)
+                    .put("updatedAt", record.updatedAt)
+                    .put("remainTimeSeconds", record.remainTimeSeconds)
+                    .put("countDownSeconds", record.countDownSeconds)
+                    .put("refreshedAtMillis", record.refreshedAtMillis)
+            )
+        }
+        prefs.edit().putString("washer_order_history", rows.toString()).apply()
+    }
+
+    private fun appendWasherHistory(order: WasherOrderUi): List<WasherOrderHistoryUi> {
+        val record = WasherOrderHistoryUi(
+            orderId = order.orderId,
+            deviceNo = order.deviceNo,
+            status = order.statusText.ifBlank { order.status },
+            payPrice = order.payPrice,
+            updatedAt = formatRefreshTime(System.currentTimeMillis()),
+            remainTimeSeconds = order.remainTimeSeconds,
+            countDownSeconds = order.countDownSeconds,
+            refreshedAtMillis = order.refreshedAtMillis
+        )
+        val records = state.washerOrderHistoryRecords
+            .filterNot { it.orderId == order.orderId }
+            .plus(record)
+        saveWasherHistory(records)
+        return records
+    }
+
+    private val WasherOrderUi.isTerminalWasherOrder: Boolean
+        get() = status == "50" ||
+            statusText.contains("完成") ||
+            statusText.contains("取消") ||
+            statusText.contains("已取消")
 
     private fun loadWaterHistory(): List<WaterOrderHistoryUi> {
         val raw = prefs.getString("water_order_history", "") ?: ""
@@ -1045,8 +1197,10 @@ class ShuiRuntimeController private constructor(
                     state = if (restored == null) {
                         state.copy(washerOrder = RuntimeActionStatus(RuntimeTaskState.Idle, "暂无进行中的洗衣订单"))
                     } else {
+                        val history = appendWasherHistory(restored)
                         state.copy(
                             currentWasherOrder = restored,
+                            washerOrderHistoryRecords = history,
                             washerOrder = RuntimeActionStatus(RuntimeTaskState.Success, "已恢复洗衣订单")
                         )
                     }
@@ -1200,6 +1354,7 @@ class ShuiRuntimeController private constructor(
     private fun initialState(): ShuiRuntimeState {
         val cached = ujing.loadCachedSession()
         val localDevices = loadLocalDevices()
+        val washerHistory = loadWasherHistory()
         val waterHistory = loadWaterHistory()
         val refreshedAt = prefs.getString("local_devices_last_refreshed", "") ?: ""
         val hotwaterPhone = prefs.getString("phone", "") ?: ""
@@ -1214,6 +1369,7 @@ class ShuiRuntimeController private constructor(
                     RuntimeActionStatus(RuntimeTaskState.Success, "已缓存住理生活：$hotwaterPhone")
                 },
                 localDevices = localDevices,
+                washerOrderHistoryRecords = washerHistory,
                 waterOrderHistoryRecords = waterHistory,
                 localDevicesLastRefreshed = refreshedAt
             )
@@ -1229,6 +1385,7 @@ class ShuiRuntimeController private constructor(
                 ujingAccount = cached.toUi(),
                 washerLogin = RuntimeActionStatus(RuntimeTaskState.Success, "已缓存 U净登录：${cached.mobile}"),
                 localDevices = localDevices,
+                washerOrderHistoryRecords = washerHistory,
                 waterOrderHistoryRecords = waterHistory,
                 localDevicesLastRefreshed = refreshedAt
             )
@@ -1286,7 +1443,8 @@ class ShuiRuntimeController private constructor(
             payPrice = payPrice,
             status = status,
             remainTimeSeconds = remainTimeSeconds,
-            countDownSeconds = countDownSeconds
+            countDownSeconds = countDownSeconds,
+            refreshedAtMillis = System.currentTimeMillis()
         )
     }
 
@@ -1352,7 +1510,7 @@ object PreviewShuiRuntimeActions : ShuiRuntimeActions {
     override fun createWasherOrder(washModelId: Int, temperatureId: Int, detergentGearId: Int?, disinfectantGearId: Int?) = Unit
     override fun refreshCurrentWasherOrder() = Unit
     override fun createWasherOrder() = Unit
-    override fun payCurrentWasherOrderWithAlipay() = Unit
+    override fun payCurrentWasherOrderWithAlipay(autoStartAfterPayment: Boolean) = Unit
     override fun startCurrentWasherOrder() = Unit
     override fun cancelCurrentWasherOrder() = Unit
     override fun stopCurrentWasherOrder() = Unit
@@ -1414,10 +1572,10 @@ object PreviewShuiRuntimeProvider : ShuiRuntimeProvider {
         ),
         waterScan = RuntimeActionStatus(RuntimeTaskState.Success, "预览：饮水机已确认"),
         currentWaterReady = WaterReadyUi(
-            cd = "0011202108055265",
-            serviceSubjectId = "37810",
-            serviceSubjectName = "武汉理工大学.马房山校区",
-            storeId = "63199627046cb84fd7c9f7ba",
+            cd = "0000000000000000",
+            serviceSubjectId = "preview-water-subject",
+            serviceSubjectName = "测试大学.测试校区",
+            storeId = "preview-water-store",
             balanceFen = 1000,
             giftBalanceFen = 0
         ),
@@ -1425,9 +1583,9 @@ object PreviewShuiRuntimeProvider : ShuiRuntimeProvider {
         currentWaterOrder = WaterOrderUi(
             orderId = "1102876060",
             orderNo = "preview-water-order",
-            serviceSubjectName = "武汉理工大学.马房山校区",
-            storeName = "学海7舍-5",
-            deviceNo = "070501",
+            serviceSubjectName = "测试大学.测试校区",
+            storeName = "测试宿舍-5",
+            deviceNo = "000001",
             orderStatus = "50",
             orderStatusName = "取水正常完成",
             statusRemark = "取水正常完成",

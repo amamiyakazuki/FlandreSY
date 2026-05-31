@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -53,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,7 +96,13 @@ import com.kazuki.zhulihotwater.runtime.WasherProgramUi
 import com.kazuki.zhulihotwater.runtime.classifyScanRouting
 import com.kazuki.zhulihotwater.runtime.homeTasks
 import org.json.JSONArray
+import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.HttpURLConnection
+import java.net.URL
 
 private sealed class ShuiRoute {
     data class Tab(val tab: MainTab) : ShuiRoute()
@@ -117,6 +125,16 @@ private enum class AccountKind {
     Zhuli,
     Ujing
 }
+
+private data class VersionCheckResult(
+    val currentVersion: String,
+    val latestVersion: String = "",
+    val releaseUrl: String = "",
+    val downloadUrl: String = "",
+    val notes: String = "",
+    val updateAvailable: Boolean = false,
+    val error: String? = null
+)
 
 @Composable
 fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
@@ -220,7 +238,8 @@ fun ShuiApp(runtime: ShuiRuntimeProvider = PreviewShuiRuntimeProvider) {
                             onOpenHotwaterDetail = { route = ShuiRoute.HotwaterDetail },
                             onOpenWasherDetail = { route = ShuiRoute.OrderDetail },
                             onOpenDrinkingDetail = { route = ShuiRoute.DrinkingWater(runtimeState.currentWaterReady?.cd.orEmpty()) },
-                            onOpenDevices = { route = ShuiRoute.Tab(MainTab.Devices) }
+                            onOpenDevices = { route = ShuiRoute.Tab(MainTab.Devices) },
+                            onOpenProfile = { route = ShuiRoute.Tab(MainTab.Profile) }
                         )
 
                         MainTab.Orders -> OrdersScreen(
@@ -575,6 +594,7 @@ private fun PrimaryPageScaffold(
     showSettings: Boolean = false,
     showAdd: Boolean = false,
     onBack: () -> Unit = {},
+    onSettings: () -> Unit = {},
     onAdd: () -> Unit = {},
     headerHeight: androidx.compose.ui.unit.Dp = 116.dp,
     character: @Composable (BoxScope.() -> Unit)? = null,
@@ -589,6 +609,7 @@ private fun PrimaryPageScaffold(
                 showSettings = showSettings,
                 showAdd = showAdd,
                 onBack = onBack,
+                onSettings = onSettings,
                 onAdd = onAdd,
                 character = character,
                 height = headerHeight
@@ -600,6 +621,7 @@ private fun PrimaryPageScaffold(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp)
                     .padding(bottom = if (bottomCharacter) 124.dp else 68.dp)
+                    .navigationBarsPadding()
             ) {
                 content()
             }
@@ -632,13 +654,15 @@ private fun HomeScreen(
     onOpenHotwaterDetail: () -> Unit,
     onOpenWasherDetail: () -> Unit,
     onOpenDrinkingDetail: () -> Unit,
-    onOpenDevices: () -> Unit
+    onOpenDevices: () -> Unit,
+    onOpenProfile: () -> Unit
 ) {
     PrimaryPageScaffold(
         title = "芙兰水衣",
         selectedTab = selectedTab,
         onTabSelected = onTabSelected,
         showSettings = true,
+        onSettings = onOpenProfile,
         headerHeight = 108.dp,
         character = {
             DecorativeImage(
@@ -1136,6 +1160,7 @@ private fun WasherOrderScreen(
     var selectedTemperatureId by remember(program?.deviceId) { mutableStateOf(1) }
     var selectedDetergentGearId by remember(program?.deviceId, selectedModelId) { mutableStateOf<Int?>(null) }
     var selectedDisinfectantGearId by remember(program?.deviceId, selectedModelId) { mutableStateOf<Int?>(null) }
+    var autoStartAfterPayment by remember { mutableStateOf(true) }
     val modelOptions = program?.models.orEmpty()
     val selectedModel = modelOptions.firstOrNull { it.id == selectedModelId }
     val detergentOptions = selectedModel?.additionGroups
@@ -1229,12 +1254,15 @@ private fun WasherOrderScreen(
                     onSelected = { index -> selectedDisinfectantGearId = if (index == 0) null else disinfectantOptions.getOrNull(index - 1)?.id }
                 )
             }
-            AutoCreateCard()
+            AutoStartNoticeCard(
+                enabled = autoStartAfterPayment,
+                onEnabledChange = { autoStartAfterPayment = it }
+            )
             runtimeState.washerOrder.message?.let { message ->
                 RuntimeStatusBanner(message, runtimeState.washerOrder.state)
             }
             if (runtimeState.currentWasherOrder != null) {
-                CurrentWasherOrderPaymentCard(runtimeState, runtimeActions)
+                CurrentWasherOrderPaymentCard(runtimeState, runtimeActions, autoStartAfterPayment)
             }
             PriceBar(
                 amount = formatFenAmount(totalPriceFen),
@@ -1250,7 +1278,8 @@ private fun WasherOrderScreen(
 @Composable
 private fun CurrentWasherOrderPaymentCard(
     runtimeState: ShuiRuntimeState,
-    runtimeActions: ShuiRuntimeActions
+    runtimeActions: ShuiRuntimeActions,
+    autoStartAfterPayment: Boolean = true
 ) {
     val order = runtimeState.currentWasherOrder ?: return
     val paying = runtimeState.washerPayment.state == RuntimeTaskState.PaymentInProgress
@@ -1282,7 +1311,7 @@ private fun CurrentWasherOrderPaymentCard(
                     if (paying) "支付中" else "支付宝支付",
                     Modifier.fillMaxWidth(),
                     enabled = !paying && !orderBusy,
-                    onClick = { runtimeActions.payCurrentWasherOrderWithAlipay() }
+                    onClick = { runtimeActions.payCurrentWasherOrderWithAlipay(autoStartAfterPayment) }
                 )
                 PrimaryGradientButton(
                     if (orderBusy) "处理中" else "取消订单",
@@ -1373,19 +1402,32 @@ private fun optionColor(sectionTitle: String, index: Int): Color {
 }
 
 @Composable
-private fun AutoCreateCard(modifier: Modifier = Modifier) {
+private fun AutoStartNoticeCard(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
     SectionCard(modifier = modifier, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("★", color = ShuiColors.Primary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("支付完成后自动启动洗衣机", color = ShuiColors.DeepText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("避免支付后忘记开启机器", color = ShuiColors.MutedText, fontSize = 12.sp)
+                Text("支付成功后会自动启动洗衣机", color = ShuiColors.DeepText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    if (enabled) "支付宝返回成功后等待 3 秒发送启动指令" else "关闭后只保留预约，需要你手动启动",
+                    color = ShuiColors.MutedText,
+                    fontSize = 12.sp
+                )
             }
             Switch(
-                checked = false,
-                onCheckedChange = {},
-                colors = SwitchDefaults.colors(uncheckedThumbColor = Color.White, uncheckedTrackColor = Color(0xFFC2A3A9))
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = ShuiColors.Primary,
+                    uncheckedThumbColor = Color.White,
+                    uncheckedTrackColor = Color(0xFFC2A3A9)
+                )
             )
         }
     }
@@ -1603,6 +1645,23 @@ private fun OrdersScreen(
         runtimeActions.loadHotwaterHistory()
     }
     var selectedCategory by remember { mutableStateOf(OrderCategory.Hotwater) }
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(selectedCategory, runtimeState.currentWasherOrder?.orderId) {
+        while (selectedCategory == OrderCategory.Washer && runtimeState.currentWasherOrder != null) {
+            nowMillis = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    LaunchedEffect(selectedCategory, runtimeState.currentWasherOrder?.orderId, runtimeState.currentWasherOrder?.status) {
+        while (
+            selectedCategory == OrderCategory.Washer &&
+            runtimeState.currentWasherOrder != null &&
+            runtimeState.currentWasherOrder.status != "50"
+        ) {
+            delay(30000)
+            runtimeActions.refreshCurrentWasherOrder()
+        }
+    }
 
     val hotwaterOrders = runtimeState.hotwaterHistoryRecords.map { record ->
         OrderUi(
@@ -1623,15 +1682,31 @@ private fun OrdersScreen(
     val washerOrder = runtimeState.currentWasherOrder?.let { order ->
         OrderUi(
             type = "洗衣",
-            time = "当前订单",
+            time = liveWasherOrderTime(order, nowMillis),
             device = "洗衣机 ${order.deviceNo}",
             amount = formatDisplayAmount(order.payPrice),
-            status = order.statusText,
+            status = liveWasherOrderStatus(order, nowMillis),
             iconRes = R.drawable.shui_yifu,
             icon = "衣",
             color = ShuiColors.Orange
         )
     }
+    val washerHistoryOrders = runtimeState.washerOrderHistoryRecords
+        .asReversed()
+        .filterNot { record -> runtimeState.currentWasherOrder?.orderId == record.orderId }
+        .map { record ->
+            OrderUi(
+                type = "洗衣",
+                time = record.updatedAt,
+                device = "洗衣机 ${record.deviceNo.ifBlank { record.orderId }}",
+                amount = formatDisplayAmount(record.payPrice),
+                status = record.status,
+                iconRes = R.drawable.shui_yifu,
+                icon = "衣",
+                color = ShuiColors.Orange
+            )
+        }
+    val washerOrders = listOfNotNull(washerOrder) + washerHistoryOrders
     val drinkingOrder = runtimeState.currentWaterOrder?.let { order ->
         OrderUi(
             type = "饮水",
@@ -1716,10 +1791,12 @@ private fun OrdersScreen(
                     }
                 }
                 OrderCategory.Washer -> {
-                    if (washerOrder == null) {
+                    if (washerOrders.isEmpty()) {
                         EmptyWasherOrderState(runtimeState.washerOrder.state)
                     } else {
-                        OrderListItem(washerOrder, onOpenDetail)
+                        washerOrders.forEachIndexed { index, order ->
+                            OrderListItem(order, if (index == 0 && washerOrder != null) onOpenDetail else ({}))
+                        }
                     }
                 }
             }
@@ -1729,6 +1806,36 @@ private fun OrdersScreen(
 
 private fun formatDisplayAmount(raw: String): String {
     return if (raw.startsWith("¥")) raw else "¥$raw"
+}
+
+private fun liveWasherOrderTime(order: com.kazuki.zhulihotwater.runtime.WasherOrderUi, nowMillis: Long): String {
+    val remain = liveRemainSeconds(order.remainTimeSeconds, order.refreshedAtMillis, nowMillis)
+    val countdown = liveRemainSeconds(order.countDownSeconds, order.refreshedAtMillis, nowMillis)
+    return when {
+        remain > 0 -> "预计 ${formatClockTime(nowMillis + remain * 1000L)} 结束"
+        countdown > 0 -> "预约保留 ${formatSeconds(remain.coerceAtLeast(countdown))}"
+        else -> "当前订单"
+    }
+}
+
+private fun liveWasherOrderStatus(order: com.kazuki.zhulihotwater.runtime.WasherOrderUi, nowMillis: Long): String {
+    val remain = liveRemainSeconds(order.remainTimeSeconds, order.refreshedAtMillis, nowMillis)
+    val countdown = liveRemainSeconds(order.countDownSeconds, order.refreshedAtMillis, nowMillis)
+    return when {
+        remain > 0 -> "${order.statusText} · 剩余 ${formatSeconds(remain)}"
+        countdown > 0 -> "${order.statusText} · 保留 ${formatSeconds(countdown)}"
+        else -> order.statusText
+    }
+}
+
+private fun liveRemainSeconds(rawSeconds: Int, refreshedAtMillis: Long, nowMillis: Long): Int {
+    if (rawSeconds <= 0) return 0
+    val elapsed = ((nowMillis - refreshedAtMillis).coerceAtLeast(0L) / 1000L).toInt()
+    return (rawSeconds - elapsed).coerceAtLeast(0)
+}
+
+private fun formatClockTime(timestamp: Long): String {
+    return java.text.SimpleDateFormat("HH:mm", java.util.Locale.CHINA).format(java.util.Date(timestamp))
 }
 
 @Composable
@@ -1947,6 +2054,7 @@ private fun DevicesScreen(
                         statusColor = when {
                             device.deviceType == LocalDeviceType.DrinkingWater -> ShuiColors.Blue
                             device.lastStatus == "可下单" -> ShuiColors.Green
+                            device.lastStatus?.contains("运行") == true -> ShuiColors.Blue
                             else -> ShuiColors.Orange
                         },
                         imageRes = when (device.deviceType) {
@@ -2300,6 +2408,10 @@ private fun MoreOptionsScreen(
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val scope = rememberCoroutineScope()
+    var showAbout by remember { mutableStateOf(false) }
+    var checkingVersion by remember { mutableStateOf(false) }
+    var versionResult by remember { mutableStateOf<VersionCheckResult?>(null) }
     val prefs = context.getSharedPreferences("zhuli_hotwater", Context.MODE_PRIVATE)
     val openSettings = {
         context.startActivity(
@@ -2327,6 +2439,17 @@ private fun MoreOptionsScreen(
             Toast.makeText(context, "剪贴板不是有效设备列表 JSON", Toast.LENGTH_SHORT).show()
         }
     }
+    val checkVersion = {
+        if (!checkingVersion) {
+            checkingVersion = true
+            scope.launch {
+                versionResult = withContext(Dispatchers.IO) {
+                    checkLatestGithubVersion(context.applicationContext)
+                }
+                checkingVersion = false
+            }
+        }
+    }
     PrimaryPageScaffold(
         title = "更多选项",
         selectedTab = selectedTab,
@@ -2337,9 +2460,211 @@ private fun MoreOptionsScreen(
         Column(Modifier.padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             MoreOptionRow("权限检测", "打开系统应用权限设置", openSettings)
             MoreOptionRow("日志与诊断", "查看本地运行日志", openLogs)
+            MoreOptionRow(
+                "检查版本",
+                if (checkingVersion) "正在连接 GitHub Releases" else "当前版本 ${appVersionName(context)}",
+                checkVersion
+            )
             MoreOptionRow("导出洗衣机设备列表", "复制本地设备 JSON 到剪贴板", exportDevices)
             MoreOptionRow("导入洗衣机设备列表", "从剪贴板恢复本地设备 JSON", importDevices)
-            MoreOptionRow("关于", "芙兰水衣运行时原型", {})
+            MoreOptionRow("关于", "版本、说明与支持范围", { showAbout = true })
+        }
+    }
+    if (showAbout) {
+        AboutDialog(onDismiss = { showAbout = false })
+    }
+    versionResult?.let { result ->
+        VersionCheckDialog(
+            result = result,
+            onDismiss = { versionResult = null },
+            onOpen = {
+                val url = result.downloadUrl.ifBlank { result.releaseUrl }
+                if (url.isNotBlank()) {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                }
+                versionResult = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun VersionCheckDialog(
+    result: VersionCheckResult,
+    onDismiss: () -> Unit,
+    onOpen: () -> Unit
+) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = .46f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        SectionCard(
+            modifier = Modifier
+                .padding(horizontal = 26.dp)
+                .clickable(enabled = false) {},
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                DecorativeImage(R.drawable.sleep, Modifier.size(86.dp))
+                Text(
+                    when {
+                        result.error != null -> "版本检查失败"
+                        result.updateAvailable -> "发现新版本"
+                        else -> "已经是最新版"
+                    },
+                    color = ShuiColors.DeepText,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    versionDialogText(result),
+                    color = ShuiColors.MutedText,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 8,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (result.updateAvailable && result.error == null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PrimaryGradientButton("稍后", Modifier.weight(1f), onClick = onDismiss)
+                        PrimaryGradientButton("获取最新版", Modifier.weight(1f), onClick = onOpen)
+                    }
+                } else {
+                    PrimaryGradientButton("知道啦", Modifier.fillMaxWidth(), onClick = onDismiss)
+                }
+            }
+        }
+    }
+}
+
+private fun versionDialogText(result: VersionCheckResult): String {
+    result.error?.let {
+        return "当前版本：${result.currentVersion}\n$it"
+    }
+    return if (result.updateAvailable) {
+        val notes = result.notes.trim().take(180).ifBlank { "打开 GitHub Release 查看更新说明。" }
+        "当前版本：${result.currentVersion}\n最新版本：${result.latestVersion}\n$notes"
+    } else {
+        "当前版本：${result.currentVersion}\n最新版本：${result.latestVersion.ifBlank { result.currentVersion }}"
+    }
+}
+
+private fun checkLatestGithubVersion(context: Context): VersionCheckResult {
+    val current = appVersionName(context)
+    return try {
+        val conn = (URL("https://api.github.com/repos/amamiyakazuki/FlandreSY/releases/latest").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 12000
+            readTimeout = 12000
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("User-Agent", "FlandreSY/${current}")
+        }
+        val code = conn.responseCode
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+        val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+        if (code == 404) {
+            return VersionCheckResult(
+                currentVersion = current,
+                error = "GitHub Releases 里还没有发布版本。公开仓库后，请先创建一个 Release 并上传签名 APK。"
+            )
+        }
+        if (code !in 200..299) {
+            return VersionCheckResult(currentVersion = current, error = "GitHub 返回 HTTP $code")
+        }
+        val json = JSONObject(text)
+        val latestTag = json.optString("tag_name").ifBlank { json.optString("name") }
+        val releaseUrl = json.optString("html_url")
+        val notes = json.optString("body")
+        val assets = json.optJSONArray("assets")
+        var apkUrl = ""
+        if (assets != null) {
+            for (i in 0 until assets.length()) {
+                val asset = assets.optJSONObject(i) ?: continue
+                val name = asset.optString("name")
+                if (name.endsWith(".apk", ignoreCase = true)) {
+                    apkUrl = asset.optString("browser_download_url")
+                    break
+                }
+            }
+        }
+        val latest = latestTag.removePrefix("v").removePrefix("V")
+        VersionCheckResult(
+            currentVersion = current,
+            latestVersion = latest.ifBlank { latestTag },
+            releaseUrl = releaseUrl,
+            downloadUrl = apkUrl,
+            notes = notes,
+            updateAvailable = isVersionNewer(latest, current)
+        )
+    } catch (e: Exception) {
+        VersionCheckResult(
+            currentVersion = current,
+            error = e.message ?: "无法连接 GitHub，请稍后再试"
+        )
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun appVersionName(context: Context): String {
+    return runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+    }.getOrDefault("1.0.0")
+}
+
+private fun isVersionNewer(latest: String, current: String): Boolean {
+    val latestParts = latest.toVersionParts()
+    val currentParts = current.toVersionParts()
+    val max = maxOf(latestParts.size, currentParts.size, 3)
+    for (i in 0 until max) {
+        val left = latestParts.getOrElse(i) { 0 }
+        val right = currentParts.getOrElse(i) { 0 }
+        if (left != right) return left > right
+    }
+    return false
+}
+
+private fun String.toVersionParts(): List<Int> {
+    return trim()
+        .removePrefix("v")
+        .removePrefix("V")
+        .split(".", "-", "_")
+        .mapNotNull { part -> part.takeWhile { it.isDigit() }.toIntOrNull() }
+}
+
+@Composable
+private fun AboutDialog(onDismiss: () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = .46f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        SectionCard(
+            modifier = Modifier
+                .padding(horizontal = 28.dp)
+                .clickable(enabled = false) {},
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                DecorativeImage(R.drawable.sleep, Modifier.size(92.dp))
+                Spacer(Modifier.height(8.dp))
+                Text("芙兰水衣", color = ShuiColors.DeepText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "版本 1.0.0\n当前支持住理热水、U净洗衣与饮水流程；洗衣支付暂时只支持支付宝。",
+                    color = ShuiColors.MutedText,
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
+                PrimaryGradientButton("知道啦", Modifier.fillMaxWidth(), onClick = onDismiss)
+            }
         }
     }
 }
@@ -2475,6 +2800,7 @@ private fun HomePreview() {
             MainTab.Home,
             PreviewShuiRuntimeProvider.state,
             PreviewShuiRuntimeProvider.actions,
+            {},
             {},
             {},
             {},

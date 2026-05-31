@@ -165,6 +165,30 @@ public final class UjingRuntimeAdapter {
         return detail;
     }
 
+    public java.util.List<WasherOrderDetail> loadRunningOrderDetails() throws Exception {
+        UjingApi.UjingSession session = requireSession();
+        JSONArray rows = api.getRunningOrders(session);
+        java.util.List<WasherOrderDetail> details = new java.util.ArrayList<>();
+        for (int i = 0; i < rows.length(); i++) {
+            Object item = rows.opt(i);
+            if (item instanceof JSONObject) {
+                String orderId = orderIdFrom((JSONObject) item);
+                if (!orderId.isEmpty()) {
+                    try {
+                        WasherOrderDetail detail = loadOrderDetail(orderId);
+                        if (!isTerminalWasherStatus(detail.status, detail.statusText)) {
+                            details.add(detail);
+                        }
+                    } catch (Exception e) {
+                        AppLogStore.append(appContext, "[ujing-runtime] skip running order detail orderId="
+                                + orderId + " error=" + e.getMessage());
+                    }
+                }
+            }
+        }
+        return details;
+    }
+
     public WasherOrderDetail startCurrentOrder() throws Exception {
         if (currentOrder == null || currentOrder.orderId == null || currentOrder.orderId.isEmpty()) {
             throw new IllegalStateException("当前没有可启动的洗衣订单");
@@ -297,11 +321,12 @@ public final class UjingRuntimeAdapter {
         AppLogStore.append(appContext, "[ujing-runtime] 启动支付宝支付，orderId=" + orderId);
         Map<String, String> result = new PayTask(activity).payV2(orderInfo, true);
         WasherOrderDetail detail = loadOrderDetail(orderId);
-        AppLogStore.append(appContext, "[ujing-runtime] 支付宝返回=" + result + " orderStatus=" + detail.statusText);
         String resultStatus = result == null ? "" : value(result, "resultStatus");
+        AppLogStore.append(appContext, "[ujing-runtime] 支付宝返回 resultStatus=" + resultStatus
+                + " orderStatus=" + detail.statusText);
         return new PaymentResult(
                 orderId,
-                String.valueOf(result),
+                "resultStatus=" + resultStatus,
                 resultStatus,
                 result == null ? "" : value(result, "memo"),
                 "9000".equals(resultStatus),

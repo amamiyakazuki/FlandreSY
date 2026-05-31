@@ -197,12 +197,6 @@ public class LegacyHotwaterActivity extends Activity {
         historyButton.setOnClickListener(v -> startActivity(new Intent(this, HistoryActivity.class)));
         logButton.setOnClickListener(v -> startActivity(new Intent(this, LogActivity.class)));
 
-        Button ujingTestButton = button("U净洗衣测试", false);
-        ujingTestButton.setOnClickListener(v -> startActivity(new Intent(this, UjingWasherTestActivity.class)));
-        LinearLayout.LayoutParams ujingLp = new LinearLayout.LayoutParams(-1, dp(48));
-        ujingLp.setMargins(0, dp(10), 0, 0);
-        root.addView(ujingTestButton, ujingLp);
-
         setContentView(page);
         updateStatusView();
     }

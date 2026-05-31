@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import android.graphics.Color
-import android.view.View
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.kazuki.zhulihotwater.runtime.ShuiRuntimeController
@@ -56,8 +55,6 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
-        window.decorView.systemUiVisibility =
-            window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
         WindowCompat.getInsetsController(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
             isAppearanceLightStatusBars = false
@@ -70,6 +67,7 @@ class MainActivity : ComponentActivity() {
             intent?.action == ACTION_OPEN_LEGACY_HOTWATER
         if (openLegacy) {
             intent?.removeExtra(EXTRA_OPEN_LEGACY_HOTWATER)
+            startActivity(Intent(this, LegacyHotwaterActivity::class.java))
         }
     }
 
