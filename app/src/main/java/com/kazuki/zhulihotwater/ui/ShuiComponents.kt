@@ -15,11 +15,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,6 +47,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -213,64 +215,72 @@ fun BottomNavBar(
     onTabSelected: (MainTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val density = LocalDensity.current
+    val navBottom = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(68.dp)
-            .navigationBarsPadding()
+            .height(68.dp + navBottom)
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val path = Path().apply {
-                moveTo(0f, 12f)
-                var x = 0f
-                val wave = size.width / 18f
-                while (x + wave < size.width) {
-                    quadraticTo(x + wave / 2f, 0f, x + wave, 12f)
-                    x += wave
-                }
-                lineTo(size.width, 12f)
-                lineTo(size.width, size.height)
-                lineTo(0f, size.height)
-                close()
-            }
-            drawPath(path, Brush.linearGradient(listOf(ShuiColors.PrimaryLight, ShuiColors.Primary, ShuiColors.PrimaryDark)))
-        }
-        DecorativeImage(R.drawable.shui_bianfu, Modifier.align(Alignment.CenterEnd).padding(end = 108.dp, top = 8.dp).size(42.dp), alpha = .44f)
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 18.dp)
-                .padding(top = 8.dp, bottom = 4.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(68.dp)
+                .align(Alignment.TopCenter)
         ) {
-            MainTab.values().forEach { tab ->
-                val selected = tab == selectedTab
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(18.dp))
-                        .shuiPressable(scale = ShuiMotion.SoftPressedScale) { onTabSelected(tab) },
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    ShuiLineIcon(
-                        name = when (tab) {
-                            MainTab.Home -> "home"
-                            MainTab.Orders -> "orders"
-                            MainTab.Devices -> "washer"
-                            MainTab.Profile -> "profile"
-                        },
-                        color = Color.White.copy(alpha = if (selected) 1f else .46f),
-                        modifier = Modifier.size(25.dp)
-                    )
-                    Text(
-                        text = tab.label,
-                        color = Color.White.copy(alpha = if (selected) 1f else .58f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+            Canvas(Modifier.fillMaxSize()) {
+                val path = Path().apply {
+                    moveTo(0f, 12f)
+                    var x = 0f
+                    val wave = size.width / 18f
+                    while (x + wave < size.width) {
+                        quadraticTo(x + wave / 2f, 0f, x + wave, 12f)
+                        x += wave
+                    }
+                    lineTo(size.width, 12f)
+                    lineTo(size.width, size.height)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                drawPath(path, Brush.linearGradient(listOf(ShuiColors.PrimaryLight, ShuiColors.Primary, ShuiColors.PrimaryDark)))
+            }
+            DecorativeImage(R.drawable.shui_bianfu, Modifier.align(Alignment.CenterEnd).padding(end = 108.dp, top = 8.dp).size(42.dp), alpha = .44f)
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp)
+                    .padding(top = 8.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                MainTab.values().forEach { tab ->
+                    val selected = tab == selectedTab
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(18.dp))
+                            .shuiPressable(scale = ShuiMotion.SoftPressedScale) { onTabSelected(tab) },
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        ShuiLineIcon(
+                            name = when (tab) {
+                                MainTab.Home -> "home"
+                                MainTab.Orders -> "orders"
+                                MainTab.Devices -> "washer"
+                                MainTab.Profile -> "profile"
+                            },
+                            color = Color.White.copy(alpha = if (selected) 1f else .46f),
+                            modifier = Modifier.size(25.dp)
+                        )
+                        Text(
+                            text = tab.label,
+                            color = Color.White.copy(alpha = if (selected) 1f else .58f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

@@ -31,10 +31,11 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -77,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import com.kazuki.zhulihotwater.R
 import com.kazuki.zhulihotwater.LogActivity
@@ -601,6 +603,8 @@ private fun PrimaryPageScaffold(
     bottomCharacter: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val density = LocalDensity.current
+    val navBottom = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
     Box(modifier.fillMaxSize().background(ShuiColors.Background)) {
         Column(Modifier.fillMaxSize()) {
             TopHeader(
@@ -620,8 +624,7 @@ private fun PrimaryPageScaffold(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp)
-                    .padding(bottom = if (bottomCharacter) 124.dp else 68.dp)
-                    .navigationBarsPadding()
+                    .padding(bottom = (if (bottomCharacter) 124.dp else 68.dp) + navBottom)
             ) {
                 content()
             }
@@ -631,7 +634,7 @@ private fun PrimaryPageScaffold(
                 R.drawable.order_bottom_character,
                 Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 48.dp)
+                    .padding(bottom = 48.dp + navBottom)
                     .offset(x = 14.dp, y = 6.dp)
                     .size(132.dp)
             )
