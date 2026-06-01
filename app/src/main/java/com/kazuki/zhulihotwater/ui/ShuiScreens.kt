@@ -3240,7 +3240,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
                 Text("芙兰水衣", color = ShuiColors.DeepText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "版本 1.0.0\n当前支持住理热水、U净洗衣与饮水流程；洗衣支付暂时只支持支付宝。",
+                    "版本 1.0.2\n当前支持住理热水、慧生活798洗浴、U净洗衣与饮水流程；洗衣支付暂时只支持支付宝。",
                     color = ShuiColors.MutedText,
                     fontSize = 14.sp,
                     lineHeight = 21.sp,
