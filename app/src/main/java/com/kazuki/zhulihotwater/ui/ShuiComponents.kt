@@ -81,7 +81,10 @@ data class DeviceUi(
     val type: String,
     val status: String,
     val statusColor: Color,
-    @DrawableRes val imageRes: Int = R.drawable.washer_machine
+    @DrawableRes val imageRes: Int = R.drawable.washer_machine,
+    val statusFilled: Boolean = true,
+    val actionSelected: Boolean = false,
+    val actionColor: Color = ShuiColors.Primary
 )
 
 @Composable
@@ -703,13 +706,14 @@ fun DeviceListItem(device: DeviceUi, onMenu: () -> Unit, onOpen: () -> Unit) {
                 Text(device.type, color = ShuiColors.DeepText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Column(horizontalAlignment = Alignment.End) {
-                StatusPill(device.status, device.statusColor, Modifier.widthIn(max = 126.dp), filled = true)
+                StatusPill(device.status, device.statusColor, Modifier.widthIn(max = 126.dp), filled = device.statusFilled)
                 Spacer(Modifier.height(18.dp))
                 Box(
                     Modifier
                         .size(18.dp)
                         .clip(CircleShape)
-                        .border(1.2.dp, ShuiColors.Primary, CircleShape)
+                        .background(if (device.actionSelected) device.actionColor else Color.Transparent)
+                        .border(1.2.dp, device.actionColor, CircleShape)
                         .shuiPressable(onClick = onMenu)
                 )
             }
@@ -732,6 +736,7 @@ fun AccountCard(
     modifier: Modifier = Modifier,
     statusTitle: String = "未登录",
     statusSubtitle: String = loginHint,
+    loginButtonText: String = "点击登录",
     middleActionText: String = "绑定设备码",
     onOpen: () -> Unit = {}
 ) {
@@ -759,7 +764,7 @@ fun AccountCard(
                             Text(statusTitle, color = ShuiColors.DeepText, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(statusSubtitle, color = ShuiColors.Brown, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        AccountLoginButton(accent, Modifier.width(82.dp).height(34.dp))
+                        AccountLoginButton(loginButtonText, accent, Modifier.width(82.dp).height(34.dp))
                     }
                     Spacer(Modifier.height(7.dp))
                     Row(
@@ -799,7 +804,7 @@ fun AccountCard(
 }
 
 @Composable
-private fun AccountLoginButton(accent: Color, modifier: Modifier) {
+private fun AccountLoginButton(text: String, accent: Color, modifier: Modifier) {
     val endColor = if (accent == ShuiColors.Blue) Color(0xFF4388E8) else ShuiColors.PrimaryDark
     Box(
         modifier = modifier
@@ -808,7 +813,7 @@ private fun AccountLoginButton(accent: Color, modifier: Modifier) {
             .border(1.dp, Color.White.copy(alpha = .42f), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center
     ) {
-        Text("点击登录", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text(text, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 
