@@ -2296,8 +2296,7 @@ private fun DevicesScreen(
 ) {
     val devices = runtimeState.localDevices.filter {
         it.deviceType == LocalDeviceType.Washer ||
-            it.deviceType == LocalDeviceType.DrinkingWater ||
-            it.deviceType == LocalDeviceType.Shower798
+            it.deviceType == LocalDeviceType.DrinkingWater
     }
     val refresh = { runtimeActions.refreshLocalDevices() }
     val lastRefreshed = runtimeState.localDevicesLastRefreshed.ifBlank { "未刷新" }
