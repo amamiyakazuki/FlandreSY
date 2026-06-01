@@ -220,11 +220,19 @@ fun BottomNavBar(
 ) {
     val density = LocalDensity.current
     val navBottom = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val barBrush = Brush.linearGradient(listOf(ShuiColors.PrimaryLight, ShuiColors.Primary, ShuiColors.PrimaryDark))
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(68.dp + navBottom)
     ) {
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(navBottom)
+                .background(barBrush)
+        )
         Box(
             Modifier
                 .fillMaxWidth()
@@ -245,7 +253,7 @@ fun BottomNavBar(
                     lineTo(0f, size.height)
                     close()
                 }
-                drawPath(path, Brush.linearGradient(listOf(ShuiColors.PrimaryLight, ShuiColors.Primary, ShuiColors.PrimaryDark)))
+                drawPath(path, barBrush)
             }
             DecorativeImage(R.drawable.shui_bianfu, Modifier.align(Alignment.CenterEnd).padding(end = 108.dp, top = 8.dp).size(42.dp), alpha = .44f)
             Row(
