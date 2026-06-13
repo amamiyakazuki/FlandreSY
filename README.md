@@ -16,11 +16,11 @@
 - U净饮水：扫码后自动创建接水订单，刷新接水状态，保存历史统计。
 - 本地设备列表：保存洗衣机快捷入口，支持海七预置设备、改名、删除、刷新状态。
 - 订单页：热水、饮水、洗衣分类展示，当前洗衣订单会显示剩余时间。
-- 版本检查：从 GitHub Releases 检查最新版，并引导下载。
+- 版本检查：读取远程版本清单，发现新版后引导到下载页面。
 
 ## 当前版本
 
-`1.0.2`：加入慧生活798洗浴入口，并让 798 设备只在洗浴系统里管理，不混入普通设备页。
+`1.0.2`：支持住理热水、慧生活798洗浴、U净洗衣与饮水流程，洗衣支付支持支付宝。
 
 ## 下载与更新
 
@@ -30,7 +30,12 @@
 2. 下载最新版本的 APK。
 3. 在 Android 手机上安装。
 
-App 内的“更多选项 -> 检查版本”会读取本仓库最新 Release。如果 Release 里上传了 `.apk` 文件，App 会优先打开 APK 下载链接；否则会打开 Release 页面。
+App 内的“更多选项 -> 检查版本”会读取远程版本清单：
+
+- 主源：`https://flandresy.pages.dev/version.json`
+- 备用源：`https://raw.githubusercontent.com/amamiyakazuki/FlandreSY/main/public/version.json`
+
+版本清单文件位于仓库的 `public/version.json`。更新版本时，请同步修改 `version`、`release_date`、`changelog` 和 `downloads` 字段。App 会根据清单里的下载链接引导用户获取最新版。
 
 ## 自己构建
 

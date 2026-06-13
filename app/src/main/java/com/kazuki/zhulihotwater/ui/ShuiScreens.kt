@@ -3031,7 +3031,7 @@ private fun MoreOptionsScreen(
             checkingVersion = true
             scope.launch {
                 versionResult = withContext(Dispatchers.IO) {
-                    checkLatestGithubVersion(context.applicationContext)
+                    checkLatestVersion(context.applicationContext)
                 }
                 checkingVersion = false
             }
@@ -3140,59 +3140,52 @@ private fun versionDialogText(result: VersionCheckResult): String {
     }
 }
 
-private fun checkLatestGithubVersion(context: Context): VersionCheckResult {
+// 更新检查 URL，按优先级排列
+private val updateUrls = listOf(
+    "https://flandresy.pages.dev/version.json",
+    "https://raw.githubusercontent.com/amamiyakazuki/FlandreSY/main/public/version.json"
+)
+
+private fun checkLatestVersion(context: Context): VersionCheckResult {
     val current = appVersionName(context)
-    return try {
-        val conn = (URL("https://api.github.com/repos/amamiyakazuki/FlandreSY/releases/latest").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 12000
-            readTimeout = 12000
-            setRequestProperty("Accept", "application/vnd.github+json")
-            setRequestProperty("User-Agent", "FlandreSY/${current}")
-        }
-        val code = conn.responseCode
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-        if (code == 404) {
+    var lastError: String? = null
+    for (url in updateUrls) {
+        try {
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10000
+                readTimeout = 10000
+                setRequestProperty("User-Agent", "FlandreSY/$current")
+            }
+            if (conn.responseCode !in 200..299) continue
+            val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val json = JSONObject(text)
+            val latest = json.optString("version").trim().removePrefix("v").removePrefix("V")
+            if (latest.isBlank()) continue
+            val notes = json.optJSONArray("changelog")?.let { arr ->
+                (0 until arr.length()).joinToString("\n") { arr.getString(it) }
+            }.orEmpty()
+            val downloads = json.optJSONObject("downloads")
+            val downloadUrl = downloads?.optString("github").orEmpty()
+            val releaseUrl = downloadUrl.ifBlank {
+                downloads?.optString("gitee").orEmpty()
+            }
             return VersionCheckResult(
                 currentVersion = current,
-                error = "GitHub Releases 里还没有发布版本。公开仓库后，请先创建一个 Release 并上传签名 APK。"
+                latestVersion = latest,
+                releaseUrl = releaseUrl,
+                downloadUrl = downloadUrl,
+                notes = notes,
+                updateAvailable = isVersionNewer(latest, current)
             )
+        } catch (e: Exception) {
+            lastError = e.message
         }
-        if (code !in 200..299) {
-            return VersionCheckResult(currentVersion = current, error = "GitHub 返回 HTTP $code")
-        }
-        val json = JSONObject(text)
-        val latestTag = json.optString("tag_name").ifBlank { json.optString("name") }
-        val releaseUrl = json.optString("html_url")
-        val notes = json.optString("body")
-        val assets = json.optJSONArray("assets")
-        var apkUrl = ""
-        if (assets != null) {
-            for (i in 0 until assets.length()) {
-                val asset = assets.optJSONObject(i) ?: continue
-                val name = asset.optString("name")
-                if (name.endsWith(".apk", ignoreCase = true)) {
-                    apkUrl = asset.optString("browser_download_url")
-                    break
-                }
-            }
-        }
-        val latest = latestTag.removePrefix("v").removePrefix("V")
-        VersionCheckResult(
-            currentVersion = current,
-            latestVersion = latest.ifBlank { latestTag },
-            releaseUrl = releaseUrl,
-            downloadUrl = apkUrl,
-            notes = notes,
-            updateAvailable = isVersionNewer(latest, current)
-        )
-    } catch (e: Exception) {
-        VersionCheckResult(
-            currentVersion = current,
-            error = e.message ?: "无法连接 GitHub，请稍后再试"
-        )
     }
+    return VersionCheckResult(
+        currentVersion = current,
+        error = lastError ?: "无法连接更新服务器，请稍后再试"
+    )
 }
 
 @Suppress("DEPRECATION")
@@ -3224,6 +3217,7 @@ private fun String.toVersionParts(): List<Int> {
 
 @Composable
 private fun AboutDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
     Box(
         Modifier
             .fillMaxSize()
@@ -3243,7 +3237,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
                 Text("芙兰水衣", color = ShuiColors.DeepText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "版本 1.0.2\n当前支持住理热水、慧生活798洗浴、U净洗衣与饮水流程；洗衣支付暂时只支持支付宝。",
+                    "版本 ${appVersionName(context)}\n当前支持住理热水、慧生活798洗浴、U净洗衣与饮水流程；洗衣支付暂时只支持支付宝。",
                     color = ShuiColors.MutedText,
                     fontSize = 14.sp,
                     lineHeight = 21.sp,

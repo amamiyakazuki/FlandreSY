@@ -149,7 +149,7 @@ final class UjingApi {
                 model.name = item.optString("workModelName");
                 model.price = item.optInt("basePrice");
                 model.time = item.optInt("time");
-                JSONArray additions = item.optJSONArray("additionDevices");
+                JSONArray additions = washerAdditions(item);
                 if (additions != null) {
                     for (int j = 0; j < additions.length(); j++) {
                         JSONObject additionJson = additions.getJSONObject(j);
@@ -182,6 +182,14 @@ final class UjingApi {
             info.defaultWashModelId = info.models.get(0).id;
         }
         return info;
+    }
+
+    private static JSONArray washerAdditions(JSONObject modelJson) {
+        JSONArray direct = modelJson.optJSONArray("additionDevices");
+        if (direct != null) return direct;
+        JSONObject grouped = modelJson.optJSONObject("additionDevices");
+        if (grouped == null) return null;
+        return grouped.optJSONArray("washingPartnerFeature");
     }
 
     WasherOrder createOrder(UjingSession session, ProgramInfo info, int washModelId, int temperatureId, Integer detergentGearId, Integer disinfectantGearId) throws Exception {

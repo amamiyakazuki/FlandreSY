@@ -142,7 +142,8 @@ fun classifyScanRouting(qrCode: String): ScanRouting {
         lower.contains("u_download.html") ||
         lower.contains("type=ujing") ||
         lower.contains("scanwashercode") ||
-        lower.contains("uuid=")
+        lower.contains("uuid=") ||
+        (!cd.isNullOrEmpty() && lower.contains("q.ujing.com.cn/ucqrc"))
     ) {
         return ScanRouting.Washer
     }
