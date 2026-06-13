@@ -1,9 +1,10 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "release_date": "2026-06-13",
   "changelog": [
-    "当前支持住理热水、慧生活798洗浴、U净洗衣与饮水流程",
-    "洗衣支付支持支付宝"
+    "支持 U净新洗衣二维码链接",
+    "恢复洗衣液和除菌液选项",
+    "检查更新改为读取远程版本清单"
   ],
   "downloads": {
     "github": "https://github.com/amamiyakazuki/FlandreSY/releases/latest"

@@ -3049,7 +3049,7 @@ private fun MoreOptionsScreen(
             MoreOptionRow("日志与诊断", "查看本地运行日志", openLogs)
             MoreOptionRow(
                 "检查版本",
-                if (checkingVersion) "正在连接 GitHub Releases" else "当前版本 ${appVersionName(context)}",
+                if (checkingVersion) "正在连接版本清单" else "当前版本 ${appVersionName(context)}",
                 checkVersion
             )
             MoreOptionRow("导出洗衣机设备列表", "复制本地设备 JSON 到剪贴板", exportDevices)
