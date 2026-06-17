@@ -21,9 +21,12 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
+          flutter-version: '3.44.2'  # 推荐使用 'stable'，或改成你本地 `flutter --version` 的精确版本（例如 3.24.3）
           channel: 'stable'
-          cache: true
+          cache: false  # 临时禁用缓存避免问题
+
+      - name: Verify Flutter version
+        run: flutter --version
 
       - name: Install dependencies
         run: flutter pub get
