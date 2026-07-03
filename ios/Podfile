@@ -48,5 +48,30 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # Xcode 26 要求最低部署目标 12.0，修复旧 pod 的 9.0/10.0 目标
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+    end
   end
+
+  # AlipaySDK-iOS 是 vendored xcframework，
+  # Xcode 26 不会在 Swift 编译前自动解包 xcframework，
+  # 需直接添加内层 .framework 路径到 FRAMEWORK_SEARCH_PATHS。
+  user_project = installer.aggregate_targets.first.user_project
+  user_project.targets.each do |target|
+    next unless target.name == 'Runner' || target.name == 'RunnerTests'
+    target.build_configurations.each do |config|
+      alipay_inner = '${PODS_ROOT}/AlipaySDK-iOS/AlipaySDK.xcframework/ios-arm64'
+      if config.name.downcase.include?('debug')
+        alipay_inner = '${PODS_ROOT}/AlipaySDK-iOS/AlipaySDK.xcframework/ios-arm64_x86_64-simulator'
+      end
+      current = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
+      current = [current] unless current.is_a?(Array)
+      unless current.any? { |p| p.include?('AlipaySDK.xcframework') }
+        config.build_settings['FRAMEWORK_SEARCH_PATHS'] = current + [alipay_inner]
+      end
+    end
+  end
+  user_project.save
 end
