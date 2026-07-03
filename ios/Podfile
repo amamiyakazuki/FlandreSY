@@ -36,8 +36,9 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
   # 支付宝 SDK（真机真实支付；RealPaymentLauncher 经 ujing/alipay channel 调用）。
-  # 若 use_frameworks! 下链接报错，改成：pod 'AlipaySDK-iOS', :linkage => :static
-  pod 'AlipaySDK-iOS', :linkage => :static
+  # 注：per-pod :linkage 参数 CocoaPods 1.16 不支持（会崩 pod install）。
+  # 若 use_frameworks! 下静态链接报错，改用官方写法：use_frameworks! :linkage => :static。
+  pod 'AlipaySDK-iOS'
 
   target 'RunnerTests' do
     inherit! :search_paths

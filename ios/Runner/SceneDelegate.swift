@@ -6,17 +6,16 @@ import AlipaySDK
 /// 需在此把结果交回 AlipaySDK（payOrder 的 completionBlock 才会触发）。
 /// Codex 无法在 Linux 编译/验证；iOS 真机 + 真钱由用户验。
 class SceneDelegate: FlutterSceneDelegate {
-  func scene(
+  override func scene(
     _ scene: UIScene,
     openURLContexts URLContexts: Set<UIOpenURLContext>
   ) {
     for context in URLContexts {
       let url = context.url
       if url.host == "safepay" {
-        // 从外部支付宝 App 回跳（standalone）。
-        AlipaySDK.defaultService().processOrder(withPaymentResult: url) { _ in }
-        // H5（钱包内 WebView）回跳。
-        AlipaySDK.defaultService().processOrderWithPaymentResult(fromH5PayUrl: url) { _ in }
+        // 支付宝 App 回跳（standalone）。standbyCallback 在 App 被杀/后台后重启走此兜底，
+        // 主回调是 payOrder(fromScheme:callback:)。H5 支付由 SDK 内部处理，无需单独调用。
+        AlipaySDK.defaultService().processOrder(withPaymentResult: url, standbyCallback: { _ in })
       }
     }
   }
