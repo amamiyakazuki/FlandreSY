@@ -1,3 +1,5 @@
+// GAL REVIEW REQUIRED BEFORE NEXT MODULE
+// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 import 'package:flutter/material.dart';
 
 /// FlandreSY 设计令牌 - 基于 Material 3 + 原生视觉精确提取
@@ -58,6 +60,7 @@ class AppColors {
   static const Color serviceOrange = Color(0xFFFFA93A);
   static const Color serviceGreen = Color(0xFF7DBF4C);
   static const Color serviceBrown = Color(0xFF7C4A50);
+  static const Color serviceViolet = Color(0xFF8D62E8); // 洗衣套餐第 4 色 (legacy OptionCard)
   static const Color error = Color(0xFFBA1A1A);
 
   // Material 3 完整 ColorScheme (Light only，无暗黑模式)
@@ -298,27 +301,126 @@ class AppCustomTokens {
   static const double goldenPhoneHeight = 932.0;
   static const double topHeaderHeight = 118.0;
   static const double topHeaderTallHeight = 132.0;
-  static const double headerWaveHeight = 25.0;
+  static const double topHeaderContentHeight = 108.0;
+  static const double headerWaveHeight = 22.0;
   static const double bottomBarHeight = 68.0;
   static const double bottomBarWaveTop = 12.0;
   static const double navIconSize = 25.0;
+  static const double navIconSizeLarge = 28.0;
   static const double headerCharacterSize = 116.0;
+  static const double headerCharacterSizeSmall = 96.0;
+  static const double headerTitleSize = 28.0;
+  static const double headerActionIconSize = 32.0;
   static const double hotWaterCharacterSize = 108.0;
+  static const double hotWaterCharacterSizeLarge = 116.0;
   static const double scanPanelHeight = 104.0;
   static const double scanImageSize = 84.0;
+  static const double scanImageSizeLarge = 92.0;
   static const double scanCircleSize = 96.0;
+  static const double scanCircleSizeLarge = 104.0;
   static const double scanCharacterSize = 78.0;
   static const double scanCharacterHeroSize = 104.0;
+  static const double scanCharacterHeroSizeLarge = 112.0;
   static const double scanBatSize = 50.0;
   static const double scanBatStartOffset = 92.0;
   static const double washerCharacterSize = 112.0;
+  static const double washerCharacterSizeLarge = 118.0;
   static const double serviceIconSize = 28.0;
+  static const double serviceIconBoxSize = 34.0;
   static const double statusIconSize = 34.0;
   static const double dialogImageSize = 108.0;
   static const double bottomBarReservedHeight = 96.0;
+  static const double bottomContentExtraPadding = 28.0;
   static const double compactActionHeight = 42.0;
   static const double primaryActionHeight = 46.0;
-  static const double runningCardMinHeight = 82.0;
+  static const double runningCardMinHeight = 76.0;
   static const double homeLargeNumberSize = 32.0;
   static const double sectionGap = 6.0;
+
+  // ========== Module B1 - Devices 模块还原尺寸 ==========
+  // 命名与取值严格对照 legacy ShuiScreens.kt / ShuiComponents.kt 的 dp 值，
+  // 集中在此处保持「单一事实来源」，禁止散落到组件内的魔法数字。
+  static const double spaceContent =
+      18.0; // legacy SectionCard contentPadding 18dp（设备/饮水页大量使用）
+  static const double radiusCompact =
+      10.0; // legacy RefreshBar / Popup / preset 卡 RoundedCornerShape 10dp
+  static const double deviceListIconSize =
+      58.0; // legacy DeviceListItem 设备图标 58dp
+  static const double deviceActionDotSize =
+      18.0; // legacy DeviceListItem 右下操作圆点 18dp
+  static const double deviceActionDotStroke = 1.2; // legacy 操作圆点描边 1.2dp
+  static const double deviceListLineGap = 5.0; // legacy 列表项三行文字间距 5dp
+  static const double presetCellHeight = 58.0; // legacy 海七预设格子高度 58dp
+  static const double presetGridHeight = 360.0; // legacy 预设网格滚动区高度 360dp
+  static const double emptyBoxSize = 160.0; // legacy empty_box 空状态插画 160dp
+  static const double emptyStateHeight = 330.0; // legacy 空状态容器高度 330dp
+  static const double devicePopupWidth =
+      150.0; // legacy DeviceActionPopup 宽度 150dp
+  static const double devicePopupEndPadding = 42.0; // legacy popup 右边距 42dp
+  static const double dialogMarginWide =
+      34.0; // legacy AddWasher/EditName 对话框水平外边距 34dp
+  static const double bottomCharacterSize =
+      132.0; // legacy order_bottom_character 132dp
+  static const double bottomCharacterContentPadding =
+      124.0; // legacy 带底部角色页面内容底部预留 124dp
+
+  // ========== Module B2 - DrinkingWater 模块还原尺寸 ==========
+  static const double infoLineLabelWidth = 70.0; // legacy InfoLine 标签列定宽 70dp
+  static const double drinkingIconSize =
+      34.0; // legacy DrinkingWaterScreen 饮水机图标 34dp
+  static const double drinkingCardGap = 10.0; // legacy 饮水卡内/卡间垂直间距 10dp
+  static const double drinkingContentTopGap = 14.0; // legacy 饮水页内容顶部留白 14dp
+
+  // ========== Module P1 - Profile 模块还原尺寸 ==========
+  // 命名严格对照 legacy ShuiScreens.kt ProfileScreen / BathSystemEntryCard +
+  // ShuiComponents.kt AccountCard 的 dp 值，集中于此保持单一事实来源。
+  static const double profileTopCharacterSize =
+      104.0; // legacy profile_top_character 104dp
+  static const double profileBottomDecorSize =
+      258.0; // legacy shui_wode_bottom 258dp
+  static const double profileBottomDecorHeight =
+      86.0; // legacy 底部装饰容器高度 86dp
+  static const double accountLogoSize = 42.0; // legacy 账号 logo / 浴室系统 logo 42dp
+  static const double accountSmallIconSize =
+      22.0; // legacy AccountServiceRow / mini action 图标 22dp
+  static const double accountLoginButtonWidth =
+      96.0; // legacy BathSystem「点击登录」按钮宽 96dp
+  static const double accountDividerWidth = 82.0; // legacy 标题行右侧分隔线 82dp
+
+  // ========== Phase 2 - 文本截断修复 ==========
+  /// StatusPill 宽度宽松上限（P2）：取代旧的 126dp 硬限（会裁状态串）。
+  /// 仅防极端超长；状态默认按内容 + 父级约束自适应 + maxLines:2 换行。
+  static const double statusPillMaxWidth = 200.0;
+
+  // ========== Module P2 - AccountDetail 登录页还原尺寸 ==========
+  static const double smsButtonWidth =
+      92.0; // legacy UjingAccountDetail「发送验证码」按钮宽 92dp
+  static const double smsButtonHeight =
+      52.0; // legacy 发送验证码按钮高 52dp（与输入框对齐）
+  static const int smsCooldownSeconds = 30; // legacy 验证码 30s cooldown
+  static const double formFieldGap = 10.0; // legacy 登录卡内字段垂直间距 10dp
+
+  // ========== Module P3 - 慧生活798 登录页还原尺寸 ==========
+  static const double captchaBoxHeight =
+      84.0; // legacy Shower798 图形验证码框高 84dp
+  static const double captchaBoxPadding = 8.0; // legacy 验证码图内边距 8dp
+
+  // ========== Module W1 - Washer 下单页还原尺寸 ==========
+  static const double optionCardHeight = 48.0; // legacy OptionCard 无副标题高 48dp
+  static const double optionCardTallHeight =
+      86.0; // legacy OptionCard 带副标题高 86dp
+  static const double optionCardIconSize = 22.0; // legacy OptionCard 行内图标 22dp
+  static const double optionCardIconLarge =
+      31.0; // legacy OptionCard 竖排图标 31dp
+  static const double optionCheckSize = 20.0; // legacy 选中角标 20dp
+  static const double optionStroke = 1.3; // legacy OptionCard 描边 1.3dp
+  static const double washerMachineInfoSize =
+      74.0; // legacy WasherRuntimeInfoCard 机器图 74dp
+
+  // ========== Module W2 - Orders 聚合页还原尺寸 ==========
+  static const double categoryChipHeight = 44.0; // legacy CategoryChip 高 44dp
+  static const double categoryChipRadius = 9.0; // legacy CategoryChip 圆角 9dp
+  static const double categoryChipIconSize = 22.0; // legacy CategoryChip 图标 22dp
+  static const double orderItemIconSize = 28.0; // legacy OrderListItem 图标 28dp
+  static const double orderItemRowGap = 16.0; // legacy OrderListItem 两行间距 16dp
 }

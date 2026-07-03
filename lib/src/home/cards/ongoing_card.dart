@@ -125,10 +125,7 @@ class RunningStatusCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DecorativeImage(
-            ShuiAssets.png(task.asset),
-            size: AppCustomTokens.serviceIconSize,
-          ),
+          _RunningTaskIcon(asset: ShuiAssets.png(task.asset)),
           const SizedBox(height: AppCustomTokens.spaceXs),
           Text(
             task.title,
@@ -145,6 +142,27 @@ class RunningStatusCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RunningTaskIcon extends StatelessWidget {
+  const _RunningTaskIcon({required this.asset});
+
+  final String asset;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: AppCustomTokens.serviceIconBoxSize,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: DecorativeImage(
+          asset,
+          width: AppCustomTokens.serviceIconSize,
+          height: AppCustomTokens.serviceIconSize,
+        ),
       ),
     );
   }

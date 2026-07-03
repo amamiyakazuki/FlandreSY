@@ -1,14 +1,26 @@
 name: flandresy
 description: FlandreSY 2.0 Flutter rewrite.
 publish_to: none
-version: 0.1.0+1
+version: 2.0.0-beta+1
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
+  crypto: ^3.0.7
   flutter:
     sdk: flutter
+  # 真实 Zhuli 热水 BLE(GATT)接入(Z2)。默认不触发:主线走 FakeHotwaterAdapter,
+  # 仅 --dart-define=UJING_HTTP=true 注入 FlutterBluePlusBleTransport 时用到。Android minSdk >= 21。
+  flutter_blue_plus: ^1.32.12
+  # 真实 auth token/secret 加密持久化(PTOK)。默认不触发:主线 Fake 无 token,
+  # 仅 --dart-define=UJING_HTTP=true 时读写真实凭证。Keystore(Android)/Keychain(iOS)。
+  flutter_secure_storage: ^10.3.1
+  # 真实相机扫码(RSCAN)。默认不触发:测试/golden 永不 pump 扫码页;点击扫码卡/添加设备才打开相机,
+  # classifyScanRouting 分类后路由到已注入适配器(默认 Fake / real 模式 real)。相机与 _useUjingHttp 解耦。
+  # Android CAMERA 权限 + iOS NSCameraUsageDescription 已声明。
+  mobile_scanner: ^5.2.3
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
@@ -20,6 +32,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/legacy/images/
+    - assets/public/version.json
   fonts:
     - family: FutureRoundSC
       fonts:

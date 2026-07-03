@@ -34,11 +34,11 @@ class TopHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleStyle = title.length <= 3
-        ? AppTypography.textTheme.displayMedium
-        : AppTypography.textTheme.headlineLarge;
+    final topInset = MediaQuery.paddingOf(context).top;
+    final headerHeight = AppCustomTokens.topHeaderContentHeight + topInset;
+    final titleStyle = AppTypography.textTheme.headlineLarge;
     return SizedBox(
-      height: AppCustomTokens.topHeaderHeight,
+      height: headerHeight,
       child: Stack(
         children: [
           const DecoratedBox(
@@ -54,32 +54,45 @@ class TopHeader extends StatelessWidget {
             child: SizedBox.expand(),
           ),
           if (character != null) character!,
-          Align(
-            child: Padding(
-              padding: const EdgeInsets.only(top: AppCustomTokens.spaceXs),
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: titleStyle?.copyWith(color: AppColors.onPrimary),
+          Positioned(
+            top: topInset,
+            left: 0,
+            right: 0,
+            height: AppCustomTokens.topHeaderContentHeight -
+                AppCustomTokens.headerWaveHeight,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: AppCustomTokens.spaceXs),
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: titleStyle?.copyWith(
+                    color: AppColors.onPrimary,
+                    fontSize: AppCustomTokens.headerTitleSize,
+                  ),
+                ),
               ),
             ),
           ),
           if (showBack)
             _HeaderIconButton(
+              topInset: topInset,
               alignment: Alignment.centerLeft,
-              label: '‹',
+              iconName: 'back',
               onTap: onBack ?? () {},
             ),
           if (showSettings)
             _HeaderIconButton(
+              topInset: topInset,
               alignment: Alignment.centerRight,
-              label: '⚙',
+              iconName: 'settings',
               onTap: onSettings ?? () {},
             ),
           if (showAdd)
             _HeaderIconButton(
+              topInset: topInset,
               alignment: Alignment.centerRight,
-              label: '+',
+              iconName: 'add',
               onTap: onAdd ?? () {},
             ),
           Positioned(
@@ -93,7 +106,7 @@ class TopHeader extends StatelessWidget {
           ),
           Positioned(
             right: AppCustomTokens.bottomBarReservedHeight,
-            top: AppCustomTokens.spaceLg,
+            top: topInset + AppCustomTokens.spaceMd,
             child: DecorativeImage(
               ShuiAssets.shuiHeart,
               size: AppCustomTokens.spaceXl,
@@ -109,30 +122,45 @@ class TopHeader extends StatelessWidget {
 
 class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
+    required this.topInset,
     required this.alignment,
-    required this.label,
+    required this.iconName,
     required this.onTap,
   });
 
+  final double topInset;
   final Alignment alignment;
-  final String label;
+  final String iconName;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: alignment,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppCustomTokens.spaceLg,
-        ),
-        child: ShuiPressable(
-          onTap: onTap,
-          child: Text(
-            label,
-            style: AppTypography.textTheme.headlineLarge?.copyWith(
-              color: AppColors.onPrimary,
-            ),
+    return Positioned(
+      top: topInset,
+      left: 0,
+      right: 0,
+      height: AppCustomTokens.topHeaderContentHeight -
+          AppCustomTokens.headerWaveHeight,
+      child: Align(
+        alignment: alignment,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppCustomTokens.spaceLg,
+          ),
+          child: ShuiPressable(
+            key: ValueKey('header-$iconName'),
+            onTap: onTap,
+            child: iconName == 'settings'
+                ? const Icon(
+                    Icons.settings_outlined,
+                    size: AppCustomTokens.headerActionIconSize,
+                    color: AppColors.onPrimary,
+                  )
+                : ShuiLineIcon(
+                    name: iconName,
+                    size: AppCustomTokens.headerActionIconSize,
+                    color: AppColors.onPrimary,
+                  ),
           ),
         ),
       ),

@@ -1,17 +1,28 @@
 // GAL REVIEW REQUIRED BEFORE NEXT MODULE
 // See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
-// Design tokens used: AppColors shell palette, AppTypography.textTheme, AppCustomTokens top/bottom/header/icon spacing.
+// Routing orchestration only; visual chrome lives in shui_shell_chrome.dart (token-compliant).
 
 import 'package:flutter/material.dart';
 
-import '../../design_tokens.dart';
+import '../devices/device_dialogs.dart';
+import '../devices/devices_screen.dart';
+import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
+import '../hotwater/hotwater_detail_screen.dart';
+import '../more/more_options_screen.dart';
+import '../orders/orders_screen.dart';
+import '../profile/account_detail_screen.dart';
+import '../profile/profile_screen.dart';
 import '../runtime/fake_shui_runtime.dart';
-import '../theme/shui_assets.dart';
+import '../runtime/models/account_session.dart';
+import '../runtime/models/local_device.dart';
+import '../runtime/scan_routing.dart';
 import '../theme/shui_motion.dart';
+import '../washer/washer_order_screen.dart';
+import '../widgets/qr_scanner_screen.dart';
 import '../widgets/shui_components.dart';
-import '../widgets/shui_header.dart';
-import '../widgets/shui_painters.dart';
+import 'shui_route.dart';
+import 'shui_shell_chrome.dart';
 
 enum MainTab {
   home('功能', 'home'),
@@ -33,9 +44,31 @@ class ShuiShell extends StatefulWidget {
 }
 
 class _ShuiShellState extends State<ShuiShell> {
-  MainTab selectedTab = MainTab.home;
+  /// 当前路由（替代原先的纯 tab 切换，支持 push 子页面 + 返回栈）。
+  ShuiRoute route = const TabRoute(MainTab.home);
+
   bool openingVisible = true;
   bool permissionVisible = true;
+
+  // Devices 模块的对话框/弹层状态（叠加在路由之上，由 PopScope 优先消费返回）。
+  bool showAddDevice = false;
+  bool showPresetPicker = false;
+  LocalDeviceShortcut? menuDevice;
+  LocalDeviceShortcut? editingDevice;
+
+  /// 标记当前饮水订单是否已创建过：用于「创建后被清空」=完成 的判定，
+  /// 避免进入页面初始 null 被误判为完成。
+  bool _drinkingOrderWasActive = false;
+
+  bool get _hasOverlay =>
+      showAddDevice ||
+      showPresetPicker ||
+      menuDevice != null ||
+      editingDevice != null;
+
+  bool get _canPop => !_hasOverlay && route is TabRoute;
+
+  MainTab get _selectedTab => route.parentTab;
 
   @override
   void initState() {
@@ -47,373 +80,412 @@ class _ShuiShellState extends State<ShuiShell> {
     });
   }
 
+  void _selectTab(MainTab tab) {
+    setState(() {
+      _dismissOverlays();
+      route = TabRoute(tab);
+    });
+  }
+
+  void _dismissOverlays() {
+    showAddDevice = false;
+    showPresetPicker = false;
+    menuDevice = null;
+    editingDevice = null;
+  }
+
+  /// 返回处理优先级：先关弹层 → 再关 popup → 再退子页面回 Tab。
+  void _handlePop() {
+    final runtime = ShuiRuntimeScope.of(context);
+    setState(() {
+      if (editingDevice != null) {
+        editingDevice = null;
+      } else if (showPresetPicker) {
+        showPresetPicker = false;
+      } else if (showAddDevice) {
+        showAddDevice = false;
+      } else if (menuDevice != null) {
+        menuDevice = null;
+      } else if (route is WasherOrderRoute) {
+        // 退出洗衣下单页时清理瞬态（program/order/payment）。
+        runtime.resetWasherTransient();
+        route = TabRoute(route.parentTab);
+      } else if (route is! TabRoute) {
+        route = TabRoute(route.parentTab);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final runtime = ShuiRuntimeScope.of(context);
-    return AnimatedBuilder(
-      animation: runtime,
-      builder: (context, _) {
-        return AdaptivePhoneContainer(
-          child: Stack(
-            children: [
-              AnimatedSwitcher(
-                duration: ShuiMotion.route,
-                switchInCurve: ShuiMotion.easeOut,
-                switchOutCurve: ShuiMotion.easeIn,
-                transitionBuilder: (child, animation) {
-                  final offset = Tween<Offset>(
-                    begin: const Offset(0.08, 0),
-                    end: Offset.zero,
-                  ).animate(animation);
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(position: offset, child: child),
-                  );
-                },
-                child: _tabBody(runtime),
-              ),
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: WavyBottomBar(
-                  selectedTab: selectedTab,
-                  onTabSelected: (tab) => setState(() => selectedTab = tab),
-                ),
-              ),
-              AnimatedSwitcher(
-                duration: ShuiMotion.normal,
-                child: openingVisible
-                    ? const OpeningMotionOverlay()
-                    : const SizedBox.shrink(),
-              ),
-              AnimatedSwitcher(
-                duration: ShuiMotion.normal,
-                child: permissionVisible && !openingVisible
-                    ? FirstLaunchPermissionDialog(
-                        onConfirm: () =>
-                            setState(() => permissionVisible = false),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ],
-          ),
-        );
+    return PopScope(
+      canPop: _canPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          _handlePop();
+        }
       },
-    );
-  }
-
-  Widget _tabBody(FakeShuiRuntime runtime) {
-    return KeyedSubtree(
-      key: ValueKey(selectedTab),
-      child: switch (selectedTab) {
-        MainTab.home => HomeScreen(
-            state: runtime.state,
-            onOpenProfile: () => setState(() => selectedTab = MainTab.profile),
-            onOpenDevices: () => setState(() => selectedTab = MainTab.devices),
-            onToggleHotwater: runtime.toggleHotwater,
-            onScan: runtime.simulateScan,
-            onWasherSummary: runtime.openWasherSummary,
-            onSwitchBathSystem: runtime.switchBathSystem,
-          ),
-        MainTab.orders => const PlaceholderPage(
-            title: '历史订单',
-            body: 'Orders 聚合页将在后续 bounded module 中完整实现。',
-          ),
-        MainTab.devices => const PlaceholderPage(
-            title: '选择设备',
-            body: 'Devices 本地设备、预置海七列表和 CRUD 将在后续 bounded module 中实现。',
-            showAdd: true,
-          ),
-        MainTab.profile => const PlaceholderPage(
-            title: '我的',
-            body: 'Profile 账号向导、住理/U净/798 登录和更多选项将在后续 bounded module 中实现。',
-            showSettings: true,
-          ),
-      },
-    );
-  }
-}
-
-class WavyBottomBar extends StatelessWidget {
-  const WavyBottomBar({
-    required this.selectedTab,
-    required this.onTabSelected,
-    super.key,
-  });
-
-  final MainTab selectedTab;
-  final ValueChanged<MainTab> onTabSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-    return SizedBox(
-      height: AppCustomTokens.bottomBarHeight + bottomInset,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: bottomInset,
-            child: const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primaryLight,
-                    AppColors.primary,
-                    AppColors.primaryDark,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            height: AppCustomTokens.bottomBarHeight,
-            child: CustomPaint(
-              painter: const _BottomBarPainter(),
+      child: AnimatedBuilder(
+        animation: runtime,
+        builder: (context, _) {
+          _maybeReturnAfterDrinkingComplete(runtime);
+          return AdaptivePhoneContainer(
+            // Shell 的根是裸 Stack（无 Scaffold/Material 祖先），WidgetsApp 的 fallback
+            // DefaultTextStyle 带黄色双下划线 decoration（Flutter 用它提示「不在 Material 内」）。
+            // 底栏 tab、设备对话框等 Stack 兄弟的文本用 copyWith(color:) 只覆盖颜色，会继承该
+            // 下划线 → 真机出现黄色双下划线。此处 merge 一个 decoration:none 统一消除；
+            // 它是纯 InheritedWidget（无合成层），golden 下文本本就无下划线故为像素级 no-op。
+            child: DefaultTextStyle.merge(
+              style: const TextStyle(decoration: TextDecoration.none),
               child: Stack(
                 children: [
-                  Positioned(
-                    right: AppCustomTokens.bottomBarReservedHeight,
-                    top: AppCustomTokens.spaceSm,
-                    child: DecorativeImage(
-                      ShuiAssets.shuiBianfu,
-                      size: AppCustomTokens.compactActionHeight,
-                      opacity: AppCustomTokens.alphaDisabled,
+                  AnimatedSwitcher(
+                    duration: ShuiMotion.route,
+                    switchInCurve: ShuiMotion.easeOut,
+                    switchOutCurve: ShuiMotion.easeIn,
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    child: _routeBody(runtime),
+                  ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: WavyBottomBar(
+                      selectedTab: _selectedTab,
+                      onTabSelected: _selectTab,
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(
-                      left: AppCustomTokens.spaceLg,
-                      right: AppCustomTokens.spaceLg,
-                      top: AppCustomTokens.spaceSm,
-                      bottom: AppCustomTokens.spaceXs,
-                    ),
-                    child: Row(
-                      children: MainTab.values.map((tab) {
-                        final selected = tab == selectedTab;
-                        return Expanded(
-                          child: ShuiPressable(
-                            soft: true,
-                            onTap: () => onTabSelected(tab),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ShuiLineIcon(
-                                  name: tab.iconName,
-                                  color: AppColors.onPrimary.withValues(
-                                    alpha: selected
-                                        ? 1
-                                        : AppCustomTokens.alphaDisabled,
-                                  ),
-                                ),
-                                Text(
-                                  tab.label,
-                                  style: AppTypography.textTheme.labelSmall
-                                      ?.copyWith(
-                                    color: AppColors.onPrimary.withValues(
-                                      alpha: selected
-                                          ? 1
-                                          : AppCustomTokens.alphaMuted,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
+                  ..._overlays(runtime),
+                  AnimatedSwitcher(
+                    duration: ShuiMotion.normal,
+                    child: openingVisible
+                        ? const OpeningMotionOverlay()
+                        : const SizedBox.shrink(),
+                  ),
+                  AnimatedSwitcher(
+                    duration: ShuiMotion.normal,
+                    child: permissionVisible && !openingVisible
+                        ? FirstLaunchPermissionDialog(
+                            onConfirm: () =>
+                                setState(() => permissionVisible = false),
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
-}
 
-class _BottomBarPainter extends CustomPainter {
-  const _BottomBarPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()..moveTo(0, AppCustomTokens.bottomBarWaveTop);
-    var x = 0.0;
-    final wave = size.width / 18;
-    while (x + wave < size.width) {
-      path.quadraticBezierTo(
-        x + wave / 2,
-        0,
-        x + wave,
-        AppCustomTokens.bottomBarWaveTop,
-      );
-      x += wave;
-    }
-    path
-      ..lineTo(size.width, AppCustomTokens.bottomBarWaveTop)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    const gradient = LinearGradient(
-      colors: [
-        AppColors.primaryLight,
-        AppColors.primary,
-        AppColors.primaryDark,
-      ],
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..shader = gradient.createShader(Offset.zero & size)
-        ..style = PaintingStyle.fill,
-    );
+  Widget _routeBody(FakeShuiRuntime runtime) {
+    final body = switch (route) {
+      TabRoute(:final tab) => _tabBody(runtime, tab),
+      EmptyDevicesRoute() => EmptyDevicesView(
+          onBack: () => _selectTab(MainTab.devices),
+          onAdd: () => setState(() => showAddDevice = true),
+        ),
+      DrinkingWaterRoute(:final cd) => DrinkingWaterScreen(
+          cd: cd,
+          state: runtime.state,
+          onBack: () => _leaveDrinkingWater(runtime),
+          onRefresh: runtime.refreshCurrentDrinkingWaterOrder,
+        ),
+      AccountDetailRoute(:final kind) => AccountDetailScreen(
+          kind: kind,
+          state: runtime.state,
+          nowMillis: runtime.clock.nowMillis(),
+          onBack: () => _selectTab(MainTab.profile),
+          onLoginZhuli: runtime.loginZhuli,
+          onBindDeviceCode: runtime.bindHotwaterDeviceCode,
+          onCheckZhuli: runtime.checkZhuliStatus,
+          onRequestUjingCaptcha: runtime.requestUjingCaptcha,
+          onLoginUjing: runtime.loginUjing,
+          onCheckUjing: runtime.checkUjingStatus,
+          onRequestShower798Captcha: runtime.requestShower798Captcha,
+          onSendShower798Sms: runtime.sendShower798SmsCode,
+          onLoginShower798: runtime.loginShower798,
+          onAddShower798Device: runtime.addShower798Device,
+          onRefreshShower798Devices: runtime.refreshShower798Devices,
+          onSelectShower798Device: runtime.selectShower798Device,
+        ),
+      WasherOrderRoute() => WasherOrderScreen(
+          state: runtime.state,
+          onBack: () => _leaveWasherOrder(runtime),
+          onCreateOrder: (model, temp, detergent, disinfectant) =>
+              runtime.createWasherOrder(
+            washModelId: model,
+            temperatureId: temp,
+            detergentGearId: detergent,
+            disinfectantGearId: disinfectant,
+          ),
+          onPay: runtime.payCurrentWasherOrderWithAlipay,
+          onStart: runtime.startCurrentWasherOrder,
+          onStop: runtime.stopCurrentWasherOrder,
+          onCancel: runtime.cancelCurrentWasherOrder,
+        ),
+      HotwaterDetailRoute() => HotwaterDetailScreen(
+          state: runtime.state,
+          onBack: () => _selectTab(MainTab.home),
+          onStart: () => _startHotwater(runtime),
+          onStop: () => _stopHotwater(runtime),
+        ),
+      MoreOptionsRoute() => MoreOptionsScreen(
+          onBack: () => _selectTab(MainTab.profile),
+          onImportDevices: runtime.refreshLocalDevices,
+          useSimulatedBackend: runtime.state.useSimulatedBackend,
+          onToggleSimulatedBackend: runtime.setUseSimulatedBackend,
+        ),
+    };
+    return KeyedSubtree(key: ValueKey(_routeKey()), child: body);
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+  String _routeKey() {
+    return switch (route) {
+      TabRoute(:final tab) => 'tab-${tab.name}',
+      EmptyDevicesRoute() => 'empty-devices',
+      DrinkingWaterRoute(:final cd) => 'drinking-$cd',
+      AccountDetailRoute(:final kind) => 'account-${kind.name}',
+      WasherOrderRoute(:final qr) => 'washer-$qr',
+      HotwaterDetailRoute() => 'hotwater-detail',
+      MoreOptionsRoute() => 'more-options',
+    };
+  }
 
-class OpeningMotionOverlay extends StatelessWidget {
-  const OpeningMotionOverlay({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.background,
-      child: Center(
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0.92, end: 1),
-          duration: ShuiMotion.opening,
-          curve: ShuiMotion.easeOut,
-          builder: (context, scale, child) {
-            return Transform.scale(scale: scale, child: child);
+  Widget _tabBody(FakeShuiRuntime runtime, MainTab tab) {
+    return switch (tab) {
+      MainTab.home => HomeScreen(
+          state: runtime.state,
+          onOpenProfile: () => _selectTab(MainTab.profile),
+          onOpenDevices: () => _selectTab(MainTab.devices),
+          onStartHotwater: () => _startHotwater(runtime),
+          onStopHotwater: () => _stopHotwater(runtime),
+          onOpenHotwaterDetail: () {
+            runtime.loadHotwaterHistory();
+            setState(() => route = const HotwaterDetailRoute());
           },
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DecorativeImage(
-                ShuiAssets.homeTopCharacter,
-                size: AppCustomTokens.headerCharacterSize,
-              ),
-              const SizedBox(height: AppCustomTokens.spaceSm),
-              Text(
-                '芙兰水衣',
-                style: AppTypography.textTheme.displayLarge?.copyWith(
-                  color: AppColors.primary,
-                ),
-              ),
-              Text(
-                '水、衣、热水，轻轻开始',
-                style: AppTypography.textTheme.labelMedium?.copyWith(
-                  color: AppColors.mutedText,
-                ),
-              ),
-            ],
-          ),
+          onScan: () => _scanFromHome(runtime),
+          onWasherSummary: runtime.openWasherSummary,
+          onSwitchBathSystem: runtime.switchBathSystem,
         ),
+      MainTab.orders => OrdersScreen(
+          state: runtime.state,
+          clock: runtime.clock,
+          onBack: () => _selectTab(MainTab.home),
+          onOpenWasherOrder: () {
+            final order = runtime.state.washer.currentOrder;
+            if (order != null) {
+              setState(() => route = WasherOrderRoute(order.deviceNo));
+            }
+          },
+          onOpenDrinking: () {
+            final cd = runtime.state.currentWaterOrder?.deviceNo ?? '';
+            setState(() => route = DrinkingWaterRoute(cd));
+          },
+          onPollWasher: runtime.refreshCurrentWasherOrder,
+        ),
+      MainTab.devices => runtime.state.visibleDevices.isEmpty
+          ? EmptyDevicesView(
+              onBack: () => _selectTab(MainTab.home),
+              onAdd: () => setState(() => showAddDevice = true),
+            )
+          : DevicesScreen(
+              state: runtime.state,
+              onAdd: () => setState(() => showAddDevice = true),
+              onBack: () => _selectTab(MainTab.home),
+              onRefresh: runtime.refreshLocalDevices,
+              onOpenDevice: (device) => _openDevice(runtime, device),
+              onMenu: (device) => setState(() => menuDevice = device),
+            ),
+      MainTab.profile => ProfileScreen(
+          state: runtime.state,
+          onSwitchBathSystem: runtime.switchBathSystem,
+          onOpenBathAccount: () {
+            // 浴室系统卡：住理 / 798 分别进各自登录详情（对齐 legacy onOpen 分发）。
+            if (runtime.state.bathSystemPreference ==
+                BathSystemPreference.shower798) {
+              setState(
+                () => route = const AccountDetailRoute(AccountKind.shower798),
+              );
+            } else {
+              setState(() => route = const AccountDetailRoute(AccountKind.zhuli));
+            }
+          },
+          onOpenUjing: () =>
+              setState(() => route = const AccountDetailRoute(AccountKind.ujing)),
+          onOpenMore: () => setState(() => route = const MoreOptionsRoute()),
+        ),
+    };
+  }
+
+  void _openDevice(FakeShuiRuntime runtime, LocalDeviceShortcut device) {
+    if (device.deviceType == LocalDeviceType.drinkingWater) {
+      final cd = device.cd ?? '';
+      setState(() => route = DrinkingWaterRoute(cd));
+      // 进入饮水页自动 ready + 创建接水订单（对齐 legacy 扫码后一步式流程）。
+      runtime.scanDrinkingWaterAndCreateOrder(cd);
+      return;
+    }
+    // 洗衣机（W1）：进入下单页并 fake 扫码识别 program。
+    final qr = device.qrUrl ?? '';
+    setState(() => route = WasherOrderRoute(qr));
+    runtime.scanWasher(qr);
+  }
+
+  /// 离开洗衣下单页：清理 washer 瞬态，回到 Devices tab。
+  void _leaveWasherOrder(FakeShuiRuntime runtime) {
+    runtime.resetWasherTransient();
+    _selectTab(MainTab.devices);
+  }
+
+  /// 首页扫码卡 → 打开真实相机（RSCAN）→ 得 qr → classifyScanRouting 分类 →
+  /// 洗衣机进下单页 + scanWasher；饮水机回首页 + 一步式接水；无法识别 → SnackBar 提示。
+  /// 对齐 legacy ShuiScreens.kt scannerLauncher 分发。相机层由用户真机验证。
+  Future<void> _scanFromHome(FakeShuiRuntime runtime) async {
+    final qr = await _openScanner();
+    if (qr == null || !mounted) {
+      return;
+    }
+    final routing = classifyScanRouting(qr);
+    switch (routing) {
+      case ScanRoutingWasher():
+        setState(() => route = WasherOrderRoute(qr));
+        runtime.scanWasher(qr);
+      case ScanRoutingDrinkingWater(:final cd):
+        setState(() => route = const TabRoute(MainTab.home));
+        runtime.scanDrinkingWaterAndCreateOrder(cd);
+      case ScanRoutingUnknown(:final reason):
+        _showScanMessage(reason);
+    }
+  }
+
+  /// 设备页「+」→「开始扫码」→ 打开真实相机（RSCAN）→ 得 qr →
+  /// runtime.addScannedDeviceFromQr（分类落洗衣/饮水快捷入口，去重 + 持久化）。
+  Future<void> _scanToAddDevice(FakeShuiRuntime runtime) async {
+    final qr = await _openScanner();
+    if (qr == null || !mounted) {
+      return;
+    }
+    runtime.addScannedDeviceFromQr(qr);
+  }
+
+  /// 打开全屏扫码页，返回识别到的 qr 字符串（取消返回 null）。
+  Future<String?> _openScanner() {
+    return Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => const QrScannerScreen(),
+        fullscreenDialog: true,
       ),
     );
   }
-}
 
-class FirstLaunchPermissionDialog extends StatelessWidget {
-  const FirstLaunchPermissionDialog({required this.onConfirm, super.key});
-
-  final VoidCallback onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.scrim.withValues(alpha: AppCustomTokens.alphaOverlay),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppCustomTokens.spaceXl,
-          ),
-          child: SectionCard(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DecorativeImage(
-                  ShuiAssets.sleep,
-                  size: AppCustomTokens.dialogImageSize,
-                ),
-                const SizedBox(height: AppCustomTokens.spaceSm),
-                Text(
-                  '先给小助手一点权限吧',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.textTheme.titleLarge?.copyWith(
-                    color: AppColors.deepText,
-                  ),
-                ),
-                const SizedBox(height: AppCustomTokens.spaceSm),
-                Text(
-                  '扫码、热水蓝牙、状态通知都需要系统权限。点一下我就会一次性申请，之后就不用反复打扰你啦。',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.textTheme.bodyMedium?.copyWith(
-                    color: AppColors.mutedText,
-                  ),
-                ),
-                const SizedBox(height: AppCustomTokens.spaceMd),
-                PrimaryGradientButton(label: '好，开启权限', onTap: onConfirm),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+  void _showScanMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
-}
 
-class PlaceholderPage extends StatelessWidget {
-  const PlaceholderPage({
-    required this.title,
-    required this.body,
-    this.showSettings = false,
-    this.showAdd = false,
-    super.key,
-  });
+  /// 按浴室偏好路由热水启动：798（已登录+选设备）走洗浴，否则走住理热水。
+  bool _use798(FakeShuiRuntime runtime) {
+    final s = runtime.state;
+    return s.bathSystemPreference == BathSystemPreference.shower798 &&
+        s.shower798Account != null &&
+        s.currentShower798DeviceId.isNotEmpty;
+  }
 
-  final String title;
-  final String body;
-  final bool showSettings;
-  final bool showAdd;
+  void _startHotwater(FakeShuiRuntime runtime) {
+    if (_use798(runtime)) {
+      runtime.startShower798();
+    } else {
+      runtime.startHotwater();
+    }
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          TopHeader(title: title, showSettings: showSettings, showAdd: showAdd),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppCustomTokens.spaceMd,
-                AppCustomTokens.spaceMd,
-                AppCustomTokens.spaceMd,
-                AppCustomTokens.bottomBarReservedHeight,
-              ),
-              child: SectionCard(
-                child: Center(
-                  child: Text(
-                    body,
-                    textAlign: TextAlign.center,
-                    style: AppTypography.textTheme.bodyLarge?.copyWith(
-                      color: AppColors.mutedText,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  void _stopHotwater(FakeShuiRuntime runtime) {
+    if (_use798(runtime)) {
+      runtime.stopShower798();
+    } else {
+      runtime.stopHotwater();
+    }
+  }
+
+  /// 离开饮水页：清理 ready/banner，回到 Devices tab。
+  void _leaveDrinkingWater(FakeShuiRuntime runtime) {
+    _drinkingOrderWasActive = false;
+    runtime.resetDrinkingWaterTransient();
+    _selectTab(MainTab.devices);
+  }
+
+  /// 饮水完成自动回 Home（对齐 legacy onCompleted）：
+  /// 当前在饮水页、订单曾创建、现已被清空且消息含「完成」→ 下一帧回 Home。
+  void _maybeReturnAfterDrinkingComplete(FakeShuiRuntime runtime) {
+    if (route is! DrinkingWaterRoute) {
+      return;
+    }
+    final s = runtime.state;
+    if (s.currentWaterOrder != null) {
+      _drinkingOrderWasActive = true;
+      return;
+    }
+    final completed = _drinkingOrderWasActive &&
+        s.waterOrder.state == RuntimeTaskState.success &&
+        (s.waterOrder.message?.contains('完成') ?? false);
+    if (completed) {
+      _drinkingOrderWasActive = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && route is DrinkingWaterRoute) {
+          setState(() => route = const TabRoute(MainTab.home));
+        }
+      });
+    }
+  }
+
+  List<Widget> _overlays(FakeShuiRuntime runtime) {
+    return [
+      if (showAddDevice && !showPresetPicker)
+        AddDeviceDialog(
+          onDismiss: () => setState(() => showAddDevice = false),
+          onScan: () {
+            setState(() => showAddDevice = false);
+            _scanToAddDevice(runtime);
+          },
+          onPreset: () => setState(() => showPresetPicker = true),
+        ),
+      if (showPresetPicker)
+        PresetDeviceDialog(
+          onDismiss: () => setState(() => showPresetPicker = false),
+          onSelect: (preset) {
+            runtime.addPresetWasherDevice(preset.name, preset.qrCode);
+            setState(() {
+              showPresetPicker = false;
+              showAddDevice = false;
+            });
+          },
+        ),
+      if (menuDevice != null && editingDevice == null)
+        DeviceActionPopup(
+          onDismiss: () => setState(() => menuDevice = null),
+          onEdit: () => setState(() {
+            editingDevice = menuDevice;
+            menuDevice = null;
+          }),
+          onDelete: () {
+            runtime.deleteLocalDevice(menuDevice!.id);
+            setState(() => menuDevice = null);
+          },
+        ),
+      if (editingDevice != null)
+        EditDeviceNameDialog(
+          initialName: editingDevice!.customName,
+          onDismiss: () => setState(() => editingDevice = null),
+          onSave: (name) {
+            runtime.renameLocalDevice(editingDevice!.id, name);
+            setState(() => editingDevice = null);
+          },
+        ),
+    ];
   }
 }

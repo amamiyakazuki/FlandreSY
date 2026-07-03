@@ -15,14 +15,18 @@ import '../../widgets/shui_painters.dart';
 class HotWaterCard extends StatelessWidget {
   const HotWaterCard({
     required this.state,
-    required this.onToggleHotwater,
+    required this.onStartHotwater,
+    required this.onStopHotwater,
     required this.onSwitchBathSystem,
+    required this.onOpenDetail,
     super.key,
   });
 
   final ShuiHomeState state;
-  final VoidCallback onToggleHotwater;
+  final VoidCallback onStartHotwater;
+  final VoidCallback onStopHotwater;
   final VoidCallback onSwitchBathSystem;
+  final VoidCallback onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -40,8 +44,16 @@ class HotWaterCard extends StatelessWidget {
     return SectionCard(
       child: Column(
         children: [
-          SectionTitle(icon: ShuiAssets.shuiFire, title: '热水控制'),
-          const SizedBox(height: AppCustomTokens.spaceSm),
+          ShuiPressable(
+            soft: true,
+            onTap: onOpenDetail,
+            child: SectionTitle(
+              icon: ShuiAssets.shuiFire,
+              title: '热水控制',
+              trailing: '详情 ›',
+            ),
+          ),
+          const SizedBox(height: AppCustomTokens.spaceXs),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -50,64 +62,79 @@ class HotWaterCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const _CurrentStatusLabel(),
-                    const SizedBox(height: AppCustomTokens.spaceSm),
+                    const SizedBox(height: AppCustomTokens.spaceXs),
                     AnimatedSwitcher(
                       duration: ShuiMotion.normal,
-                      child: Text(
-                        '≋  $statusText',
+                      child: Row(
                         key: ValueKey(statusText),
-                        textAlign: TextAlign.center,
-                        style: AppTypography.textTheme.titleMedium?.copyWith(
-                          color: statusColor,
-                        ),
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '≋  $statusText',
+                              textAlign: TextAlign.center,
+                              // P2 截断修复：登录提示长句（「请先在「我的」登录住理生活」）
+                              // 与 StatusPill + 角色图抢宽，旧实现无 maxLines（默认 1）被裁。
+                              // 允许两行 + softWrap，信息优先。
+                              maxLines: 2,
+                              softWrap: true,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.textTheme.titleMedium
+                                  ?.copyWith(color: statusColor),
+                            ),
+                          ),
+                          const SizedBox(width: AppCustomTokens.spaceSm),
+                          ShuiPressable(
+                            onTap: onSwitchBathSystem,
+                            soft: true,
+                            child: StatusPill(
+                              text: isShower798 ? '慧生活798' : '住理生活',
+                              color: isShower798
+                                  ? AppColors.serviceBlue
+                                  : AppColors.primary,
+                              filled: true,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: AppCustomTokens.spaceMd),
+                    const SizedBox(height: AppCustomTokens.spaceSm),
                     Row(
                       children: [
                         Expanded(
                           child: PrimaryGradientButton(
                             label: busy
-                                ? (state.hotwaterRunning ? '关闭中' : '启动中')
+                                ? '处理中'
                                 : (isShower798 ? '开始洗浴' : '开热水'),
                             enabled: !busy,
-                            onTap: onToggleHotwater,
+                            compact: true,
+                            onTap: onStartHotwater,
                           ),
                         ),
                         const SizedBox(width: AppCustomTokens.spaceSm),
                         Expanded(
                           child: PrimaryGradientButton(
                             label: busy
-                                ? (state.hotwaterRunning ? '关闭中' : '启动中')
+                                ? '处理中'
                                 : (isShower798 ? '结束洗浴' : '关热水'),
                             enabled: !busy,
-                            onTap: onToggleHotwater,
+                            compact: true,
+                            onTap: onStopHotwater,
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: AppCustomTokens.spaceSm),
-                    ShuiPressable(
-                      onTap: onSwitchBathSystem,
-                      soft: true,
-                      child: StatusPill(
-                        text: isShower798 ? '当前：慧生活798' : '当前：住理生活',
-                        color: isShower798
-                            ? AppColors.serviceBlue
-                            : AppColors.primary,
-                        filled: true,
-                      ),
                     ),
                   ],
                 ),
               ),
               ShadowedImage(
                 asset: ShuiAssets.hotWaterCharacter,
-                size: AppCustomTokens.hotWaterCharacterSize,
+                size: AppCustomTokens.hotWaterCharacterSize -
+                    AppCustomTokens.spaceSm,
               ),
             ],
           ),
-          const SizedBox(height: AppCustomTokens.spaceSm),
+          const SizedBox(height: AppCustomTokens.spaceXs),
           DecoratedBox(
             decoration: BoxDecoration(
               color: AppColors.primary
@@ -120,7 +147,7 @@ class HotWaterCard extends StatelessWidget {
                 color: AppColors.primaryLight,
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppCustomTokens.spaceMd,
-                  vertical: AppCustomTokens.spaceSm,
+                  vertical: AppCustomTokens.spaceXs,
                 ),
                 child: Row(
                   children: [

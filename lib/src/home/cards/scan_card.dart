@@ -53,8 +53,8 @@ class ScanCard extends StatelessWidget {
                     ),
                   ),
                   Positioned(
-                    right: AppCustomTokens.spaceSm + AppCustomTokens.spaceXs,
-                    top: -AppCustomTokens.spaceLg,
+                    right: AppCustomTokens.spaceXs,
+                    top: AppCustomTokens.spaceXs,
                     child: DecorativeImage(
                       ShuiAssets.scanCharacter,
                       size: AppCustomTokens.scanCharacterHeroSize,
@@ -63,7 +63,9 @@ class ScanCard extends StatelessWidget {
                   Center(
                     child: DecorativeImage(
                       ShuiAssets.scan,
-                      size: AppCustomTokens.scanImageSize,
+                      width: AppCustomTokens.scanImageSizeLarge +
+                          AppCustomTokens.scanBatSize,
+                      height: AppCustomTokens.scanImageSizeLarge,
                     ),
                   ),
                   Positioned(

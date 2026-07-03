@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Flandresy</string>
+	<string>芙兰水衣</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -66,5 +66,37 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- 支付宝支付回跳 URL scheme（SceneDelegate 收到后交回 AlipaySDK）。
+	     真机接入：与商户后台配置一致即可；flandrepay 为本工程自定义 scheme。 -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.flandresy.alipay</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>flandrepay</string>
+			</array>
+		</dict>
+	</array>
+	<!-- iOS 9+ 需白名单支付宝 scheme 才能检测/拉起支付宝 App。 -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>alipay</string>
+		<string>alipays</string>
+	</array>
+	<!-- Zhuli 热水真实 BLE(GATT)所需蓝牙用途说明(Z2)。默认全 Fake 不触发;
+	     仅 dart-define UJING_HTTP=true 注入 FlutterBluePlusBleTransport 时用到。
+	     iOS BLE 由用户真机验证(Codex 无法编译/运行 iOS)。 -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>需要蓝牙以连接热水设备完成开水/关水</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>需要蓝牙以连接热水设备完成开水/关水</string>
+	<!-- 真实相机扫码(RSCAN)用途说明。点击扫码卡/添加设备打开 mobile_scanner 相机时用到。
+	     iOS 相机权限由用户真机验证(Codex 无法编译/运行 iOS)。 -->
+	<key>NSCameraUsageDescription</key>
+	<string>需要相机以扫描饮水机或洗衣机二维码</string>
 </dict>
 </plist>

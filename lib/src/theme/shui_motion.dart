@@ -45,25 +45,17 @@ class _ShuiPressableState extends State<ShuiPressable> {
 
   @override
   Widget build(BuildContext context) {
-    final scale = widget.soft
-        ? AppCustomTokens.softPressScale
-        : AppCustomTokens.pressScale;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.enabled ? widget.onTap : null,
       onTapDown: (_) => setPressed(true),
       onTapCancel: () => setPressed(false),
       onTapUp: (_) => setPressed(false),
-      child: AnimatedScale(
-        scale: pressed ? scale : 1,
-        curve: Curves.elasticOut,
-        duration: ShuiMotion.normal,
-        child: AnimatedOpacity(
-          opacity: pressed ? AppCustomTokens.alphaPressed : 1,
-          curve: ShuiMotion.easeOut,
-          duration: ShuiMotion.quick,
-          child: widget.child,
-        ),
+      child: AnimatedOpacity(
+        opacity: pressed ? AppCustomTokens.alphaPressed : 1,
+        curve: ShuiMotion.easeOut,
+        duration: ShuiMotion.quick,
+        child: widget.child,
       ),
     );
   }

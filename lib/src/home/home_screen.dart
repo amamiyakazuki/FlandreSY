@@ -19,7 +19,9 @@ class HomeScreen extends StatelessWidget {
     required this.state,
     required this.onOpenProfile,
     required this.onOpenDevices,
-    required this.onToggleHotwater,
+    required this.onStartHotwater,
+    required this.onStopHotwater,
+    required this.onOpenHotwaterDetail,
     required this.onScan,
     required this.onWasherSummary,
     required this.onSwitchBathSystem,
@@ -29,13 +31,19 @@ class HomeScreen extends StatelessWidget {
   final ShuiHomeState state;
   final VoidCallback onOpenProfile;
   final VoidCallback onOpenDevices;
-  final VoidCallback onToggleHotwater;
+  final VoidCallback onStartHotwater;
+  final VoidCallback onStopHotwater;
+  final VoidCallback onOpenHotwaterDetail;
   final VoidCallback onScan;
   final VoidCallback onWasherSummary;
   final VoidCallback onSwitchBathSystem;
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final bottomPadding = AppCustomTokens.bottomBarHeight +
+        bottomInset +
+        AppCustomTokens.bottomContentExtraPadding;
     return Scaffold(
       body: Column(
         children: [
@@ -45,7 +53,7 @@ class HomeScreen extends StatelessWidget {
             onSettings: onOpenProfile,
             character: Positioned(
               left: AppCustomTokens.spaceMd,
-              bottom: AppCustomTokens.spaceSm,
+              bottom: -AppCustomTokens.spaceXs,
               child: DecorativeImage(
                 ShuiAssets.homeTopCharacter,
                 size: AppCustomTokens.headerCharacterSize,
@@ -54,11 +62,11 @@ class HomeScreen extends StatelessWidget {
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 AppCustomTokens.spaceMd,
                 AppCustomTokens.spaceSm,
                 AppCustomTokens.spaceMd,
-                AppCustomTokens.bottomBarReservedHeight,
+                bottomPadding,
               ),
               child: Column(
                 children: [
@@ -68,8 +76,10 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(height: AppCustomTokens.sectionGap),
                   HotWaterCard(
                     state: state,
-                    onToggleHotwater: onToggleHotwater,
+                    onStartHotwater: onStartHotwater,
+                    onStopHotwater: onStopHotwater,
                     onSwitchBathSystem: onSwitchBathSystem,
+                    onOpenDetail: onOpenHotwaterDetail,
                   ),
                   const SizedBox(height: AppCustomTokens.sectionGap),
                   ScanCard(onScan: onScan),

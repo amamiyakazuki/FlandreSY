@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0-beta",
+  "release_date": "2026-07-03",
+  "changelog": [
+    "Flutter 重构，真实后端默认开启",
+    "修复设备状态与热水历史残留假数据",
+    "文本截断修复；应用名/图标/包名整理"
+  ],
+  "downloads": {
+    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/latest"
+  }
+}

@@ -219,6 +219,14 @@ class _ShuiLineIconPainter extends CustomPainter {
         line(0.38, 0.82, 0.18, 0.82);
         line(0.18, 0.82, 0.18, 0.62);
         break;
+      case 'back':
+        line(0.62, 0.20, 0.34, 0.50);
+        line(0.34, 0.50, 0.62, 0.80);
+        break;
+      case 'add':
+        line(0.50, 0.20, 0.50, 0.80);
+        line(0.20, 0.50, 0.80, 0.50);
+        break;
       default:
         line(0.50, 0.16, 0.50, 0.84);
         line(0.16, 0.50, 0.84, 0.50);

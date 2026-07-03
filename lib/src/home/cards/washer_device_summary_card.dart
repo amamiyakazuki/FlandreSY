@@ -31,72 +31,41 @@ class WasherDeviceSummaryCard extends StatelessWidget {
           SectionTitle(icon: ShuiAssets.shuiYifu, title: '洗衣设备'),
           const SizedBox(height: AppCustomTokens.spaceSm),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(AppCustomTokens.spaceMd),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface.withValues(
-                      alpha: AppCustomTokens.alphaCardAlt,
-                    ),
-                    borderRadius: BorderRadius.circular(
-                      AppCustomTokens.radiusMedium,
-                    ),
-                    border: Border.all(
-                      color: AppColors.cardBorder.withValues(
-                        alpha: AppCustomTokens.alphaMuted,
-                      ),
-                      width: AppCustomTokens.strokeThin,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _WasherMetric(
-                          label: '已添加设备',
-                          value: '$washerCount',
-                          suffix: '台',
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      Container(
-                        width: AppCustomTokens.strokeThin,
-                        height: AppCustomTokens.compactActionHeight,
-                        color: AppColors.cardBorder.withValues(
-                          alpha: AppCustomTokens.alphaMuted,
-                        ),
-                      ),
-                      Expanded(
-                        child: _WasherMetric(
-                          label: '空闲 / 未知',
-                          value:
-                              '$availableCount / ${washerCount - availableCount}',
-                          suffix: '台',
-                          color: AppColors.serviceGreen,
-                        ),
-                      ),
-                    ],
+                child: ShuiPressable(
+                  onTap: onWasherSummary,
+                  soft: true,
+                  child: _WasherMetricsPanel(
+                    washerCount: washerCount,
+                    availableCount: availableCount,
                   ),
                 ),
               ),
               const SizedBox(width: AppCustomTokens.spaceSm),
               SizedBox(
-                width: AppCustomTokens.washerCharacterSize,
+                width: AppCustomTokens.washerCharacterSizeLarge +
+                    AppCustomTokens.spaceLg,
                 child: Column(
                   children: [
                     Stack(
-                      alignment: Alignment.bottomLeft,
+                      alignment: Alignment.bottomCenter,
                       children: [
                         Align(
                           alignment: Alignment.bottomRight,
                           child: DecorativeImage(
                             ShuiAssets.washerCharacter,
-                            size: AppCustomTokens.statusIconSize * 2,
+                            size: AppCustomTokens.washerCharacterSize -
+                                AppCustomTokens.spaceLg,
                           ),
                         ),
-                        DecorativeImage(
-                          ShuiAssets.washerMachine,
-                          size: AppCustomTokens.statusIconSize,
+                        Align(
+                          alignment: Alignment.bottomLeft,
+                          child: DecorativeImage(
+                            ShuiAssets.washerMachine,
+                            size: AppCustomTokens.compactActionHeight,
+                          ),
                         ),
                       ],
                     ),
@@ -111,17 +80,66 @@ class WasherDeviceSummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppCustomTokens.spaceSm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ShuiPressable(
-              onTap: onWasherSummary,
-              soft: true,
-              child: const StatusPill(
-                text: '模拟一条洗衣进行中任务',
-                color: AppColors.serviceBlue,
-                filled: true,
-              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WasherMetricsPanel extends StatelessWidget {
+  const _WasherMetricsPanel({
+    required this.washerCount,
+    required this.availableCount,
+  });
+
+  final int washerCount;
+  final int availableCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppCustomTokens.spaceMd,
+        vertical: AppCustomTokens.spaceSm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(
+          alpha: AppCustomTokens.alphaCardAlt,
+        ),
+        borderRadius: BorderRadius.circular(
+          AppCustomTokens.radiusMedium,
+        ),
+        border: Border.all(
+          color: AppColors.cardBorder.withValues(
+            alpha: AppCustomTokens.alphaMuted,
+          ),
+          width: AppCustomTokens.strokeThin,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _WasherMetric(
+              label: '已添加设备',
+              value: '$washerCount',
+              suffix: '台',
+              color: AppColors.primary,
+            ),
+          ),
+          Container(
+            width: AppCustomTokens.strokeThin,
+            height:
+                AppCustomTokens.compactActionHeight + AppCustomTokens.spaceMd,
+            color: AppColors.cardBorder.withValues(
+              alpha: AppCustomTokens.alphaMuted,
+            ),
+          ),
+          Expanded(
+            child: _WasherMetric(
+              label: '空闲 / 未知',
+              value: '$availableCount / ${washerCount - availableCount}',
+              suffix: '台',
+              color: AppColors.serviceGreen,
             ),
           ),
         ],
@@ -146,12 +164,17 @@ class _WasherMetric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: AppTypography.textTheme.bodyMedium?.copyWith(
-            color: AppColors.deepText,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            style: AppTypography.textTheme.bodyMedium?.copyWith(
+              color: AppColors.deepText,
+            ),
           ),
         ),
         const SizedBox(height: AppCustomTokens.spaceXs),
@@ -170,7 +193,7 @@ class _WasherMetric extends StatelessWidget {
               const SizedBox(width: AppCustomTokens.spaceXs),
               Padding(
                 padding: const EdgeInsets.only(
-                  bottom: AppCustomTokens.spaceXs,
+                  bottom: AppCustomTokens.spaceSm,
                 ),
                 child: Text(
                   suffix,

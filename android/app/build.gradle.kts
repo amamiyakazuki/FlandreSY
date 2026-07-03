@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.flandresy"
+    namespace = "com.flandresy"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +15,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.flandresy"
+        applicationId = "com.flandresy"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -42,4 +41,10 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Alipay SDK (for real payment with --dart-define=UJING_HTTP=true)
+    // Version matches the legacy Kotlin project.
+    implementation("com.alipay.sdk:alipaysdk-android:15.8.42")
 }

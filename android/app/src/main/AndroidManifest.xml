@@ -1,6 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Zhuli 热水真实 BLE(GATT)所需权限(Z2)。默认全 Fake 不触发;
+         仅 dart-define UJING_HTTP=true 注入 FlutterBluePlusBleTransport 时用到。 -->
+    <!-- Android 12+ (API 31+):运行时请求 BLUETOOTH_SCAN / BLUETOOTH_CONNECT。 -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Android 11 及以下:旧蓝牙权限 + 扫描需定位。 -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <!-- 真实相机扫码(RSCAN)所需权限。默认全 Fake 不触发相机;点击扫码卡/添加设备才打开 mobile_scanner。
+         相机与 dart-define UJING_HTTP 解耦(相机永远真开,后端按已注入适配器)。 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <application
-        android:label="flandresy"
+        android:label="芙兰水衣"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -30,6 +49,8 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Alipay SDK 的 H5PayActivity 由 SDK 自带 manifest 声明并合并进来，
+             无需在此手动重复声明（重复会导致 manifest merger 冲突）。 -->
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
