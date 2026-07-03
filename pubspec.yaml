@@ -19,7 +19,7 @@ dependencies:
   # 真实相机扫码(RSCAN)。默认不触发:测试/golden 永不 pump 扫码页;点击扫码卡/添加设备才打开相机,
   # classifyScanRouting 分类后路由到已注入适配器(默认 Fake / real 模式 real)。相机与 _useUjingHttp 解耦。
   # Android CAMERA 权限 + iOS NSCameraUsageDescription 已声明。
-  mobile_scanner: ^5.2.3
+  mobile_scanner: ^7.2.0
   shared_preferences: ^2.5.5
 
 dev_dependencies:

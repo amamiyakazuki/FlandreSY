@@ -29,6 +29,12 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // 应用 CameraX / ML Kit / mobile_scanner 的 keep 规则，修复 release 真机
+            // 扫码 R8 混淆导致的空指针崩溃（proguard-rules.pro）。
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

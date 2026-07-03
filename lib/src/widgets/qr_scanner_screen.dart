@@ -10,6 +10,7 @@
 // the caller (shui_shell) classifies + routes. Cancel pops null.
 //
 // 相机启动稳健性（真机「相机启动失败，请重试」修复）：
+//   - mobile_scanner 7.x（升级自 5.2.3，消 KGP 弃用警告 + 相机稳定性改进）。
 //   - autoStart:false + 自己显式 start()，避免 widget/生命周期重复 start 触发 genericError。
 //   - 真正的「重试」按钮（原文案说重试却无入口）。
 //   - app 生命周期：切后台 stop、回前台重启，避免相机会话残留。
@@ -119,7 +120,8 @@ class _QrScannerScreenState extends State<QrScannerScreen>
           MobileScanner(
             controller: _controller,
             onDetect: _onDetect,
-            errorBuilder: (context, error, child) => _ScannerError(
+            // mobile_scanner 7.x：errorBuilder 去掉了第三个 child 参数。
+            errorBuilder: (context, error) => _ScannerError(
               error: error,
               onRetry: _startScanner,
             ),
