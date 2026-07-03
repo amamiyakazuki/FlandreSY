@@ -342,7 +342,8 @@ class _ShuiShellState extends State<ShuiShell> {
   }
 
   /// 首页扫码卡 → 打开真实相机（RSCAN）→ 得 qr → classifyScanRouting 分类 →
-  /// 洗衣机进下单页 + scanWasher；饮水机回首页 + 一步式接水；无法识别 → SnackBar 提示。
+  /// 洗衣机：自动加到设备页（去重+持久化）后进下单页 + scanWasher；
+  /// 饮水机回首页 + 一步式接水（一次性，不落设备）；无法识别 → SnackBar 提示。
   /// 对齐 legacy ShuiScreens.kt scannerLauncher 分发。相机层由用户真机验证。
   Future<void> _scanFromHome(FakeShuiRuntime runtime) async {
     final qr = await _openScanner();
@@ -352,6 +353,9 @@ class _ShuiShellState extends State<ShuiShell> {
     final routing = classifyScanRouting(qr);
     switch (routing) {
       case ScanRoutingWasher():
+        // 洗衣机需反复使用 → 首页扫码也自动加到设备页（addScannedDeviceFromQr
+        // 内部按 qrUrl 去重 + 持久化，重复扫不会重复加），再进下单页。
+        runtime.addScannedDeviceFromQr(qr);
         setState(() => route = WasherOrderRoute(qr));
         runtime.scanWasher(qr);
       case ScanRoutingDrinkingWater(:final cd):
