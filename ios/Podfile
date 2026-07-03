@@ -37,7 +37,7 @@ target 'Runner' do
 
   # 支付宝 SDK（真机真实支付；RealPaymentLauncher 经 ujing/alipay channel 调用）。
   # 若 use_frameworks! 下链接报错，改成：pod 'AlipaySDK-iOS', :linkage => :static
-  pod 'AlipaySDK-iOS'
+  pod 'AlipaySDK-iOS', :linkage => :static
 
   target 'RunnerTests' do
     inherit! :search_paths
