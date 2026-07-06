@@ -14,6 +14,7 @@ import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
 import '../data/settings_repository.dart';
+import '../data/water_order_repository.dart';
 import '../runtime/fake_shui_runtime.dart';
 import '../runtime/live_clock.dart';
 import '../shell/shui_shell.dart';
@@ -24,6 +25,7 @@ class FlandreApp extends StatelessWidget {
     this.sessions,
     this.devices,
     this.history,
+    this.water,
     this.secure,
     this.clock,
     this.ujing,
@@ -44,6 +46,9 @@ class FlandreApp extends StatelessWidget {
 
   /// 可选注入的热水历史持久化（测试传内存实现）。
   final HistoryRepository? history;
+
+  /// 可选注入的饮水订单持久化（PWATER 问题7；测试传内存实现）。
+  final WaterOrderRepository? water;
 
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
   final SecureSessionRepository? secure;
@@ -80,6 +85,7 @@ class FlandreApp extends StatelessWidget {
         sessions: sessions,
         devices: devices,
         history: history,
+        water: water,
         secure: secure,
         clock: clock,
         ujing: ujing,

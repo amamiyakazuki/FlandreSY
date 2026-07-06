@@ -8,7 +8,6 @@ import '../devices/device_dialogs.dart';
 import '../devices/devices_screen.dart';
 import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
-import '../hotwater/hotwater_detail_screen.dart';
 import '../more/more_options_screen.dart';
 import '../orders/orders_screen.dart';
 import '../profile/account_detail_screen.dart';
@@ -227,12 +226,6 @@ class _ShuiShellState extends State<ShuiShell> {
           onStop: runtime.stopCurrentWasherOrder,
           onCancel: runtime.cancelCurrentWasherOrder,
         ),
-      HotwaterDetailRoute() => HotwaterDetailScreen(
-          state: runtime.state,
-          onBack: () => _selectTab(MainTab.home),
-          onStart: () => _startHotwater(runtime),
-          onStop: () => _stopHotwater(runtime),
-        ),
       MoreOptionsRoute() => MoreOptionsScreen(
           onBack: () => _selectTab(MainTab.profile),
           onImportDevices: runtime.refreshLocalDevices,
@@ -250,7 +243,6 @@ class _ShuiShellState extends State<ShuiShell> {
       DrinkingWaterRoute(:final cd) => 'drinking-$cd',
       AccountDetailRoute(:final kind) => 'account-${kind.name}',
       WasherOrderRoute(:final qr) => 'washer-$qr',
-      HotwaterDetailRoute() => 'hotwater-detail',
       MoreOptionsRoute() => 'more-options',
     };
   }
@@ -263,10 +255,6 @@ class _ShuiShellState extends State<ShuiShell> {
           onOpenDevices: () => _selectTab(MainTab.devices),
           onStartHotwater: () => _startHotwater(runtime),
           onStopHotwater: () => _stopHotwater(runtime),
-          onOpenHotwaterDetail: () {
-            runtime.loadHotwaterHistory();
-            setState(() => route = const HotwaterDetailRoute());
-          },
           onScan: () => _scanFromHome(runtime),
           onWasherSummary: runtime.openWasherSummary,
           onSwitchBathSystem: runtime.switchBathSystem,
@@ -286,6 +274,7 @@ class _ShuiShellState extends State<ShuiShell> {
             setState(() => route = DrinkingWaterRoute(cd));
           },
           onPollWasher: runtime.refreshCurrentWasherOrder,
+          onLoadHotwaterHistory: runtime.loadHotwaterHistory,
         ),
       MainTab.devices => runtime.state.visibleDevices.isEmpty
           ? EmptyDevicesView(

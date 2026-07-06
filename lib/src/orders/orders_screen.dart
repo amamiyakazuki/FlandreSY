@@ -26,6 +26,7 @@ class OrdersScreen extends StatefulWidget {
     required this.onOpenWasherOrder,
     required this.onOpenDrinking,
     required this.onPollWasher,
+    required this.onLoadHotwaterHistory,
     super.key,
   });
 
@@ -36,6 +37,10 @@ class OrdersScreen extends StatefulWidget {
   final VoidCallback onOpenDrinking;
   final VoidCallback onPollWasher;
 
+  /// 进入订单页时拉取热水历史（原本由已删的热水详情页触发；详情整删后由订单页接管，
+  /// 否则「热水」分类会空。对齐 legacy「进订单页即刷新历史」语义）。
+  final VoidCallback onLoadHotwaterHistory;
+
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
@@ -44,6 +49,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
   OrderCategory _category = OrderCategory.hotwater;
   Timer? _tickTimer;
   Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // 进入订单页即拉一次热水历史（替换旧值，不 append），接管原详情页职责。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onLoadHotwaterHistory();
+    });
+  }
 
   @override
   void dispose() {

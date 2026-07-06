@@ -86,6 +86,8 @@ mixin WaterActions on ShuiRuntimeBase {
         ),
       ),
     );
+    // PWATER（问题7）：创建即记录 → 持久化当前订单，重启后订单页饮水分类可恢复。
+    persistWaterOrders();
   }
 
   /// 刷新当前接水订单状态（对齐 legacy `refreshCurrentDrinkingWaterOrder`）。
@@ -148,6 +150,8 @@ mixin WaterActions on ShuiRuntimeBase {
           ),
         ),
       );
+      // PWATER（问题7）：完成转历史 → 持久化（当前订单已清空，历史含本单花费）。
+      persistWaterOrders();
       return;
     }
 
@@ -161,6 +165,8 @@ mixin WaterActions on ShuiRuntimeBase {
         ),
       ),
     );
+    // PWATER（问题7）：刷新后的当前订单状态同步落盘。
+    persistWaterOrders();
   }
 
   /// 离开饮水页时清理 ready/banner（不删历史）。

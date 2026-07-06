@@ -82,7 +82,7 @@ packages:
     source: hosted
     version: "0.7.14"
   fake_async:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: fake_async
       sha256: "5368f224a74523e8d2e7399ea1638b37aecfca824a3cc4dfdf77bf1fa905ac44"
@@ -232,14 +232,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  golden_toolkit:
-    dependency: "direct dev"
-    description:
-      name: golden_toolkit
-      sha256: "8f74adab33154fe7b731395782797021f97d2edc52f7bfb85ff4f1b5c4a215f0"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.15.0"
   hooks:
     dependency: transitive
     description:

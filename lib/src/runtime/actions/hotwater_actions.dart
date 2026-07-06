@@ -231,6 +231,7 @@ mixin HotwaterActions on ShuiRuntimeBase {
         hotwaterStart: RuntimeActionStatus(state: taskState, message: message),
       ),
     );
+    _scheduleHotwaterErrorClearIfNeeded(taskState);
   }
 
   void _emitStop(RuntimeTaskState taskState, String message) {
@@ -239,6 +240,38 @@ mixin HotwaterActions on ShuiRuntimeBase {
         hotwaterStop: RuntimeActionStatus(state: taskState, message: message),
       ),
     );
+    _scheduleHotwaterErrorClearIfNeeded(taskState);
+  }
+
+  /// 问题2：热水开/关落到「错误态」（failure/loginRequired）时注册 3 秒清理，
+  /// 到点把 start/stop 复位为 idle（警告框随即消失，卡片回到「热水待启动」正常态）。
+  /// 非错误态（loading/success）不清——处理中/成功状态由后续 emit 覆盖，当前状态需可见。
+  void _scheduleHotwaterErrorClearIfNeeded(RuntimeTaskState taskState) {
+    final isError = taskState == RuntimeTaskState.failure ||
+        taskState == RuntimeTaskState.loginRequired;
+    if (!isError) {
+      return;
+    }
+    scheduleHotwaterErrorClear(() {
+      // 守卫：仅当到点时「仍处于错误态」才复位——若这 3 秒内用户已重试成功
+      // （start=success）或正在处理（loading），保留那个新状态，不误清。
+      final startErr =
+          state.hotwaterStart.state == RuntimeTaskState.failure ||
+              state.hotwaterStart.state == RuntimeTaskState.loginRequired;
+      final stopErr = state.hotwaterStop.state == RuntimeTaskState.failure;
+      if (!startErr && !stopErr) {
+        return;
+      }
+      emit(
+        state.copyWith(
+          hotwaterStart: const RuntimeActionStatus(
+            state: RuntimeTaskState.idle,
+            message: '热水待启动',
+          ),
+          hotwaterStop: const RuntimeActionStatus(),
+        ),
+      );
+    });
   }
 
   List<Shower798DeviceUi> _mapDeviceStatus(String deviceId, String status) {

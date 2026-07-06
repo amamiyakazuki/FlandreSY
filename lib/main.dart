@@ -22,6 +22,7 @@ import 'src/data/shared_prefs_account_session_repository.dart';
 import 'src/data/shared_prefs_history_repository.dart';
 import 'src/data/shared_prefs_local_device_repository.dart';
 import 'src/data/shared_prefs_settings_repository.dart';
+import 'src/data/shared_prefs_water_order_repository.dart';
 
 /// 开发用「强制模拟后端」覆盖（Phase 0）。默认 false。
 /// 现在**默认真实后端**：正常构建/运行即真实登录/网络/支付/BLE。
@@ -40,7 +41,9 @@ Future<void> main() async {
   final sessions = SharedPrefsAccountSessionRepository();
   final devices = SharedPrefsLocalDeviceRepository();
   final history = SharedPrefsHistoryRepository();
-  final initial = await AppBootstrap.load(settings, sessions, devices, history);
+  final water = SharedPrefsWaterOrderRepository();
+  final initial =
+      await AppBootstrap.load(settings, sessions, devices, history, water);
 
   // Phase 0：默认真实后端。持久化开关或 dev define 任一为真 → 全 Fake + InMemory。
   // adapter 在启动时一次性构造，故开关改动需重启才生效（MoreOptions 会提示「重启后生效」）。
@@ -89,6 +92,7 @@ Future<void> main() async {
       sessions: sessions,
       devices: devices,
       history: history,
+      water: water,
       secure: secure,
       ujing: ujing,
       hotwater: hotwater,
