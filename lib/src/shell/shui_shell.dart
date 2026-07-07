@@ -3,11 +3,14 @@
 // Routing orchestration only; visual chrome lives in shui_shell_chrome.dart (token-compliant).
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../data/local_device_repository.dart';
 import '../devices/device_dialogs.dart';
 import '../devices/devices_screen.dart';
 import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
+import '../more/log_screen.dart';
 import '../more/more_options_screen.dart';
 import '../orders/orders_screen.dart';
 import '../profile/account_detail_screen.dart';
@@ -228,9 +231,17 @@ class _ShuiShellState extends State<ShuiShell> {
         ),
       MoreOptionsRoute() => MoreOptionsScreen(
           onBack: () => _selectTab(MainTab.profile),
-          onImportDevices: runtime.refreshLocalDevices,
+          onImportDevices: () => _importDevices(runtime),
+          onExportDevices: () => _exportDevices(runtime),
+          onOpenLogs: () =>
+              setState(() => route = const DiagnosticLogRoute()),
+          appVersion: runtime.appVersion,
           useSimulatedBackend: runtime.state.useSimulatedBackend,
           onToggleSimulatedBackend: runtime.setUseSimulatedBackend,
+        ),
+      DiagnosticLogRoute() => LogScreen(
+          log: runtime.diagnosticLog,
+          onBack: () => setState(() => route = const MoreOptionsRoute()),
         ),
     };
     return KeyedSubtree(key: ValueKey(_routeKey()), child: body);
@@ -244,6 +255,7 @@ class _ShuiShellState extends State<ShuiShell> {
       AccountDetailRoute(:final kind) => 'account-${kind.name}',
       WasherOrderRoute(:final qr) => 'washer-$qr',
       MoreOptionsRoute() => 'more-options',
+      DiagnosticLogRoute() => 'diagnostic-log',
     };
   }
 
@@ -379,6 +391,27 @@ class _ShuiShellState extends State<ShuiShell> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// 导出本地设备列表到剪贴板（M-REAL，对齐 legacy exportDevices）。
+  Future<void> _exportDevices(FakeShuiRuntime runtime) async {
+    final json = LocalDeviceCodec.encode(runtime.state.localDevices);
+    await Clipboard.setData(ClipboardData(text: json));
+    if (!mounted) {
+      return;
+    }
+    _showScanMessage('设备列表已复制到剪贴板');
+  }
+
+  /// 从剪贴板导入本地设备列表（M-REAL，对齐 legacy importDevices）。
+  /// 读剪贴板 → runtime 校验/写入/刷新 → snackbar 成功或失败。
+  Future<void> _importDevices(FakeShuiRuntime runtime) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final ok = await runtime.importLocalDevicesFromJson(data?.text ?? '');
+    if (!mounted) {
+      return;
+    }
+    _showScanMessage(ok ? '设备列表已从剪贴板导入' : '剪贴板不是有效设备列表 JSON');
   }
 
   /// 按浴室偏好路由热水启动：798（已登录+选设备）走洗浴，否则走住理热水。

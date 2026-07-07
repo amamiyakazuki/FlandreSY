@@ -52,6 +52,11 @@ class MoreOptionsRoute extends ShuiRoute {
   const MoreOptionsRoute();
 }
 
+/// 运行日志子页（M-REAL 日志与诊断）。归属 Profile tab（从更多选项进入）。
+class DiagnosticLogRoute extends ShuiRoute {
+  const DiagnosticLogRoute();
+}
+
 /// 每个非 Tab 路由在底栏上「归属」哪个 Tab（用于高亮 + 返回落点）。
 extension ShuiRouteParent on ShuiRoute {
   MainTab get parentTab {
@@ -62,6 +67,7 @@ extension ShuiRouteParent on ShuiRoute {
       AccountDetailRoute() => MainTab.profile,
       WasherOrderRoute() => MainTab.devices,
       MoreOptionsRoute() => MainTab.profile,
+      DiagnosticLogRoute() => MainTab.profile,
     };
   }
 

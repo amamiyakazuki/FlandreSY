@@ -3,6 +3,7 @@
 // Design tokens used: AppTheme, AppColors.background, AppTypography.textTheme, AppCustomTokens adaptive shell tokens.
 
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'src/app/flandre_app.dart';
 import 'src/data/adapters/alipay_payment_launcher.dart';
@@ -20,9 +21,13 @@ import 'src/data/flutter_secure_session_repository.dart';
 import 'src/data/secure_session_repository.dart';
 import 'src/data/shared_prefs_account_session_repository.dart';
 import 'src/data/shared_prefs_history_repository.dart';
+import 'src/data/shared_prefs_diagnostic_log_repository.dart';
 import 'src/data/shared_prefs_local_device_repository.dart';
 import 'src/data/shared_prefs_settings_repository.dart';
 import 'src/data/shared_prefs_water_order_repository.dart';
+import 'src/more/version_check.dart' show kCurrentAppVersion;
+import 'src/runtime/diagnostic_log.dart';
+import 'src/runtime/live_clock.dart';
 
 /// 开发用「强制模拟后端」覆盖（Phase 0）。默认 false。
 /// 现在**默认真实后端**：正常构建/运行即真实登录/网络/支付/BLE。
@@ -44,6 +49,26 @@ Future<void> main() async {
   final water = SharedPrefsWaterOrderRepository();
   final initial =
       await AppBootstrap.load(settings, sessions, devices, history, water);
+
+  // M-REAL 检查版本：真实 App 版本号（PackageInfo.version）。读失败回退常量兜底。
+  String appVersion;
+  try {
+    appVersion = (await PackageInfo.fromPlatform()).version;
+  } catch (_) {
+    appVersion = kCurrentAppVersion;
+  }
+
+  // M-REAL 日志与诊断：持久化环形日志器。真实 adapter 埋点写入，日志页读；
+  // FlutterError 也灌进来（对齐 legacy「后台组件结果也记录」）。
+  final diagnosticLog = DiagnosticLog(
+    repo: SharedPrefsDiagnosticLogRepository(),
+    clock: const SystemLiveClock(),
+  );
+  final previousOnError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    diagnosticLog.log('flutter-error', details.exceptionAsString());
+    previousOnError?.call(details);
+  };
 
   // Phase 0：默认真实后端。持久化开关或 dev define 任一为真 → 全 Fake + InMemory。
   // adapter 在启动时一次性构造，故开关改动需重启才生效（MoreOptions 会提示「重启后生效」）。
@@ -67,6 +92,7 @@ Future<void> main() async {
       ? UjingHttpAdapter(
           launcher: const RealPaymentLauncher(),
           token: ujingToken,
+          log: diagnosticLog.sinkFor('ujing'),
         )
       : null;
   // 真实模式注入 RealZhuliAdapter（签名 HTTP + BLE）。BLE 那几步经 FlutterBluePlusBleTransport
@@ -76,6 +102,7 @@ Future<void> main() async {
           transport: IoZhuliTransport(),
           ble: const FlutterBluePlusBleTransport(),
           session: zhuliSession,
+          log: diagnosticLog.sinkFor('hotwater'),
         )
       : null;
   // 真实模式注入 RealShower798Adapter（纯 token HTTP）；恢复 token 注入。
@@ -84,6 +111,7 @@ Future<void> main() async {
       ? RealShower798Adapter(
           transport: IoShower798Transport(),
           token: shower798Token,
+          log: diagnosticLog.sinkFor('shower798'),
         )
       : null;
   runApp(
@@ -97,6 +125,8 @@ Future<void> main() async {
       ujing: ujing,
       hotwater: hotwater,
       shower798: shower798,
+      diagnosticLog: diagnosticLog,
+      appVersion: appVersion,
       initial: initial,
     ),
   );

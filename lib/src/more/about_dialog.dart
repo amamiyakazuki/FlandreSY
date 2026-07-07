@@ -4,6 +4,7 @@
 // Reference: legacy ShuiScreens.kt AboutDialog (3219) + VersionCheckDialog (3079).
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../design_tokens.dart';
 import '../theme/shui_assets.dart';
@@ -12,10 +13,16 @@ import '../widgets/shui_components.dart';
 import 'version_check.dart';
 
 /// 关于弹窗（sleep 插图 + 版本 + 支持说明 + 知道啦）。对齐 legacy AboutDialog。
+/// [appVersion] 为真实 PackageInfo.version（main 注入）；缺省用常量兜底。
 class AboutDialogCard extends StatelessWidget {
-  const AboutDialogCard({required this.onDismiss, super.key});
+  const AboutDialogCard({
+    required this.onDismiss,
+    this.appVersion = kCurrentAppVersion,
+    super.key,
+  });
 
   final VoidCallback onDismiss;
+  final String appVersion;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +47,7 @@ class AboutDialogCard extends StatelessWidget {
           ),
           const SizedBox(height: AppCustomTokens.spaceSm),
           Text(
-            '版本 $kCurrentAppVersion\n'
+            '版本 $appVersion\n'
             '当前支持住理热水、慧生活798洗浴、U净洗衣与饮水流程；洗衣支付暂时只支持支付宝。',
             textAlign: TextAlign.center,
             style: textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
@@ -67,12 +74,20 @@ class VersionCheckDialogCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = AppTypography.textTheme;
-    final title = result.hasUpdate ? '发现新版本' : '已是最新版本';
-    final body = result.hasUpdate
-        ? '最新版本 ${result.latest.version}（当前 ${result.current}）\n'
-            '${result.latest.changelog.join('；')}\n'
-            '可前往 GitHub Releases 下载更新。'
-        : '当前版本 ${result.current} 已是最新。';
+    final isError = result.error != null;
+    final downloadUrl = result.latest.downloadUrl;
+    final canDownload = result.hasUpdate && downloadUrl.isNotEmpty;
+
+    final title = isError
+        ? '版本检查失败'
+        : (result.hasUpdate ? '发现新版本' : '已是最新版本');
+    final body = isError
+        ? '${result.error}\n（当前版本 ${result.current}）'
+        : result.hasUpdate
+            ? '最新版本 ${result.latest.version}（当前 ${result.current}）\n'
+                '${result.latest.changelog.join('；')}\n'
+                '可前往 GitHub Releases 下载更新。'
+            : '当前版本 ${result.current} 已是最新。';
     return ShuiModalCard(
       onDismiss: onDismiss,
       child: Column(
@@ -92,12 +107,23 @@ class VersionCheckDialogCard extends StatelessWidget {
           ),
           const SizedBox(height: AppCustomTokens.spaceMd),
           PrimaryGradientButton(
-            label: result.hasUpdate ? '知道啦（去下载留后续）' : '知道啦',
-            onTap: onDismiss,
+            label: canDownload ? '获取最新版' : '知道啦',
+            onTap: canDownload
+                ? () => _openDownload(downloadUrl)
+                : onDismiss,
           ),
         ],
       ),
     );
+  }
+
+  /// 打开下载链接（对齐 legacy ACTION_VIEW）。外部浏览器打开 GitHub Releases，随后关闭弹窗。
+  Future<void> _openDownload(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri != null) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    onDismiss();
   }
 }
 

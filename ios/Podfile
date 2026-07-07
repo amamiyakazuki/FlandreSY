@@ -52,6 +52,15 @@ post_install do |installer|
     # Xcode 26 要求最低部署目标 12.0，修复旧 pod 的 9.0/10.0 目标
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+
+      # M-REAL 权限检测：permission_handler 用编译宏门控编译进哪些权限。
+      # 仅开启本 App 实际用到的相机/蓝牙/定位（对齐 Info.plist 用途串 + AndroidManifest）。
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_BLUETOOTH=1',
+        'PERMISSION_LOCATION=1',
+      ]
     end
   end
 

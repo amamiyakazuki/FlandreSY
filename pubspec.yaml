@@ -20,7 +20,14 @@ dependencies:
   # classifyScanRouting 分类后路由到已注入适配器(默认 Fake / real 模式 real)。相机与 _useUjingHttp 解耦。
   # Android CAMERA 权限 + iOS NSCameraUsageDescription 已声明。
   mobile_scanner: ^7.2.0
+  # 真实版本号(M-REAL 检查版本)。读平台 PackageInfo.version 替代硬编码常量。
+  package_info_plus: ^10.2.0
+  # 运行时权限申请 + 兜底跳系统设置(M-REAL 权限检测)。相机/蓝牙/定位已在 AndroidManifest 声明;
+  # iOS 用途串在 Info.plist + permission_handler 宏在 Podfile。
+  permission_handler: ^12.0.3
   shared_preferences: ^2.5.5
+  # 打开外部下载链接(M-REAL 检查版本下载键 → GitHub Releases)。对齐 legacy ACTION_VIEW。
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

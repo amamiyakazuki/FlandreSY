@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../data/account_session_repository.dart';
+import '../data/diagnostic_log_repository.dart';
 import '../data/adapters/fake_hotwater_adapter.dart';
 import '../data/adapters/fake_shower798_adapter.dart';
 import '../data/adapters/fake_ujing_adapter.dart';
@@ -23,6 +24,8 @@ import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
 import '../data/settings_repository.dart';
 import '../data/water_order_repository.dart';
+import '../more/version_check.dart' show kCurrentAppVersion;
+import 'diagnostic_log.dart';
 import 'live_clock.dart';
 import 'models/account_session.dart';
 import 'models/hotwater_history.dart';
@@ -48,6 +51,8 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     IUjingAdapter? ujing,
     IHotwaterAdapter? hotwater,
     IShower798Adapter? shower798,
+    DiagnosticLog? diagnosticLog,
+    String? appVersion,
     PersistedSnapshot? initial,
   })  : settings = settings ?? InMemorySettingsRepository(),
         sessions = sessions ?? InMemoryAccountSessionRepository(),
@@ -59,6 +64,9 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
         ujing = ujing ?? const FakeUjingAdapter(),
         hotwater = hotwater ?? const FakeHotwaterAdapter(),
         shower798 = shower798 ?? FakeShower798Adapter(),
+        diagnosticLog =
+            diagnosticLog ?? DiagnosticLog(repo: InMemoryDiagnosticLogRepository()),
+        appVersion = appVersion ?? kCurrentAppVersion,
         _state = initial == null ? seedState() : _applySnapshot(initial) {
     // 恢复 deviceSeq / hotwaterOrderSeq 起点，避免新增 id 与已持久化数据撞号。
     deviceSeq = _maxDeviceSeq(_state.localDevices);
@@ -103,6 +111,14 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   /// 慧生活798 洗浴适配器（P4 S798）。生产默认注入 RealShower798Adapter；
   /// 未注入（null）→ FakeShower798Adapter（测试/golden/模拟模式）。
   final IShower798Adapter shower798;
+
+  /// 诊断日志器（M-REAL 日志与诊断）。真实 adapter 埋点写入，日志页读。
+  /// 未注入 → InMemory（测试/模拟模式，不落盘）。
+  final DiagnosticLog diagnosticLog;
+
+  /// 真实 App 版本号（M-REAL）。main() 传 PackageInfo.version；未注入 → 常量兜底。
+  /// About / 检查版本 / 版本行读它。
+  final String appVersion;
 
   ShuiHomeState _state;
 

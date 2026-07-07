@@ -28,6 +28,7 @@ import 'actions/hotwater_actions.dart';
 import 'actions/shower798_actions.dart';
 import 'actions/washer_actions.dart';
 import 'actions/water_actions.dart';
+import 'diagnostic_log.dart';
 import 'live_clock.dart';
 import 'shui_runtime_base.dart';
 
@@ -56,6 +57,8 @@ class FakeShuiRuntime extends ShuiRuntimeBase
     super.ujing,
     super.hotwater,
     super.shower798,
+    super.diagnosticLog,
+    super.appVersion,
     super.initial,
   });
 }
@@ -73,6 +76,8 @@ class ShuiRuntimeScope extends StatefulWidget {
     this.ujing,
     this.hotwater,
     this.shower798,
+    this.diagnosticLog,
+    this.appVersion,
     this.initial,
     super.key,
   });
@@ -109,6 +114,12 @@ class ShuiRuntimeScope extends StatefulWidget {
   /// 可选注入的 798 洗浴适配器（默认 FakeShower798Adapter；真机验证注入 RealShower798Adapter）。
   final IShower798Adapter? shower798;
 
+  /// 可选注入的诊断日志器（M-REAL）。默认 InMemory（测试不落盘）；main() 注入持久化实现 + adapter 埋点。
+  final DiagnosticLog? diagnosticLog;
+
+  /// 可选注入的真实 App 版本号（M-REAL PackageInfo.version）。null → 常量兜底。
+  final String? appVersion;
+
   /// 可选预加载的持久化快照（main() 启动前已 await 读出，消除首帧闪烁）。
   /// 为 null 时由 runtime 异步从 repository 回填（测试路径）。
   final PersistedSnapshot? initial;
@@ -141,6 +152,8 @@ class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope> {
       ujing: widget.ujing,
       hotwater: widget.hotwater,
       shower798: widget.shower798,
+      diagnosticLog: widget.diagnosticLog,
+      appVersion: widget.appVersion,
       initial: widget.initial,
     );
   }
