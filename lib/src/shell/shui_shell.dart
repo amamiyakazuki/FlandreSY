@@ -12,6 +12,7 @@ import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
 import '../more/log_screen.dart';
 import '../more/more_options_screen.dart';
+import '../more/permission_check.dart';
 import '../orders/orders_screen.dart';
 import '../profile/account_detail_screen.dart';
 import '../profile/profile_screen.dart';
@@ -169,8 +170,7 @@ class _ShuiShellState extends State<ShuiShell> {
                     duration: ShuiMotion.normal,
                     child: permissionVisible && !openingVisible
                         ? FirstLaunchPermissionDialog(
-                            onConfirm: () =>
-                                setState(() => permissionVisible = false),
+                            onConfirm: _confirmFirstLaunchPermissions,
                           )
                         : const SizedBox.shrink(),
                   ),
@@ -391,6 +391,13 @@ class _ShuiShellState extends State<ShuiShell> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// 首次启动权限引导「好，开启权限」：真实一次性申请相机/蓝牙/定位（M-REAL，取代旧 fake 空操作）。
+  /// 先收起对话框（避免申请系统弹窗时叠在引导框上），再申请；被永久拒绝走兜底跳系统设置。
+  Future<void> _confirmFirstLaunchPermissions() async {
+    setState(() => permissionVisible = false);
+    await runPermissionCheck();
   }
 
   /// 导出本地设备列表到剪贴板（M-REAL，对齐 legacy exportDevices）。

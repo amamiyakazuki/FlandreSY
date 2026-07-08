@@ -248,7 +248,7 @@ class FirstLaunchPermissionDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: AppCustomTokens.spaceSm),
                   Text(
-                    '扫码、热水蓝牙、状态通知都需要系统权限。点一下我就会一次性申请，之后就不用反复打扰你啦。',
+                    '扫码相机、热水蓝牙、蓝牙扫描定位都需要系统权限。点一下我就会一次性申请，之后就不用反复打扰你啦。',
                     textAlign: TextAlign.center,
                     style: AppTypography.textTheme.bodyMedium?.copyWith(
                       color: AppColors.mutedText,
