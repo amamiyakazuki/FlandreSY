@@ -1,6 +1,9 @@
+# GAL REVIEW REQUIRED BEFORE NEXT MODULE
+# See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 # Flutter iOS Podfile. Adds AlipaySDK-iOS for real Ujing payment (RealPaymentLauncher via
 # MethodChannel 'ujing/alipay'). NOTE (Codex 无法在 Linux 验证)：pod install + iOS 构建 + 真机/真钱
-# 由用户在 macOS 完成。若 AlipaySDK-iOS 与 use_frameworks! 冲突，改用 :linkage => :static（见下）。
+# 由用户在 macOS 完成。AlipaySDK-iOS 与动态 framework 更容易在真实 Archive / release 链路上出问题，
+# 因此这里固定采用 static linkage。
 platform :ios, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
@@ -30,14 +33,14 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  use_frameworks! :linkage => :static
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
   # 支付宝 SDK（真机真实支付；RealPaymentLauncher 经 ujing/alipay channel 调用）。
-  # 注：per-pod :linkage 参数 CocoaPods 1.16 不支持（会崩 pod install）。
-  # 若 use_frameworks! 下静态链接报错，改用官方写法：use_frameworks! :linkage => :static。
+  # 注：per-pod :linkage 参数 CocoaPods 1.16 不支持（会崩 pod install），
+  # 因此直接在 target 级别使用 `use_frameworks! :linkage => :static`。
   pod 'AlipaySDK-iOS'
 
   target 'RunnerTests' do

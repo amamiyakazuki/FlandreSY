@@ -1,7 +1,7 @@
 name: flandresy
 description: FlandreSY 2.0 Flutter rewrite.
 publish_to: none
-version: 2.0.0-beta+1
+version: 2.0.0+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -40,7 +40,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/legacy/images/
-    - assets/public/version.json
+    - public/version.json
   fonts:
     - family: FutureRoundSC
       fonts:
