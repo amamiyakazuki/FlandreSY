@@ -1,10 +1,10 @@
 {
-  "version": "1.0.3",
-  "release_date": "2026-06-13",
+  "version": "2.0.0",
+  "release_date": "2026-07-07",
   "changelog": [
-    "支持 U净新洗衣二维码链接",
-    "恢复洗衣液和除菌液选项",
-    "检查更新改为读取远程版本清单"
+    "FlandreSY 2.0 正式版发布",
+    "真实后端、订单持久化与扫码/支付链路整合",
+    "修复设备状态、热水历史与文本截断等 beta 收尾问题"
   ],
   "downloads": {
     "github": "https://github.com/amamiyakazuki/FlandreSY/releases/latest"

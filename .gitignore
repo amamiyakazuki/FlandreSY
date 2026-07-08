@@ -1,48 +1,67 @@
-# Android / Gradle
-.gradle/
-build/
-**/build/
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
 
-# IDE
-.idea/
+# IntelliJ related
 *.iml
 *.ipr
 *.iws
-.classpath
-.project
-.settings/
+.idea/
 
-# Local config
-local.properties
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
 
-# Generated APK/AAB and packaging outputs
-*.apk
-*.aab
-*.ap_
-outputs/
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+/coverage/
 
-# Logs, dumps, temp files
-*.log
-*.tmp
-*.temp
-*.hprof
-java_pid*.hprof
+# Symbolication related
+app.*.symbols
 
-# Kotlin / Java / Android Studio caches
-*.kotlin_metadata
-.cxx/
+# Obfuscation related
+app.*.map.json
 
-# Workspace-only review artifacts
-.codex/
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Project specific - keep legacy for reference
+# flandreSY_LAGECY/ is intentionally kept (reference code + assets)
+
+# Planning & process docs (GAL reviews etc.)
+# Keep the main plans and living thread. Ignore only transient/pending items.
+P_PLAN/reviews/pending-*
+P_PLAN/reviews/current-review-thread-*.md
+P_PLAN/reviews/*.backup
+
+# Local / machine-specific config
+*.local
+.env
+.env.local
+AGENTS.md
+
+# IDE (uncomment .vscode/ if you don't want to commit workspace settings)
+#.vscode/
+test/
 P_PLAN/
-screenshots/
-tmp_ujing_flows.jsonl
-
-# OS noise
-.DS_Store
-Thumbs.db
-refer/
-openspec/
-release-key.jks
-keystore.properties
-.vscode/

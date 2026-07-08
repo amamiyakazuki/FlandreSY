@@ -1,0 +1,53 @@
+# GAL REVIEW REQUIRED BEFORE NEXT MODULE
+# See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
+name: iOS Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:  # 支持手动 gh 触发，用于 iOS 验证结果回填
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.3'
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter version
+        run: flutter --version
+
+      - name: Flutter clean
+        run: flutter clean
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Pod install
+        working-directory: ios
+        run: pod install --repo-update
+
+      - name: Build iOS (no codesign for CI check)
+        run: flutter build ios --no-codesign --release
+
+      - name: Upload iOS build artifacts (optional)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-build
+          path: build/ios/iphoneos/Runner.app
+          retention-days: 7

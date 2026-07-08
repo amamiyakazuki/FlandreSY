@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 1.0 launcher background (restored from legacy flandreSY_LAGECY). -->
+    <color name="ic_launcher_background">#F94B58</color>
+</resources>

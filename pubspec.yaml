@@ -1,0 +1,47 @@
+name: flandresy
+description: FlandreSY 2.0 Flutter rewrite.
+publish_to: none
+version: 2.0.0+2
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  crypto: ^3.0.7
+  flutter:
+    sdk: flutter
+  # 真实 Zhuli 热水 BLE(GATT)接入(Z2)。默认不触发:主线走 FakeHotwaterAdapter,
+  # 仅 --dart-define=UJING_HTTP=true 注入 FlutterBluePlusBleTransport 时用到。Android minSdk >= 21。
+  flutter_blue_plus: ^1.32.12
+  # 真实 auth token/secret 加密持久化(PTOK)。默认不触发:主线 Fake 无 token,
+  # 仅 --dart-define=UJING_HTTP=true 时读写真实凭证。Keystore(Android)/Keychain(iOS)。
+  flutter_secure_storage: ^10.3.1
+  # 真实相机扫码(RSCAN)。默认不触发:测试/golden 永不 pump 扫码页;点击扫码卡/添加设备才打开相机,
+  # classifyScanRouting 分类后路由到已注入适配器(默认 Fake / real 模式 real)。相机与 _useUjingHttp 解耦。
+  # Android CAMERA 权限 + iOS NSCameraUsageDescription 已声明。
+  mobile_scanner: ^7.2.0
+  # 真实版本号(M-REAL 检查版本)。读平台 PackageInfo.version 替代硬编码常量。
+  package_info_plus: ^10.2.0
+  # 运行时权限申请 + 兜底跳系统设置(M-REAL 权限检测)。相机/蓝牙/定位已在 AndroidManifest 声明;
+  # iOS 用途串在 Info.plist + permission_handler 宏在 Podfile。
+  permission_handler: ^12.0.3
+  shared_preferences: ^2.5.5
+  # 打开外部下载链接(M-REAL 检查版本下载键 → GitHub Releases)。对齐 legacy ACTION_VIEW。
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+  # Phase 3 问题2：热水错误 3 秒自动消失的定时器测试用 fakeAsync 推进虚拟时间。
+  fake_async: ^1.3.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/legacy/images/
+    - public/version.json
+  fonts:
+    - family: FutureRoundSC
+      fonts:
+        - asset: assets/legacy/fonts/future_round_sc_regular.ttf
