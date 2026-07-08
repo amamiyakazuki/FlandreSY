@@ -65,3 +65,12 @@ AGENTS.md
 #.vscode/
 test/
 P_PLAN/
+/app/
+/docs
+/image/
+/gradle/wrapper/
+/build.gradle
+/settings.gradle
+/gradle.properties
+/gradlew
+/gradlew.bat
