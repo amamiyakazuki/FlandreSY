@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Real Alipay payment launcher. Invokes the native Alipay SDK jump (legacy:
 // com.alipay.sdk.app.PayTask.payV2(orderInfo, true)) via MethodChannel 'ujing/alipay'.
 // The Android native side is wired (MainActivity.kt payV2 handler + alipaysdk dependency +
@@ -28,8 +26,8 @@ class RealPaymentLauncher implements PaymentLauncher {
   Future<String> payWithAlipay(String orderInfo) async {
     try {
       // 原生返回 Map<String,String>（含 resultStatus/memo/result）。取 resultStatus。
-      final result =
-          await channel.invokeMapMethod<String, dynamic>('payV2', <String, Object?>{
+      final result = await channel
+          .invokeMapMethod<String, dynamic>('payV2', <String, Object?>{
         'orderInfo': orderInfo,
       });
       final status = result?['resultStatus'];

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Injectable clock (no visual constants). Lets washer live countdown + Orders ticker use real
 // time in production (SystemLiveClock) but a fixed value under tests (golden determinism).
 

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors header gradient, AppTypography.textTheme, AppCustomTokens header/spacing/icon sizing.
 
 import 'package:flutter/material.dart';

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Real Ujing HTTP adapter (no visual constants). Real HTTP (through an injectable UjingTransport)
 // for: login, drinking-water full chain, washer scan + create (A2), and washer pay + start + stop (A3).
 // Request-building / JSON-parsing / error-mapping / payment orchestration are testable via fixtures
@@ -148,7 +146,8 @@ class UjingHttpAdapter implements IUjingAdapter {
       authToken: token,
     ));
 
-    final balanceFen = _int(current, 'balance', fallback: _int(subject, 'balance'));
+    final balanceFen =
+        _int(current, 'balance', fallback: _int(subject, 'balance'));
     final ready = WaterReadyUi(
       cd: code,
       serviceSubjectId: _strAny(
@@ -162,7 +161,8 @@ class UjingHttpAdapter implements IUjingAdapter {
       ]),
       storeId: _str(subject, 'storeId'),
       balanceFen: balanceFen,
-      giftBalanceFen: _int(current, 'giftBalance', fallback: _int(subject, 'giftBalance')),
+      giftBalanceFen:
+          _int(current, 'giftBalance', fallback: _int(subject, 'giftBalance')),
     );
 
     // 余额不足：不创建订单，交给 action emit「请充值」（对齐 legacy balance<=0 抛错前置）。
@@ -193,7 +193,8 @@ class UjingHttpAdapter implements IUjingAdapter {
     return _fetchWaterOrderDetail(current.orderId, token);
   }
 
-  Future<WaterOrderUi> _fetchWaterOrderDetail(String orderId, String token) async {
+  Future<WaterOrderUi> _fetchWaterOrderDetail(
+      String orderId, String token) async {
     // POST water/waterOrderDetail {orderId: <int>}（对齐 legacy，body 用数值）。
     final detail = await _transport.send(UjingRequest(
       method: 'POST',
@@ -351,7 +352,8 @@ class UjingHttpAdapter implements IUjingAdapter {
     return _fetchWasherOrderDetail(order.orderId, token);
   }
 
-  Future<WasherOrderUi> _fetchWasherOrderDetail(String orderId, String token) async {
+  Future<WasherOrderUi> _fetchWasherOrderDetail(
+      String orderId, String token) async {
     // GET orders/{orderId}/detail（对齐 legacy loadOrderDetail）。
     final detail = await _transport.send(UjingRequest(
       method: 'GET',
@@ -363,7 +365,8 @@ class UjingHttpAdapter implements IUjingAdapter {
     return WasherOrderUi(
       orderId: orderId,
       deviceNo: _str(detail, 'deviceNo'),
-      statusText: _str(detail, 'statusRemark', fallback: _str(detail, 'status')),
+      statusText:
+          _str(detail, 'statusRemark', fallback: _str(detail, 'status')),
       payPrice: _formatPayPrice(detail['payPrice']),
       status: _str(detail, 'status'),
       remainTimeSeconds: _int(detail, 'remainTime'),
@@ -420,6 +423,9 @@ class UjingHttpAdapter implements IUjingAdapter {
         '支付未完成（resultStatus=$resultStatus），当前订单状态：${refreshed.statusText}',
         code: resultStatus,
       );
+    }
+    if (!const {'20', '21', '40', '50'}.contains(refreshed.status)) {
+      throw UjingException('支付结果待确认，请刷新订单状态：${refreshed.statusText}');
     }
     return refreshed;
   }
@@ -575,7 +581,8 @@ class UjingHttpAdapter implements IUjingAdapter {
     return '$value';
   }
 
-  static String _str(Map<String, dynamic> map, String key, {String fallback = ''}) {
+  static String _str(Map<String, dynamic> map, String key,
+      {String fallback = ''}) {
     final v = map[key];
     if (v == null) {
       return fallback;
@@ -607,7 +614,8 @@ class UjingHttpAdapter implements IUjingAdapter {
     return fallback;
   }
 
-  static double _double(Map<String, dynamic> map, String key, {double fallback = 0}) {
+  static double _double(Map<String, dynamic> map, String key,
+      {double fallback = 0}) {
     final v = map[key];
     if (v is num) {
       return v.toDouble();

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors, AppTypography.textTheme, AppCustomTokens space/radius/alpha.
 // Reference: legacy ShuiScreens.kt CurrentWasherOrderPaymentCard (1299) + AutoStartNoticeCard + PriceBar.
 
@@ -52,7 +50,8 @@ class CurrentWasherOrderPaymentCard extends StatelessWidget {
             children: [
               Text(
                 '当前订单',
-                style: textTheme.titleMedium?.copyWith(color: AppColors.deepText),
+                style:
+                    textTheme.titleMedium?.copyWith(color: AppColors.deepText),
               ),
               const Spacer(),
               StatusPill(
@@ -67,7 +66,8 @@ class CurrentWasherOrderPaymentCard extends StatelessWidget {
           InfoLine(label: '设备号', value: order.deviceNo),
           InfoLine(label: '金额', value: order.payPrice),
           if (order.remainTimeSeconds > 0)
-            InfoLine(label: '剩余时间', value: _formatSeconds(order.remainTimeSeconds)),
+            InfoLine(
+                label: '剩余时间', value: _formatSeconds(order.remainTimeSeconds)),
           const SizedBox(height: AppCustomTokens.spaceXs),
           Text(
             '暂时只支持支付宝支付',
@@ -164,7 +164,8 @@ class AutoStartNoticeCard extends StatelessWidget {
                   maxLines: 2,
                   softWrap: true,
                   overflow: TextOverflow.ellipsis,
-                  style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
+                  style:
+                      textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
                 ),
               ],
             ),
@@ -216,7 +217,8 @@ class PriceBar extends StatelessWidget {
             children: [
               Text(
                 '预计价格',
-                style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
+                style:
+                    textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
               ),
               // P2 截断修复：预计价格大号数字用 FittedBox 缩放，避免与右侧按钮抢宽时溢出。
               FittedBox(
@@ -224,8 +226,8 @@ class PriceBar extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(
                   amount,
-                  style:
-                      textTheme.headlineSmall?.copyWith(color: AppColors.primary),
+                  style: textTheme.headlineSmall
+                      ?.copyWith(color: AppColors.primary),
                 ),
               ),
             ],

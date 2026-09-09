@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Local device list persistence abstraction (no visual constants). Same decoupling pattern as
 // SettingsRepository / AccountSessionRepository (roadmap §3: keep persistence out of the runtime,
 // inject via interface). PDEV: the Devices tab list (state.localDevices) previously lived only in

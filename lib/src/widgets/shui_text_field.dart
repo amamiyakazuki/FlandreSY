@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors (primary/cardBorder/deepText/mutedText), AppTypography.textTheme,
 // AppCustomTokens radius/space/alpha. Token-ized OutlinedTextField wrapper for forms.
 

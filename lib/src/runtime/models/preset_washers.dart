@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Pure data (no visual constants); preset list 1:1 from legacy ShuiScreens.kt haiqiPresetWashers.
 
 /// 海七宿舍预置洗衣机。二维码 uuid 与 legacy `ShuiScreens.kt` 的

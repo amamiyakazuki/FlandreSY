@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Composition entry for the fake runtime. State/enums and per-service actions are split
 // into runtime_status / shui_home_state / shui_runtime_base / actions/* and re-exported here,
 // so existing consumers keep importing this single file unchanged.
@@ -19,8 +17,6 @@ import '../data/shared_prefs_account_session_repository.dart';
 import '../data/shared_prefs_history_repository.dart';
 import '../data/shared_prefs_local_device_repository.dart';
 import '../data/shared_prefs_settings_repository.dart';
-import '../data/shared_prefs_water_order_repository.dart';
-import '../data/water_order_repository.dart';
 import 'actions/account_actions.dart';
 import 'actions/devices_actions.dart';
 import 'actions/home_actions.dart';
@@ -28,7 +24,6 @@ import 'actions/hotwater_actions.dart';
 import 'actions/shower798_actions.dart';
 import 'actions/washer_actions.dart';
 import 'actions/water_actions.dart';
-import 'diagnostic_log.dart';
 import 'live_clock.dart';
 import 'shui_runtime_base.dart';
 
@@ -51,14 +46,11 @@ class FakeShuiRuntime extends ShuiRuntimeBase
     super.sessions,
     super.devices,
     super.history,
-    super.water,
     super.secure,
     super.clock,
     super.ujing,
     super.hotwater,
     super.shower798,
-    super.diagnosticLog,
-    super.appVersion,
     super.initial,
   });
 }
@@ -70,14 +62,11 @@ class ShuiRuntimeScope extends StatefulWidget {
     this.sessions,
     this.devices,
     this.history,
-    this.water,
     this.secure,
     this.clock,
     this.ujing,
     this.hotwater,
     this.shower798,
-    this.diagnosticLog,
-    this.appVersion,
     this.initial,
     super.key,
   });
@@ -96,9 +85,6 @@ class ShuiRuntimeScope extends StatefulWidget {
   /// 可选注入的热水历史持久化（测试传内存实现）。默认生产用 shared_preferences。
   final HistoryRepository? history;
 
-  /// 可选注入的饮水订单持久化（PWATER 问题7；测试传内存实现）。默认生产用 shared_preferences。
-  final WaterOrderRepository? water;
-
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
   final SecureSessionRepository? secure;
 
@@ -113,12 +99,6 @@ class ShuiRuntimeScope extends StatefulWidget {
 
   /// 可选注入的 798 洗浴适配器（默认 FakeShower798Adapter；真机验证注入 RealShower798Adapter）。
   final IShower798Adapter? shower798;
-
-  /// 可选注入的诊断日志器（M-REAL）。默认 InMemory（测试不落盘）；main() 注入持久化实现 + adapter 埋点。
-  final DiagnosticLog? diagnosticLog;
-
-  /// 可选注入的真实 App 版本号（M-REAL PackageInfo.version）。null → 常量兜底。
-  final String? appVersion;
 
   /// 可选预加载的持久化快照（main() 启动前已 await 读出，消除首帧闪烁）。
   /// 为 null 时由 runtime 异步从 repository 回填（测试路径）。
@@ -135,33 +115,39 @@ class ShuiRuntimeScope extends StatefulWidget {
   State<ShuiRuntimeScope> createState() => _ShuiRuntimeScopeState();
 }
 
-class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope> {
+class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
+    with WidgetsBindingObserver {
   late final FakeShuiRuntime runtime;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     runtime = FakeShuiRuntime(
       settings: widget.settings ?? SharedPrefsSettingsRepository(),
       sessions: widget.sessions ?? SharedPrefsAccountSessionRepository(),
       devices: widget.devices ?? SharedPrefsLocalDeviceRepository(),
       history: widget.history ?? SharedPrefsHistoryRepository(),
-      water: widget.water ?? SharedPrefsWaterOrderRepository(),
-      secure: widget.secure, // null → base 默认 InMemory；real 模式由 main() 注入 flutter_secure_storage
+      secure: widget
+          .secure, // null → base 默认 InMemory；real 模式由 main() 注入 flutter_secure_storage
       clock: widget.clock,
       ujing: widget.ujing,
       hotwater: widget.hotwater,
       shower798: widget.shower798,
-      diagnosticLog: widget.diagnosticLog,
-      appVersion: widget.appVersion,
       initial: widget.initial,
     );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     runtime.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    runtime.setPollingPaused(state != AppLifecycleState.resumed);
   }
 
   @override

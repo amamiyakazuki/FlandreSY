@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors palette, AppTypography.textTheme, AppCustomTokens spacing/radius/drinking sizing.
 // Reference: P_PLAN/FlandreSY-Complete-Functions-and-UI-Design-Reference.md §4.11；legacy ShuiScreens.kt DrinkingWaterScreen.
 
@@ -8,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../design_tokens.dart';
 import '../runtime/fake_shui_runtime.dart';
 import '../runtime/models/water_order.dart';
+import '../theme/shui_motion.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
@@ -20,6 +19,7 @@ class DrinkingWaterScreen extends StatelessWidget {
     required this.state,
     required this.onBack,
     required this.onRefresh,
+    this.onReturnHome,
     super.key,
   });
 
@@ -27,16 +27,16 @@ class DrinkingWaterScreen extends StatelessWidget {
   final ShuiHomeState state;
   final VoidCallback onBack;
   final VoidCallback onRefresh;
+  final VoidCallback? onReturnHome;
 
   @override
   Widget build(BuildContext context) {
     final ready = state.waterReady;
     final order = state.currentWaterOrder;
+    final result = state.waterResult;
     final busy = state.waterOrder.isBusy;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final bottomPadding = AppCustomTokens.bottomBarHeight +
-        bottomInset +
-        AppCustomTokens.bottomContentExtraPadding;
+    final bottomPadding = bottomInset + AppCustomTokens.spaceLg;
 
     return Scaffold(
       body: Column(
@@ -63,7 +63,23 @@ class DrinkingWaterScreen extends StatelessWidget {
                   ],
                   _InfoCard(cd: cd, ready: ready),
                   const SizedBox(height: AppCustomTokens.drinkingCardGap),
-                  _StatusCard(order: order, busy: busy, onRefresh: onRefresh),
+                  AnimatedSwitcher(
+                    duration: ShuiMotion.duration(context, ShuiMotion.local),
+                    switchInCurve: ShuiMotion.easeOut,
+                    switchOutCurve: ShuiMotion.easeIn,
+                    child: result != null && order == null
+                        ? _CompletedCard(
+                            key: ValueKey(result.orderId),
+                            order: result,
+                            onBack: onReturnHome ?? onBack,
+                          )
+                        : _StatusCard(
+                            key: ValueKey(order?.orderId ?? 'empty'),
+                            order: order,
+                            busy: busy,
+                            onRefresh: onRefresh,
+                          ),
+                  ),
                   if (state.waterHistory.isNotEmpty) ...[
                     const SizedBox(height: AppCustomTokens.drinkingCardGap),
                     _HistoryCard(records: state.waterHistory),
@@ -72,6 +88,39 @@ class DrinkingWaterScreen extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompletedCard extends StatelessWidget {
+  const _CompletedCard({required this.order, required this.onBack, super.key});
+
+  final WaterOrderUi order;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            order.statusRemark.isNotEmpty
+                ? order.statusRemark
+                : order.orderStatusName,
+            style: AppTypography.textTheme.titleLarge?.copyWith(
+              color: AppColors.serviceGreen,
+            ),
+          ),
+          const SizedBox(height: AppCustomTokens.spaceSm),
+          InfoLine(label: '订单号', value: order.orderId),
+          InfoLine(label: '设备', value: order.deviceNo),
+          InfoLine(label: '用水量', value: '${order.warmWaterMl} ml'),
+          InfoLine(label: '扣费', value: formatYuanAmount(order.payment)),
+          const SizedBox(height: AppCustomTokens.spaceMd),
+          PrimaryGradientButton(label: '返回首页', onTap: onBack),
         ],
       ),
     );
@@ -159,6 +208,7 @@ class _StatusCard extends StatelessWidget {
     required this.order,
     required this.busy,
     required this.onRefresh,
+    super.key,
   });
 
   final WaterOrderUi? order;

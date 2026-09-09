@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors (primary/serviceOrange/serviceBlue/deepText/mutedText),
 // AppTypography.textTheme, AppCustomTokens space/radius/stroke/alpha/profile sizing.
 // Reference: legacy ShuiScreens.kt BathSystemEntryCard (1540-1659) + §4.7 ProfileScreen.
@@ -31,8 +29,7 @@ class BathSystemEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final useShower798 =
         state.bathSystemPreference == BathSystemPreference.shower798;
-    final accent =
-        useShower798 ? AppColors.serviceOrange : AppColors.primary;
+    final accent = useShower798 ? AppColors.serviceOrange : AppColors.primary;
 
     return SectionCard(
       borderColor:
@@ -105,8 +102,8 @@ class _CardHeader extends StatelessWidget {
         Container(
           width: AppCustomTokens.accountDividerWidth,
           height: AppCustomTokens.strokeThin,
-          color: AppColors.primary
-              .withValues(alpha: AppCustomTokens.alphaSubtle),
+          color:
+              AppColors.primary.withValues(alpha: AppCustomTokens.alphaSubtle),
         ),
       ],
     );
@@ -176,7 +173,8 @@ class _CurrentSystemRow extends StatelessWidget {
           Text(
             '惠生活',
             style: textTheme.labelSmall?.copyWith(
-              color: useShower798 ? AppColors.serviceOrange : AppColors.mutedText,
+              color:
+                  useShower798 ? AppColors.serviceOrange : AppColors.mutedText,
             ),
           ),
         ],

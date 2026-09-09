@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors palette, AppTypography.textTheme, AppCustomTokens
 // space/profile sizing/shell bottom reserve. Thin composition (cards live in own files).
 // Reference: P_PLAN/FlandreSY-Complete-Functions-and-UI-Design-Reference.md §4.7 + legacy ProfileScreen.
@@ -11,8 +9,6 @@ import '../runtime/fake_shui_runtime.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
-import 'account_card.dart';
-import 'bath_system_card.dart';
 import 'more_options_entry.dart';
 
 /// Profile「我的」页（P1 骨架）。核心可跑通锚点：洗浴系统切换 → Home 热水卡联动 + 持久化。
@@ -20,17 +16,13 @@ import 'more_options_entry.dart';
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
     required this.state,
-    required this.onSwitchBathSystem,
-    required this.onOpenBathAccount,
-    required this.onOpenUjing,
+    required this.onOpenAccountHub,
     required this.onOpenMore,
     super.key,
   });
 
   final ShuiHomeState state;
-  final VoidCallback onSwitchBathSystem;
-  final VoidCallback onOpenBathAccount;
-  final VoidCallback onOpenUjing;
+  final VoidCallback onOpenAccountHub;
   final VoidCallback onOpenMore;
 
   @override
@@ -65,24 +57,40 @@ class ProfileScreen extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  BathSystemEntryCard(
-                    state: state,
-                    onSwitchBathSystem: onSwitchBathSystem,
-                    onOpenAccount: onOpenBathAccount,
-                  ),
-                  const SizedBox(height: AppCustomTokens.sectionGap),
-                  AccountCard(
-                    title: 'U净账号',
-                    accent: AppColors.serviceBlue,
-                    titleIcon: ShuiAssets.shuiU,
-                    logo: ShuiAssets.shuiU,
-                    serviceIcon: ShuiAssets.shuiBlueCheck,
-                    loginHint: '验证码登录 U净',
-                    serviceText: '检测 U净服务',
-                    statusTitle: state.ujingAccount != null
-                        ? '已登录：${state.ujingAccount!.mobile}'
-                        : '未登录',
-                    onOpen: onOpenUjing,
+                  SectionCard(
+                    onTap: onOpenAccountHub,
+                    padding: const EdgeInsets.all(AppCustomTokens.spaceMd),
+                    child: Row(
+                      children: [
+                        DecorativeImage(
+                          ShuiAssets.shuiZhuli,
+                          size: AppCustomTokens.accountLogoSize,
+                        ),
+                        const SizedBox(width: AppCustomTokens.spaceSm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '账号中心',
+                                style: AppTypography.textTheme.titleMedium
+                                    ?.copyWith(color: AppColors.deepText),
+                              ),
+                              Text(
+                                '管理住理生活、慧生活798、U净账号',
+                                style: AppTypography.textTheme.bodySmall
+                                    ?.copyWith(color: AppColors.mutedText),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '›',
+                          style: AppTypography.textTheme.titleLarge
+                              ?.copyWith(color: AppColors.primary),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: AppCustomTokens.sectionGap),
                   MoreOptionsEntry(onOpen: onOpenMore),

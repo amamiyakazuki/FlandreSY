@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // SharedPreferences-backed HistoryRepository (no visual constants). Stores the whole hotwater history
 // list as one JSON string under a single key (mirrors SharedPrefsLocalDeviceRepository). Uses the
 // key's presence to distinguish "never persisted" (null → first-launch adapter fetch) from "empty

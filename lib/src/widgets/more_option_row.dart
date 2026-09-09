@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors (primary/deepText/mutedText), AppTypography.textTheme,
 // AppCustomTokens space/radius/navIcon sizing.
 // Reference: legacy ShuiScreens.kt MoreOptionRow (3254).
@@ -48,7 +46,8 @@ class MoreOptionRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: textTheme.titleSmall?.copyWith(color: AppColors.deepText),
+                  style:
+                      textTheme.titleSmall?.copyWith(color: AppColors.deepText),
                 ),
                 Text(
                   subtitle,
@@ -56,7 +55,8 @@ class MoreOptionRow extends StatelessWidget {
                   maxLines: 2,
                   softWrap: true,
                   overflow: TextOverflow.ellipsis,
-                  style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
+                  style:
+                      textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
                 ),
               ],
             ),
@@ -64,8 +64,7 @@ class MoreOptionRow extends StatelessWidget {
           trailing ??
               Text(
                 '›',
-                style:
-                    textTheme.titleLarge?.copyWith(color: AppColors.primary),
+                style: textTheme.titleLarge?.copyWith(color: AppColors.primary),
               ),
         ],
       ),
@@ -75,7 +74,8 @@ class MoreOptionRow extends StatelessWidget {
 
 /// 遮罩居中对话框卡（About / 版本检查复用）。对齐 legacy AboutDialog 遮罩布局。
 class ShuiModalCard extends StatelessWidget {
-  const ShuiModalCard({required this.child, required this.onDismiss, super.key});
+  const ShuiModalCard(
+      {required this.child, required this.onDismiss, super.key});
 
   final Widget child;
   final VoidCallback onDismiss;
@@ -85,12 +85,16 @@ class ShuiModalCard extends StatelessWidget {
     return GestureDetector(
       onTap: onDismiss,
       child: ColoredBox(
-        color: AppColors.scrim.withValues(alpha: AppCustomTokens.alphaOverlay),
+        color: Colors.transparent,
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppCustomTokens.dialogMarginWide,
-            ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                AppCustomTokens.dialogMarginWide,
+                MediaQuery.paddingOf(context).top + AppCustomTokens.spaceMd,
+                AppCustomTokens.dialogMarginWide,
+                MediaQuery.viewInsetsOf(context).bottom +
+                    MediaQuery.paddingOf(context).bottom +
+                    AppCustomTokens.spaceMd),
             // 吞掉卡片内部点击，避免误触遮罩关闭。
             child: GestureDetector(
               onTap: () {},

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors palette, AppTypography.textTheme, AppCustomTokens space/radius/stroke/profile sizing.
 // Reference: legacy ShuiScreens.kt AccountServiceRow / AccountMiniAction.
 
@@ -45,8 +43,10 @@ class ProfileServiceRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            DecorativeImage(iconAsset, size: AppCustomTokens.accountSmallIconSize),
-            const SizedBox(width: AppCustomTokens.spaceSm + AppCustomTokens.spaceXs / 2),
+            DecorativeImage(iconAsset,
+                size: AppCustomTokens.accountSmallIconSize),
+            const SizedBox(
+                width: AppCustomTokens.spaceSm + AppCustomTokens.spaceXs / 2),
             Expanded(
               child: Text(
                 text,

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors (primary/deepText/mutedText), AppTypography.textTheme,
 // AppCustomTokens space/radius/navIcon sizing.
 // Reference: legacy ShuiScreens.kt MoreOptionsEntry (1660-1681) + §4.7.
@@ -28,7 +26,8 @@ class MoreOptionsEntry extends StatelessWidget {
       ),
       child: Row(
         children: [
-          DecorativeImage(ShuiAssets.shuiRed1, size: AppCustomTokens.navIconSize),
+          DecorativeImage(ShuiAssets.shuiRed1,
+              size: AppCustomTokens.navIconSize),
           const SizedBox(width: AppCustomTokens.radiusCompact),
           Expanded(
             child: Column(

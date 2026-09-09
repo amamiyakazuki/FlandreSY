@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors palette, AppTypography.textTheme, AppCustomTokens space/radius/stroke/device sizing/alpha.
 // Reference: P_PLAN/FlandreSY-Complete-Functions-and-UI-Design-Reference.md §4.6 Devices；legacy ShuiComponents.kt DeviceListItem / RefreshBar.
 

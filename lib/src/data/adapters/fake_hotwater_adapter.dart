@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Fake Zhuli hotwater adapter (no visual constants). Fake login/start/stop timing + text.
 // P1-FIX: loadHistory now returns [] (the old hardcoded ¥1.20/¥2.40 rows leaked into real mode
 // via PHIST persistence + a non-empty early-return that froze them). Real history is Zhuli-only.
@@ -12,7 +10,9 @@ import 'hotwater_adapter.dart';
 
 /// Fake 实现：保留原有 fake 时序/数值/文案。网络+BLE 延迟由本类承载（对齐真实 IO）。
 class FakeHotwaterAdapter implements IHotwaterAdapter {
-  const FakeHotwaterAdapter();
+  FakeHotwaterAdapter();
+
+  bool _running = false;
 
   static const Duration _netDelay = Duration(milliseconds: 620);
   static const Duration _historyDelay = Duration(milliseconds: 400);
@@ -35,6 +35,7 @@ class FakeHotwaterAdapter implements IHotwaterAdapter {
   @override
   Future<HotwaterActionResult> startHotwater(String deviceId) async {
     await Future<void>.delayed(_netDelay);
+    _running = true;
     return HotwaterActionResult(
       deviceId: deviceId,
       statusText: '热水启动完成，供应中',
@@ -44,11 +45,22 @@ class FakeHotwaterAdapter implements IHotwaterAdapter {
   }
 
   @override
-  Future<HotwaterActionResult> stopHotwater(String deviceId) async {
+  Future<HotwaterActionResult> stopHotwater(String deviceId,
+      {String? isn}) async {
     await Future<void>.delayed(_netDelay);
+    _running = false;
     return HotwaterActionResult(
       deviceId: deviceId,
       statusText: '热水已关闭',
+    );
+  }
+
+  @override
+  Future<HotwaterStatusResult> refreshHotwaterStatus(String deviceId) async {
+    await Future<void>.delayed(_netDelay);
+    return HotwaterStatusResult(
+      running: _running,
+      statusText: _running ? '热水供应中' : '热水已停止',
     );
   }
 

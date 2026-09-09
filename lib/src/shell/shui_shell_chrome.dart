@@ -1,15 +1,15 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors shell palette, AppTypography.textTheme, AppCustomTokens bottom/header/icon/spacing.
 //
 // Shell「外壳装饰」组件集合：底栏、开场动画、权限对话框、占位页。
 // 从 shui_shell.dart 抽出，让 Shell 专注路由编排，避免 God 文件（对齐 Module A 拆分纪律）。
 
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../design_tokens.dart';
 import '../theme/shui_assets.dart';
 import '../theme/shui_motion.dart';
+import '../data/permission_service.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
 import '../widgets/shui_painters.dart';
@@ -75,41 +75,64 @@ class WavyBottomBar extends StatelessWidget {
                       top: AppCustomTokens.spaceSm,
                       bottom: AppCustomTokens.spaceXs,
                     ),
-                    child: Row(
-                      children: MainTab.values.map((tab) {
-                        final selected = tab == selectedTab;
-                        return Expanded(
-                          child: ShuiPressable(
-                            soft: true,
-                            onTap: () => onTabSelected(tab),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ShuiLineIcon(
-                                  name: tab.iconName,
-                                  color: AppColors.onPrimary.withValues(
-                                    alpha: selected
-                                        ? 1
-                                        : AppCustomTokens.alphaDisabled,
-                                  ),
-                                  size: AppCustomTokens.navIconSizeLarge,
-                                ),
-                                Text(
-                                  tab.label,
-                                  style: AppTypography.textTheme.labelSmall
-                                      ?.copyWith(
-                                    color: AppColors.onPrimary.withValues(
-                                      alpha: selected
-                                          ? 1
-                                          : AppCustomTokens.alphaMuted,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                            child: AnimatedAlign(
+                          duration:
+                              ShuiMotion.duration(context, ShuiMotion.local),
+                          curve: ShuiMotion.easeOut,
+                          alignment: AlignmentDirectional(
+                              -1 + selectedTab.index * 2 / 3, 1),
+                          child: FractionallySizedBox(
+                              widthFactor: 0.25,
+                              child: Center(
+                                  heightFactor: 1,
+                                  child: Container(
+                                      width: AppCustomTokens.spaceLg,
+                                      height: 3,
+                                      decoration: BoxDecoration(
+                                          color: AppColors.onPrimary,
+                                          borderRadius:
+                                              BorderRadius.circular(2))))),
+                        )),
+                        Row(
+                          children: MainTab.values.map((tab) {
+                            final selected = tab == selectedTab;
+                            return Expanded(
+                              child: ShuiPressable(
+                                soft: true,
+                                onTap: () => onTabSelected(tab),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    ShuiLineIcon(
+                                      name: tab.iconName,
+                                      color: AppColors.onPrimary.withValues(
+                                        alpha: selected
+                                            ? 1
+                                            : AppCustomTokens.alphaDisabled,
+                                      ),
+                                      size: AppCustomTokens.navIconSizeLarge,
                                     ),
-                                  ),
+                                    Text(
+                                      tab.label,
+                                      style: AppTypography.textTheme.labelSmall
+                                          ?.copyWith(
+                                        color: AppColors.onPrimary.withValues(
+                                          alpha: selected
+                                              ? 1
+                                              : AppCustomTokens.alphaMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -213,9 +236,16 @@ class OpeningMotionOverlay extends StatelessWidget {
 
 /// 首次启动权限引导对话框（sleep 插图 + 说明 + 开启权限）。
 class FirstLaunchPermissionDialog extends StatelessWidget {
-  const FirstLaunchPermissionDialog({required this.onConfirm, super.key});
+  const FirstLaunchPermissionDialog({
+    required this.onConfirm,
+    required this.onOpenSettings,
+    this.permissionState,
+    super.key,
+  });
 
   final VoidCallback onConfirm;
+  final VoidCallback onOpenSettings;
+  final ShuiPermissionState? permissionState;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +278,7 @@ class FirstLaunchPermissionDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: AppCustomTokens.spaceSm),
                   Text(
-                    '扫码、热水蓝牙、状态通知都需要系统权限。点一下我就会一次性申请，之后就不用反复打扰你啦。',
+                    '扫码、热水蓝牙和状态通知需要系统权限。点击后将按需请求授权。',
                     textAlign: TextAlign.center,
                     style: AppTypography.textTheme.bodyMedium?.copyWith(
                       color: AppColors.mutedText,
@@ -256,6 +286,17 @@ class FirstLaunchPermissionDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: AppCustomTokens.spaceMd),
                   PrimaryGradientButton(label: '好，开启权限', onTap: onConfirm),
+                  if (permissionState?.status.values.any(
+                        (status) =>
+                            status == PermissionStatus.permanentlyDenied,
+                      ) ??
+                      false) ...[
+                    const SizedBox(height: AppCustomTokens.spaceSm),
+                    TextButton(
+                      onPressed: onOpenSettings,
+                      child: const Text('打开系统设置'),
+                    ),
+                  ],
                 ],
               ),
             ),

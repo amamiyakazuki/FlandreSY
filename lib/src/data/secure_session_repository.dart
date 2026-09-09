@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Secure credential persistence abstraction (no visual constants). PTOK: the real adapters' auth
 // tokens/secrets (UjingHttpAdapter._token, RealZhuliAdapter._session, RealShower798Adapter._token)
 // previously lived only in memory — restart forced re-login. This repository persists them encrypted
@@ -15,6 +13,8 @@ import 'adapters/hotwater_adapter.dart';
 /// 各 load 返回 null = 无凭证（首启 / 未登录 / 已清）。Ujing/798 是裸 token 字符串；
 /// Zhuli 是完整 [ZhuliSessionData]（secretKey+serverAddr 等业务签名/base 关键，7 字段全需）。
 abstract class SecureSessionRepository {
+  Future<String?> loadHotwaterIsn(String sessionId);
+  Future<void> saveHotwaterIsn(String sessionId, String? isn);
   Future<String?> loadUjingToken();
   Future<void> saveUjingToken(String token);
   Future<void> clearUjingToken();
@@ -30,6 +30,19 @@ abstract class SecureSessionRepository {
 
 /// 内存实现：默认兜底 + 测试注入用。无 IO、无平台依赖（secure storage 在 flutter test 下无 channel）。
 class InMemorySecureSessionRepository implements SecureSessionRepository {
+  final Map<String, String> _hotwaterIsns = {};
+  @override
+  Future<String?> loadHotwaterIsn(String sessionId) async =>
+      _hotwaterIsns[sessionId];
+  @override
+  Future<void> saveHotwaterIsn(String sessionId, String? isn) async {
+    if (isn == null) {
+      _hotwaterIsns.remove(sessionId);
+    } else {
+      _hotwaterIsns[sessionId] = isn;
+    }
+  }
+
   InMemorySecureSessionRepository({
     String? ujingToken,
     ZhuliSessionData? zhuliSession,

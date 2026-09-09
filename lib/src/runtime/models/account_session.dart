@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Account session models (no visual constants). Field names align 1:1 with legacy
 // ShuiRuntime.kt UjingAccountUi + hotwaterPhone/hotwaterDeviceCode (Zhuli).
 

@@ -16,6 +16,8 @@
     <!-- 真实相机扫码(RSCAN)所需权限。默认全 Fake 不触发相机;点击扫码卡/添加设备才打开 mobile_scanner。
          相机与 dart-define UJING_HTTP 解耦(相机永远真开,后端按已注入适配器)。 -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Android 13+ notification permission. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <application

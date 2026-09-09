@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // 慧生活798 shower adapter interface (no visual constants). Separates data source (798 HTTP backend,
 // token auth, captcha image endpoint) from state management (emit/notify in shower798/hotwater actions).
 // Fake + real both implement this. Method shapes align with legacy Shower798RuntimeAdapter.kt.

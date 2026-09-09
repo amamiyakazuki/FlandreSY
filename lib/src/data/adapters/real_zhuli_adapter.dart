@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Real Zhuli hotwater adapter (no visual constants). Orchestrates the signed-HTTP <-> BLE interleave
 // for login / start / stop / history, faithful to legacy ZhuliApi + HotwaterRuntimeAdapter +
 // service-interfaces.md §Zhuli. HTTP (build signed request + parse) is testable via fixtures through
@@ -225,9 +223,11 @@ class RealZhuliAdapter implements IHotwaterAdapter {
   // ===== 关水（对齐 legacy stopHotwater）=====
 
   @override
-  Future<HotwaterActionResult> stopHotwater(String deviceId) async {
+  Future<HotwaterActionResult> stopHotwater(String deviceId,
+      {String? isn}) async {
     final s = _requireSession();
-    if (_lastIsn.isEmpty) {
+    final sessionIsn = isn ?? _lastIsn;
+    if (sessionIsn.isEmpty) {
       throw const HotwaterException('只能关闭本 App 本次打开的热水（缺少 isn）');
     }
     final device = await _business(s, 'device/get_by_id', {'id': deviceId});
@@ -239,7 +239,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
       final endHex =
           await _businessString(s, 'consume/ble/create_end_consume_cmd', {
         'device_id': deviceId,
-        'isn': _lastIsn,
+        'isn': sessionIsn,
       });
       await conn.writeHex(endHex);
       final endResp = await conn.awaitNotify(
@@ -255,6 +255,23 @@ class RealZhuliAdapter implements IHotwaterAdapter {
     } finally {
       await conn.close();
     }
+  }
+
+  @override
+  Future<HotwaterStatusResult> refreshHotwaterStatus(String deviceId) async {
+    final s = _requireSession();
+    final device = await _business(s, 'device/get_by_id', {'id': deviceId});
+    final running = _boolAny(device, const [
+      'running',
+      'is_running',
+      'is_using',
+      'consume_status',
+      'status',
+    ]);
+    return HotwaterStatusResult(
+      running: running ?? _lastIsn.isNotEmpty,
+      statusText: (running ?? _lastIsn.isNotEmpty) ? '热水供应中' : '热水已停止',
+    );
   }
 
   // ===== 历史 =====
@@ -359,7 +376,10 @@ class RealZhuliAdapter implements IHotwaterAdapter {
 
   static String _base64Url(String text) {
     // 对齐 legacy base64Url：标准 base64（NO_WRAP）后 +→- /→_。
-    return base64.encode(utf8.encode(text)).replaceAll('+', '-').replaceAll('/', '_');
+    return base64
+        .encode(utf8.encode(text))
+        .replaceAll('+', '-')
+        .replaceAll('/', '_');
   }
 
   static Map<String, dynamic> _obj(Map<String, dynamic> map, String key) {
@@ -380,5 +400,25 @@ class RealZhuliAdapter implements IHotwaterAdapter {
       return v.isEmpty ? fallback : v;
     }
     return '$v';
+  }
+
+  static bool? _boolAny(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final normalized = value.toLowerCase();
+        if (const ['1', 'true', 'running', 'using', 'on']
+            .contains(normalized)) {
+          return true;
+        }
+        if (const ['0', 'false', 'idle', 'off', 'stop', 'stopped']
+            .contains(normalized)) {
+          return false;
+        }
+      }
+    }
+    return null;
   }
 }

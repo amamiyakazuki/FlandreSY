@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Devices tab actions (Module B1). Mixin on ShuiRuntimeBase; behavior unchanged by the runtime split.
 
 import 'dart:async';

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // SharedPreferences-backed LocalDeviceRepository (no visual constants). Stores the whole device list
 // as one JSON string under a single key (mirrors saveShower798's list-as-JSON pattern). Uses the
 // key's presence to distinguish "never persisted" (null → first-launch empty) from "user emptied

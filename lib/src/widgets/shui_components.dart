@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors palette, AppTypography.textTheme, AppCustomTokens space/radius/stroke/shell sizing.
 
 import 'package:flutter/material.dart';
@@ -247,10 +245,15 @@ class PrimaryGradientButton extends StatelessWidget {
             const SizedBox(width: AppCustomTokens.spaceXs),
           ],
           Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: textTheme.labelLarge?.copyWith(color: AppColors.onPrimary),
+            child: AnimatedSwitcher(
+              duration: ShuiMotion.duration(context, ShuiMotion.local),
+              child: Text(
+                label,
+                key: ValueKey(label),
+                overflow: TextOverflow.ellipsis,
+                style:
+                    textTheme.labelLarge?.copyWith(color: AppColors.onPrimary),
+              ),
             ),
           ),
         ],
@@ -316,9 +319,6 @@ class RuntimeStatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final message = status.message;
-    if (message == null || message.isEmpty) {
-      return const SizedBox.shrink();
-    }
     final color = switch (status.state) {
       RuntimeTaskState.success => AppColors.serviceGreen,
       RuntimeTaskState.failure ||
@@ -327,26 +327,34 @@ class RuntimeStatusBanner extends StatelessWidget {
         AppColors.serviceOrange,
       _ => AppColors.primary,
     };
-    return AnimatedSwitcher(
-      duration: ShuiMotion.normal,
-      switchInCurve: ShuiMotion.easeOut,
-      switchOutCurve: ShuiMotion.easeIn,
-      child: Container(
-        key: ValueKey(message),
-        width: double.infinity,
-        padding: const EdgeInsets.all(AppCustomTokens.spaceSm),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: AppCustomTokens.alphaLow),
-          borderRadius: BorderRadius.circular(AppCustomTokens.radiusMedium),
-          border: Border.all(
-            color: color.withValues(alpha: AppCustomTokens.alphaShadow),
-            width: AppCustomTokens.strokeThin,
-          ),
-        ),
-        child: Text(
-          message,
-          style: AppTypography.textTheme.bodyMedium?.copyWith(color: color),
-        ),
+    return AnimatedSize(
+      duration: ShuiMotion.duration(context, ShuiMotion.local),
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: ShuiMotion.duration(context, ShuiMotion.normal),
+        switchInCurve: ShuiMotion.easeOut,
+        switchOutCurve: ShuiMotion.easeIn,
+        child: message == null || message.isEmpty
+            ? const SizedBox(key: ValueKey('empty-status'))
+            : Container(
+                key: ValueKey(message),
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppCustomTokens.spaceSm),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: AppCustomTokens.alphaLow),
+                  borderRadius:
+                      BorderRadius.circular(AppCustomTokens.radiusMedium),
+                  border: Border.all(
+                    color: color.withValues(alpha: AppCustomTokens.alphaShadow),
+                    width: AppCustomTokens.strokeThin,
+                  ),
+                ),
+                child: Text(
+                  message,
+                  style: AppTypography.textTheme.bodyMedium
+                      ?.copyWith(color: color),
+                ),
+              ),
       ),
     );
   }

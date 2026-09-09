@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Zhuli hotwater adapter interface (no visual constants). Separates data source (Zhuli platform +
 // signed business HTTP + BLE GATT) from state management (emit/notify in hotwater_actions).
 // Fake + real both implement this. Method shapes align with legacy ZhuliApi + HotwaterRuntimeAdapter.
@@ -84,6 +82,13 @@ class HotwaterActionResult {
   final String isn;
 }
 
+class HotwaterStatusResult {
+  const HotwaterStatusResult({required this.running, this.statusText = ''});
+
+  final bool running;
+  final String statusText;
+}
+
 /// Zhuli 热水适配器接口（Z1）。
 ///
 /// 约定：实现方**只**负责「拿数据 + 编排 HTTP↔BLE + IO 延迟」，返回结果数据；
@@ -100,7 +105,10 @@ abstract class IHotwaterAdapter {
 
   /// 关热水（编排：create_end_consume_cmd → BLE 写 → end_consume_response）。
   /// 依赖开水时保存的 isn（对齐 legacy last_isn）。
-  Future<HotwaterActionResult> stopHotwater(String deviceId);
+  Future<HotwaterActionResult> stopHotwater(String deviceId, {String? isn});
+
+  /// 查询当前热水会话状态，不执行开关水操作。
+  Future<HotwaterStatusResult> refreshHotwaterStatus(String deviceId);
 
   /// 近 30 天热水消费历史（consume/list_record_by_staffid）。
   Future<List<HotwaterHistoryUi>> loadHistory();

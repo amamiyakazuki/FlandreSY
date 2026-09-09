@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Fake captcha image generator (no visual constants — produces raw PNG bytes as base64).
 // The base64 decode + Image.memory render path in the UI is REAL; only the image content is fake,
 // so this is ready to swap for a real 798 getCaptcha() response later.
@@ -19,7 +17,8 @@ String fakeCaptchaBase64(int index) {
     [125, 191, 76], // 绿
   ];
   final rgb = palette[index % palette.length];
-  return _solidPngBase64(width: 120, height: 44, r: rgb[0], g: rgb[1], b: rgb[2]);
+  return _solidPngBase64(
+      width: 120, height: 44, r: rgb[0], g: rgb[1], b: rgb[2]);
 }
 
 /// 构造一张纯色 RGBA PNG 并返回 base64。手写 PNG（IHDR + IDAT[zlib stored] + IEND）。

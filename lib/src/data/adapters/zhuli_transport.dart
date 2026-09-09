@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Zhuli signed-HTTP transport seam (no visual constants). Splits "build signed request + parse
 // result JSON" (testable via fixtures — the MD5 signing is deterministic) from "real socket IO"
 // (IoZhuliTransport, verified ON-DEVICE by the user). RealZhuliAdapter depends on this interface;

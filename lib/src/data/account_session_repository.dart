@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Account session persistence abstraction (no visual constants). Same decoupling pattern as
 // SettingsRepository (roadmap §3/§4): runtime depends only on this interface.
 

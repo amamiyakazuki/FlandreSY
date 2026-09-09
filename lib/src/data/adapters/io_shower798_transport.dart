@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Real 慧生活798 HTTP transport (no visual constants). Uses dart:io HttpClient (faithful to legacy
 // Shower798RuntimeAdapter.kt's HttpURLConnection: BASE https://i.ilife798.com/api/v1, token in
 // Authorization header, code==0 success). THIS IS THE ONLY LAYER THAT TOUCHES A REAL SOCKET here,

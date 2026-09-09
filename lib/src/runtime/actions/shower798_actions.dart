@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Shower798 login + device actions (Module P3; refactored in P4 S798 to orchestrate IShower798Adapter).
 // The adapter supplies data (captcha image bytes / sms / login / devices) + IO latency; this mixin
 // does validation + emit + cooldown-stamp + persist. Default FakeShower798Adapter (fakeCaptchaBase64),
@@ -124,7 +122,11 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 登录慧生活798（fake：手机号 + 短信码非空 → 成功 + 加载 fake 设备列表）。
   /// 对齐 legacy loginShower798。
   Future<void> loginShower798(String phone, String smsCode) async {
-    if (state.shower798Login.isBusy) {
+    await ready;
+    if (isDisposed ||
+        state.hotwaterStart.isBusy ||
+        state.hotwaterStop.isBusy ||
+        state.shower798Login.isBusy) {
       return;
     }
     final mobile = phone.trim();
@@ -148,6 +150,7 @@ mixin Shower798Actions on ShuiRuntimeBase {
       ),
     );
     final Shower798SessionData session;
+    hotwaterAuthEpoch++;
     final List<Shower798DeviceUi> devices;
     try {
       session = await shower798.login(mobile, smsCode.trim());
@@ -179,11 +182,13 @@ mixin Shower798Actions on ShuiRuntimeBase {
       ),
     );
     await _persist();
+    await setBathSystem(BathSystemPreference.shower798);
     // PTOK：real 模式下 adapter 返回带真 token 的 session → 加密持久化（重启免重登）。
     // Fake 返回占位 token（'fake-798-token'）也会存——无害（重启仍走 Fake adapter）。
     if (session.token.isNotEmpty) {
       await secure.saveShower798Token(session.token);
     }
+    resumeHotwaterSession();
   }
 
   /// 查看 798 状态（对齐 legacy checkShower798Status）。

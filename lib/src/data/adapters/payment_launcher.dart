@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Payment SDK seam (no visual constants). Splits "the Alipay SDK jump" (PayTask.payV2 — native,
 // real money, verified ON-DEVICE by the user) from the payment HTTP layer (payment/methods +
 // payment/arguments → orderInfo, testable via fixtures). UjingHttpAdapter depends on this interface;

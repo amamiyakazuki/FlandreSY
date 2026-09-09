@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // DrinkingWater actions (Module B2; refactored in P4 A1 to orchestrate IUjingAdapter).
 // The adapter supplies data + IO latency; this mixin does validation + emit + poll bookkeeping.
 
@@ -12,14 +10,20 @@ import '../runtime_status.dart';
 import '../shui_runtime_base.dart';
 
 mixin WaterActions on ShuiRuntimeBase {
+  int _waterGeneration = 0;
+  bool _showWaterResult = true;
+
   /// 扫码识别饮水机 → 确认校区/余额 → 创建接水订单（一步式，对齐 legacy
   /// `scanDrinkingWaterAndCreateOrder`）。余额不足时中止并提示充值。
   Future<void> scanDrinkingWaterAndCreateOrder(String cd) async {
     if (state.waterOrder.isBusy) {
       return;
     }
+    final generation = ++_waterGeneration;
+    _showWaterResult = true;
     emit(
       state.copyWith(
+        clearWaterResult: true,
         waterScan: const RuntimeActionStatus(
           state: RuntimeTaskState.loading,
           message: '正在识别饮水机',
@@ -35,6 +39,7 @@ mixin WaterActions on ShuiRuntimeBase {
     try {
       result = await ujing.scanAndCreateWaterOrder(cd.trim());
     } on UjingException catch (e) {
+      if (generation != _waterGeneration) return;
       if (e.authInvalid) {
         await handleAuthInvalidation(AuthService.ujing);
         return;
@@ -54,11 +59,13 @@ mixin WaterActions on ShuiRuntimeBase {
       return;
     }
 
+    if (generation != _waterGeneration) return;
     final ready = result.ready;
     if (result.order == null) {
       emit(
         state.copyWith(
           waterReady: ready,
+          clearWaterResult: true,
           waterScan: RuntimeActionStatus(
             state: RuntimeTaskState.success,
             message: '饮水机已识别：${ready.serviceSubjectName}',
@@ -75,6 +82,7 @@ mixin WaterActions on ShuiRuntimeBase {
     emit(
       state.copyWith(
         waterReady: ready,
+        clearWaterResult: true,
         currentWaterOrder: result.order,
         waterScan: RuntimeActionStatus(
           state: RuntimeTaskState.success,
@@ -86,31 +94,60 @@ mixin WaterActions on ShuiRuntimeBase {
         ),
       ),
     );
-    // PWATER（问题7）：创建即记录 → 持久化当前订单，重启后订单页饮水分类可恢复。
-    persistWaterOrders();
+    startWaterPolling();
   }
 
   /// 刷新当前接水订单状态（对齐 legacy `refreshCurrentDrinkingWaterOrder`）。
   /// fake：第一次刷新视为用户已在机器上完成接水 → status=50 + 上报扣费，
   /// 写入历史并清空当前订单（终态）。
   Future<void> refreshCurrentDrinkingWaterOrder() async {
+    await _refreshCurrentDrinkingWaterOrder(showLoading: true);
+  }
+
+  @override
+  Future<void> pollWaterOrderOnce() async {
+    await _refreshCurrentDrinkingWaterOrder(showLoading: false);
+  }
+
+  bool _waterPollInFlight = false;
+
+  Future<void> _refreshCurrentDrinkingWaterOrder(
+      {required bool showLoading}) async {
     if (state.waterOrder.isBusy || state.currentWaterOrder == null) {
       return;
     }
-    emit(
-      state.copyWith(
-        waterOrder: const RuntimeActionStatus(
-          state: RuntimeTaskState.loading,
-          message: '正在刷新接水订单',
+    if (!showLoading && _waterPollInFlight) return;
+    if (!showLoading) _waterPollInFlight = true;
+    try {
+      await _refreshCurrentDrinkingWaterOrderImpl(showLoading: showLoading);
+    } finally {
+      if (!showLoading) _waterPollInFlight = false;
+    }
+  }
+
+  Future<void> _refreshCurrentDrinkingWaterOrderImpl(
+      {required bool showLoading}) async {
+    final generation = _waterGeneration;
+    if (showLoading) {
+      emit(
+        state.copyWith(
+          waterOrder: const RuntimeActionStatus(
+            state: RuntimeTaskState.loading,
+            message: '正在刷新接水订单',
+          ),
         ),
-      ),
-    );
+      );
+    }
 
     final current = state.currentWaterOrder!;
     final WaterOrderUi refreshed;
     try {
       refreshed = await ujing.refreshWaterOrder(current);
     } on UjingException catch (e) {
+      if (generation != _waterGeneration ||
+          state.currentWaterOrder?.orderId != current.orderId) {
+        return;
+      }
       if (e.authInvalid) {
         await handleAuthInvalidation(AuthService.ujing);
         return;
@@ -123,6 +160,11 @@ mixin WaterActions on ShuiRuntimeBase {
           ),
         ),
       );
+      return;
+    }
+
+    if (generation != _waterGeneration ||
+        state.currentWaterOrder?.orderId != current.orderId) {
       return;
     }
 
@@ -143,15 +185,17 @@ mixin WaterActions on ShuiRuntimeBase {
       emit(
         state.copyWith(
           clearCurrentWaterOrder: true,
+          waterResult: _showWaterResult ? refreshed : null,
+          clearWaterResult: !_showWaterResult,
           waterHistory: history,
-          waterOrder: const RuntimeActionStatus(
+          waterOrder: RuntimeActionStatus(
             state: RuntimeTaskState.success,
-            message: '接水已完成，已加入订单统计',
+            message:
+                '${refreshed.statusRemark.isEmpty ? refreshed.orderStatusName : refreshed.statusRemark}，已加入订单统计',
           ),
         ),
       );
-      // PWATER（问题7）：完成转历史 → 持久化（当前订单已清空，历史含本单花费）。
-      persistWaterOrders();
+      stopWaterPolling();
       return;
     }
 
@@ -165,15 +209,16 @@ mixin WaterActions on ShuiRuntimeBase {
         ),
       ),
     );
-    // PWATER（问题7）：刷新后的当前订单状态同步落盘。
-    persistWaterOrders();
   }
 
   /// 离开饮水页时清理 ready/banner（不删历史）。
   void resetDrinkingWaterTransient() {
+    _showWaterResult = false;
+    stopWaterPolling();
     emit(
       state.copyWith(
         clearWaterReady: true,
+        clearWaterResult: true,
         waterScan: const RuntimeActionStatus(
           state: RuntimeTaskState.idle,
           message: '扫描饮水机或洗衣机二维码',

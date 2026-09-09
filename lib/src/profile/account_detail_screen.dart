@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppCustomTokens space/shell bottom reserve via TopHeader/Scaffold.
 // Reference: legacy ShuiScreens.kt AccountDetailScreen (2615) dispatcher.
 
@@ -32,6 +30,7 @@ class AccountDetailScreen extends StatelessWidget {
     required this.onAddShower798Device,
     required this.onRefreshShower798Devices,
     required this.onSelectShower798Device,
+    required this.onSetDefaultSystem,
     super.key,
   });
 
@@ -53,6 +52,7 @@ class AccountDetailScreen extends StatelessWidget {
   final ValueChanged<String> onAddShower798Device;
   final VoidCallback onRefreshShower798Devices;
   final ValueChanged<String> onSelectShower798Device;
+  final ValueChanged<BathSystemPreference> onSetDefaultSystem;
 
   String get _title => switch (kind) {
         AccountKind.zhuli => '住理生活',
@@ -84,6 +84,13 @@ class AccountDetailScreen extends StatelessWidget {
                     onLogin: onLoginZhuli,
                     onBindDeviceCode: onBindDeviceCode,
                     onCheckStatus: onCheckZhuli,
+                    isDefault: state.bathSystemPreference ==
+                        BathSystemPreference.zhuli,
+                    onDefaultChanged: (selected) => onSetDefaultSystem(
+                      selected
+                          ? BathSystemPreference.zhuli
+                          : BathSystemPreference.none,
+                    ),
                   ),
                 AccountKind.ujing => UjingAccountDetail(
                     state: state,
@@ -101,6 +108,13 @@ class AccountDetailScreen extends StatelessWidget {
                     onAddDevice: onAddShower798Device,
                     onRefreshDevices: onRefreshShower798Devices,
                     onSelectDevice: onSelectShower798Device,
+                    isDefault: state.bathSystemPreference ==
+                        BathSystemPreference.shower798,
+                    onDefaultChanged: (selected) => onSetDefaultSystem(
+                      selected
+                          ? BathSystemPreference.shower798
+                          : BathSystemPreference.none,
+                    ),
                   ),
               },
             ),

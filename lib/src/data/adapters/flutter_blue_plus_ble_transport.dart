@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Real Zhuli BLE (GATT) transport using flutter_blue_plus (no visual constants — protocol only).
 // Faithful to legacy LegacyHotwaterActivity.BleDeviceSession: scan by ble_name / ble_mac / name-contains-"XN"
 // fallback (8s), connect with 3 retries (1s apart, 10s each), discover service ff12 / write ff01 /
@@ -60,13 +58,15 @@ class FlutterBluePlusBleTransport implements BleTransport {
   /// 瞬时 unknown/turningOn 继续等；确凿 off/unavailable/unauthorized 立即失败。
   Future<void> _ensureAdapterOn() async {
     try {
-      final state = await FlutterBluePlus.adapterState.firstWhere(
-        (s) =>
-            s == BluetoothAdapterState.on ||
-            s == BluetoothAdapterState.off ||
-            s == BluetoothAdapterState.unavailable ||
-            s == BluetoothAdapterState.unauthorized,
-      ).timeout(ZhuliBleContract.connectTimeout);
+      final state = await FlutterBluePlus.adapterState
+          .firstWhere(
+            (s) =>
+                s == BluetoothAdapterState.on ||
+                s == BluetoothAdapterState.off ||
+                s == BluetoothAdapterState.unavailable ||
+                s == BluetoothAdapterState.unauthorized,
+          )
+          .timeout(ZhuliBleContract.connectTimeout);
       if (state != BluetoothAdapterState.on) {
         throw HotwaterException(_adapterStateMessage(state));
       }
@@ -129,7 +129,8 @@ class FlutterBluePlusBleTransport implements BleTransport {
   }
 
   /// 连接 + 服务发现，3 次重试（1s 间隔，每次 10s 超时），对齐 legacy connectGattOnce。
-  Future<List<BluetoothService>> _connectWithRetry(BluetoothDevice device) async {
+  Future<List<BluetoothService>> _connectWithRetry(
+      BluetoothDevice device) async {
     Object? lastError;
     for (var attempt = 0; attempt < ZhuliBleContract.gattRetry; attempt++) {
       try {
@@ -147,7 +148,8 @@ class FlutterBluePlusBleTransport implements BleTransport {
         }
       }
     }
-    throw HotwaterException('BLE 连接失败（已重试 ${ZhuliBleContract.gattRetry} 次）：$lastError');
+    throw HotwaterException(
+        'BLE 连接失败（已重试 ${ZhuliBleContract.gattRetry} 次）：$lastError');
   }
 
   /// UUID 比较：忽略大小写（flutter_blue_plus 可能返回 16-bit 短式，故也比末段）。

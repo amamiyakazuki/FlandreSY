@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Pure runtime status/enums (no visual constants). Split out of fake_shui_runtime.dart
 // for maintainability (Grok B1 Major 1 / B2 Major 1: avoid runtime aggregation).
 
@@ -18,7 +16,7 @@ enum RuntimeTaskState {
 }
 
 /// 洗浴系统偏好（住理 / 慧生活798）。
-enum BathSystemPreference { zhuli, shower798 }
+enum BathSystemPreference { none, zhuli, shower798 }
 
 /// Home「进行中」任务的跳转目标。
 enum HomeTaskTarget { hotwater, drinking, washer }
@@ -40,6 +38,7 @@ class RuntimeActionStatus {
 @immutable
 class HomeTaskUi {
   const HomeTaskUi({
+    this.id = '',
     required this.target,
     required this.title,
     required this.extra,
@@ -47,6 +46,7 @@ class HomeTaskUi {
   });
 
   final HomeTaskTarget target;
+  final String id;
   final String title;
   final String extra;
   final String asset;

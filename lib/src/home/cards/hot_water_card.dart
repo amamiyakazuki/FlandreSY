@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors service palette, AppTypography.textTheme, AppCustomTokens spacing/radius/sizing/alpha.
 // Reference: P_PLAN/FlandreSY-Complete-Functions-and-UI-Design-Reference.md §4.2 HomeScreen HotWaterCard.
 
@@ -18,6 +16,7 @@ class HotWaterCard extends StatelessWidget {
     required this.onStartHotwater,
     required this.onStopHotwater,
     required this.onSwitchBathSystem,
+    required this.onOpenDetail,
     super.key,
   });
 
@@ -25,21 +24,17 @@ class HotWaterCard extends StatelessWidget {
   final VoidCallback onStartHotwater;
   final VoidCallback onStopHotwater;
   final VoidCallback onSwitchBathSystem;
+  final VoidCallback onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
     final isShower798 =
-        state.bathSystemPreference == BathSystemPreference.shower798;
+        state.hotwaterControlSystem == BathSystemPreference.shower798;
     final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
-    final statusText = state.hotwaterStart.message ?? '热水待启动';
-    // 问题2：警告框仅在「错误态」显示（开/关热水失败或需登录），正常时不出现——
-    // 正常状态信息由上方「当前状态」行体现即可。错误文案取自 start/stop 的失败消息。
-    final errorStatus = state.hotwaterStart.state == RuntimeTaskState.failure ||
-            state.hotwaterStart.state == RuntimeTaskState.loginRequired
-        ? state.hotwaterStart
-        : state.hotwaterStop.state == RuntimeTaskState.failure
-            ? state.hotwaterStop
-            : null;
+    final unselected = state.hotwaterControlSystem == BathSystemPreference.none;
+    final statusText =
+        unselected ? '未选择系统' : state.hotwaterStart.message ?? '热水待启动';
+    final warningText = state.hotwaterStart.message;
     final statusColor = state.hotwaterRunning
         ? AppColors.serviceGreen
         : state.hotwaterStart.state == RuntimeTaskState.loginRequired
@@ -49,7 +44,15 @@ class HotWaterCard extends StatelessWidget {
     return SectionCard(
       child: Column(
         children: [
-          SectionTitle(icon: ShuiAssets.shuiFire, title: '热水控制'),
+          ShuiPressable(
+            soft: true,
+            onTap: onOpenDetail,
+            child: SectionTitle(
+              icon: ShuiAssets.shuiFire,
+              title: '热水控制页',
+              trailing: '查看详情 ›',
+            ),
+          ),
           const SizedBox(height: AppCustomTokens.spaceXs),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -85,7 +88,11 @@ class HotWaterCard extends StatelessWidget {
                             onTap: onSwitchBathSystem,
                             soft: true,
                             child: StatusPill(
-                              text: isShower798 ? '慧生活798' : '住理生活',
+                              text: unselected
+                                  ? '选择系统'
+                                  : isShower798
+                                      ? '慧生活798'
+                                      : '住理生活',
                               color: isShower798
                                   ? AppColors.serviceBlue
                                   : AppColors.primary,
@@ -101,9 +108,10 @@ class HotWaterCard extends StatelessWidget {
                         Expanded(
                           child: PrimaryGradientButton(
                             label: busy
-                                ? '处理中'
-                                : (isShower798 ? '开始洗浴' : '开热水'),
-                            enabled: !busy,
+                                ? '正在处理中'
+                                : (isShower798 ? '启动洗浴' : '启动热水'),
+                            enabled:
+                                !busy && !unselected && !state.hotwaterRunning,
                             compact: true,
                             onTap: onStartHotwater,
                           ),
@@ -112,9 +120,9 @@ class HotWaterCard extends StatelessWidget {
                         Expanded(
                           child: PrimaryGradientButton(
                             label: busy
-                                ? '处理中'
-                                : (isShower798 ? '结束洗浴' : '关热水'),
-                            enabled: !busy,
+                                ? '正在处理中'
+                                : (isShower798 ? '停止洗浴' : '停止热水'),
+                            enabled: !busy && state.hotwater.session != null,
                             compact: true,
                             onTap: onStopHotwater,
                           ),
@@ -131,12 +139,13 @@ class HotWaterCard extends StatelessWidget {
               ),
             ],
           ),
-          // 问题2：警告框仅在错误态出现（正常/成功态不显示，信息由上方状态行承载）。
-          if (errorStatus != null) ...[
+          if (warningText != null &&
+              warningText.trim().isNotEmpty &&
+              state.hotwaterStart.state == RuntimeTaskState.failure) ...[
             const SizedBox(height: AppCustomTokens.spaceXs),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: AppColors.serviceOrange
+                color: AppColors.primary
                     .withValues(alpha: AppCustomTokens.alphaVeryLow),
                 borderRadius:
                     BorderRadius.circular(AppCustomTokens.radiusMedium),
@@ -144,7 +153,7 @@ class HotWaterCard extends StatelessWidget {
               child: SizedBox(
                 width: double.infinity,
                 child: DashedBorderBox(
-                  color: AppColors.serviceOrange,
+                  color: AppColors.primaryLight,
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppCustomTokens.spaceMd,
                     vertical: AppCustomTokens.spaceXs,
@@ -154,17 +163,15 @@ class HotWaterCard extends StatelessWidget {
                       Text(
                         '⚠',
                         style: AppTypography.textTheme.titleMedium?.copyWith(
-                          color: AppColors.serviceOrange,
+                          color: AppColors.primary,
                         ),
                       ),
                       const SizedBox(width: AppCustomTokens.spaceSm),
                       Expanded(
                         child: Text(
-                          errorStatus.message ?? '操作失败，请重试',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                          warningText,
                           style: AppTypography.textTheme.labelLarge?.copyWith(
-                            color: AppColors.serviceOrange,
+                            color: AppColors.primary,
                           ),
                         ),
                       ),

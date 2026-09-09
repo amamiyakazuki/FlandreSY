@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors palette, AppTypography.textTheme, AppCustomTokens space/radius/device sizing/alpha.
 // Reference: P_PLAN/FlandreSY-Complete-Functions-and-UI-Design-Reference.md §4.6；legacy ShuiScreens.kt DevicesScreen/EmptyDevicesScreen.
 
@@ -9,6 +7,7 @@ import '../../design_tokens.dart';
 import '../runtime/fake_shui_runtime.dart';
 import '../runtime/models/local_device.dart';
 import '../theme/shui_assets.dart';
+import '../widgets/shui_animated_list.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
 import 'device_list_item.dart';
@@ -92,17 +91,17 @@ class DevicesScreen extends StatelessWidget {
                         RuntimeStatusBanner(status: state.devicesRefresh),
                         const SizedBox(height: AppCustomTokens.spaceSm),
                       ],
-                      if (devices.isEmpty)
-                        const EmptyDeviceRuntimeCard()
-                      else
-                        ...devices.asMap().entries.map((entry) {
-                          final index = entry.key;
-                          final device = entry.value;
+                      ShuiAnimatedList<LocalDeviceShortcut>(
+                        items: devices,
+                        identity: (device) => device.id,
+                        empty: const EmptyDeviceRuntimeCard(),
+                        itemBuilder: (device, index) {
                           return Padding(
                             padding: const EdgeInsets.only(
                               bottom: AppCustomTokens.spaceSm,
                             ),
                             child: DeviceListItem(
+                              key: ValueKey(device.id),
                               device: device,
                               displayName: deviceDisplayName(device, index),
                               index: index,
@@ -110,7 +109,8 @@ class DevicesScreen extends StatelessWidget {
                               onMenu: () => onMenu(device),
                             ),
                           );
-                        }),
+                        },
+                      ),
                     ],
                   ),
                 ),

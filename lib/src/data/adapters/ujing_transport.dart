@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Ujing HTTP transport seam (no visual constants). Splits "build request + parse JSON + map errors"
 // (testable via fixtures) from "real socket IO" (IoUjingTransport, verified on-device by the user).
 // UjingHttpAdapter depends on this interface; tests inject a fake transport replaying 抓包 JSON.
