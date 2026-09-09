@@ -1,12 +1,16 @@
 name: flandresy
 description: FlandreSY 2.0 Flutter rewrite.
 publish_to: none
-version: 2.0.0-beta+1
+version: 2.1.0+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
+  http: ^1.6.0
+  package_info_plus: ^9.0.0
+  pub_semver: ^2.2.0
+  url_launcher: ^6.3.2
   crypto: ^3.0.7
   flutter:
     sdk: flutter
@@ -20,6 +24,7 @@ dependencies:
   # classifyScanRouting 分类后路由到已注入适配器(默认 Fake / real 模式 real)。相机与 _useUjingHttp 解耦。
   # Android CAMERA 权限 + iOS NSCameraUsageDescription 已声明。
   mobile_scanner: ^7.2.0
+  permission_handler: ^12.0.1
   shared_preferences: ^2.5.5
 
 dev_dependencies:

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors, AppTypography.textTheme, AppCustomTokens space/shell.
 // Reference: P_PLAN/...Reference.md §4.10 + legacy ShuiScreens.kt MoreOptionsScreen (2990).
 
@@ -9,6 +7,7 @@ import '../../design_tokens.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/more_option_row.dart';
 import '../widgets/shui_header.dart';
+import '../widgets/shui_overlay_host.dart';
 import 'about_dialog.dart';
 import 'version_check.dart';
 
@@ -43,6 +42,7 @@ enum _Overlay { none, about, version, info }
 class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
   _Overlay _overlay = _Overlay.none;
   VersionCheckResult? _versionResult;
+  bool _checkingVersion = false;
   String _infoTitle = '';
   String _infoBody = '';
 
@@ -56,13 +56,16 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
 
   void _dismiss() => setState(() => _overlay = _Overlay.none);
 
-  /// 检查版本（fake：从打包 asset 读版本清单 → 对比 → 弹窗）。
+  /// 检查远程版本清单并展示结果。
   Future<void> _checkVersion() async {
-    final result = await checkLatestVersionFake();
+    if (_checkingVersion) return;
+    setState(() => _checkingVersion = true);
+    final result = await checkLatestVersion();
     if (!mounted) {
       return;
     }
     setState(() {
+      _checkingVersion = false;
       _versionResult = result;
       _overlay = _Overlay.version;
     });
@@ -74,69 +77,87 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
     final bottomPadding = AppCustomTokens.bottomBarHeight +
         bottomInset +
         AppCustomTokens.bottomContentExtraPadding;
-    return Scaffold(
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              TopHeader(title: '更多选项', showBack: true, onBack: widget.onBack),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    AppCustomTokens.spaceMd,
-                    AppCustomTokens.spaceMd,
-                    AppCustomTokens.spaceMd,
-                    bottomPadding,
-                  ),
-                  child: Column(
-                    children: [
-                      MoreOptionRow(
-                        iconAsset: ShuiAssets.shuiRed3,
-                        title: '使用模拟后端',
-                        subtitle: widget.useSimulatedBackend
-                            ? '当前：模拟数据（重启后生效）'
-                            : '当前：真实后端（重启后生效）',
-                        trailing: Switch(
-                          value: widget.useSimulatedBackend,
-                          onChanged: (value) {
-                            widget.onToggleSimulatedBackend(value);
-                            _showInfo(
-                              '使用模拟后端',
-                              value
-                                  ? '已切换到模拟后端。重启 App 后生效（将使用 Fake 数据，无需真实账号/设备）。'
-                                  : '已切换到真实后端。重启 App 后生效（将连接真实登录/网络/支付/蓝牙）。',
-                            );
-                          },
-                          activeThumbColor: AppColors.onPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: AppCustomTokens.spaceSm),
-                      for (final row in _rows()) ...[
+    return PopScope(
+      canPop: _overlay == _Overlay.none,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _overlay != _Overlay.none) _dismiss();
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            Column(
+              children: [
+                TopHeader(title: '更多选项', showBack: true, onBack: widget.onBack),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      AppCustomTokens.spaceMd,
+                      AppCustomTokens.spaceMd,
+                      AppCustomTokens.spaceMd,
+                      bottomPadding,
+                    ),
+                    child: Column(
+                      children: [
                         MoreOptionRow(
-                          iconAsset: row.icon,
-                          title: row.title,
-                          subtitle: row.subtitle,
-                          onTap: row.onTap,
+                          iconAsset: ShuiAssets.shuiRed3,
+                          title: '使用模拟后端',
+                          subtitle: widget.useSimulatedBackend
+                              ? '当前：模拟数据（重启后生效）'
+                              : '当前：真实后端（重启后生效）',
+                          trailing: Switch(
+                            value: widget.useSimulatedBackend,
+                            onChanged: (value) {
+                              widget.onToggleSimulatedBackend(value);
+                              _showInfo(
+                                '使用模拟后端',
+                                value
+                                    ? '已切换到模拟后端。重启 App 后生效（将使用 Fake 数据，无需真实账号/设备）。'
+                                    : '已切换到真实后端。重启 App 后生效（将连接真实登录/网络/支付/蓝牙）。',
+                              );
+                            },
+                            activeThumbColor: AppColors.onPrimary,
+                          ),
                         ),
                         const SizedBox(height: AppCustomTokens.spaceSm),
+                        for (final row in _rows()) ...[
+                          MoreOptionRow(
+                            iconAsset: row.icon,
+                            title: row.title,
+                            subtitle: row.subtitle,
+                            onTap: row.onTap,
+                          ),
+                          const SizedBox(height: AppCustomTokens.spaceSm),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          if (_overlay == _Overlay.about)
-            AboutDialogCard(onDismiss: _dismiss)
-          else if (_overlay == _Overlay.version && _versionResult != null)
-            VersionCheckDialogCard(result: _versionResult!, onDismiss: _dismiss)
-          else if (_overlay == _Overlay.info)
-            InfoDialogCard(
-              title: _infoTitle,
-              body: _infoBody,
-              onDismiss: _dismiss,
+              ],
             ),
-        ],
+            ShuiOverlayHost(
+                child: _overlay == _Overlay.none
+                    ? null
+                    : KeyedSubtree(
+                        key: ValueKey(_overlay),
+                        child: switch (_overlay) {
+                          _Overlay.about =>
+                            AboutDialogCard(onDismiss: _dismiss),
+                          _Overlay.version => VersionCheckDialogCard(
+                              result: _versionResult!,
+                              onDismiss: _dismiss,
+                              onRetry: () {
+                                _dismiss();
+                                _checkVersion();
+                              }),
+                          _Overlay.info => InfoDialogCard(
+                              title: _infoTitle,
+                              body: _infoBody,
+                              onDismiss: _dismiss,
+                            ),
+                          _Overlay.none => const SizedBox.shrink(),
+                        })),
+          ],
+        ),
       ),
     );
   }
@@ -164,7 +185,7 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
       _OptionRowData(
         icon: ShuiAssets.shuiRed3,
         title: '检查版本',
-        subtitle: '当前版本 $kCurrentAppVersion',
+        subtitle: _checkingVersion ? '正在检查更新…' : '当前版本 $kCurrentAppVersion',
         onTap: _checkVersion,
       ),
       _OptionRowData(

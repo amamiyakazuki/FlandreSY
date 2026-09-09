@@ -1,12 +1,12 @@
 {
-  "version": "2.0.0-beta",
-  "release_date": "2026-07-03",
+  "version": "2.1.0",
+  "release_date": "2026-09-09",
   "changelog": [
-    "Flutter 重构，真实后端默认开启",
-    "修复设备状态与热水历史残留假数据",
-    "文本截断修复；应用名/图标/包名整理"
+    "重构页面动效与切换过渡",
+    "完善账号、设备、订单和接水结果交互",
+    "更多选项支持在线检查更新"
   ],
   "downloads": {
-    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/latest"
+    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.1.0/app-release.apk"
   }
 }
