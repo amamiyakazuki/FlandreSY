@@ -25,9 +25,16 @@ class UjingHttpAdapter implements IUjingAdapter {
     UjingTransport? transport,
     PaymentLauncher? launcher,
     String? token,
+    void Function(String message)? log,
   })  : _transport = transport ?? IoUjingTransport(),
         _launcher = launcher ?? const FakePaymentLauncher(),
-        _token = token;
+        _token = token,
+        _log = log ?? _noop;
+
+  static void _noop(String _) {}
+
+  /// M-REAL 诊断日志埋点（对齐 legacy [ujing-runtime] AppLogStore.append）。默认 no-op。
+  final void Function(String message) _log;
 
   final UjingTransport _transport;
 
@@ -91,6 +98,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       throw const UjingException('U净登录成功但没有返回 token');
     }
     _token = token;
+    _log('U净登录成功 mobile=$mobile');
     return UjingAccountUi(
       mobile: _str(data, 'mobile', fallback: mobile),
       userId: _str(data, 'userId'),
@@ -401,7 +409,9 @@ class UjingHttpAdapter implements IUjingAdapter {
     }
 
     // SDK 那一跳经 launcher（Fake 返回 9000；真机 RealPaymentLauncher 接原生 PayTask）。
+    _log('启动支付宝支付 orderId=${order.orderId}');
     final resultStatus = await _launcher.payWithAlipay(orderInfo);
+    _log('支付宝返回 resultStatus=$resultStatus orderId=${order.orderId}');
 
     // 支付后必须刷新订单详情（对齐 legacy「不能只信 SDK 回调」）。
     final refreshed = await _fetchWasherOrderDetail(order.orderId, token);
@@ -428,6 +438,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       weex: '1.1.68',
       authToken: token,
     ));
+    _log('洗衣启动确认完成 orderId=${order.orderId}');
     return _fetchWasherOrderDetail(order.orderId, token);
   }
 
@@ -442,6 +453,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       weex: '1.1.68',
       authToken: token,
     ));
+    _log('洗衣提前停止完成 orderId=${order.orderId}');
     return _fetchWasherOrderDetail(order.orderId, token);
   }
 

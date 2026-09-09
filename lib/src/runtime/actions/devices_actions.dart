@@ -5,6 +5,7 @@
 import 'dart:async';
 
 import '../../data/adapters/ujing_adapter.dart';
+import '../../data/local_device_repository.dart';
 import '../live_clock.dart';
 import '../models/local_device.dart';
 import '../runtime_status.dart';
@@ -173,6 +174,45 @@ mixin DevicesActions on ShuiRuntimeBase {
       ),
     );
     _persistDevices();
+  }
+
+  /// 从剪贴板 JSON 导入本地设备列表（M-REAL 导入设备，对齐 legacy importDevices）。
+  /// 空/非法 → 错误 notice，不改列表；有效 → 替换 localDevices + 持久化 + 刷新真实状态。
+  /// 返回 true=导入成功（shell 据此弹成功/失败 snackbar）。
+  Future<bool> importLocalDevicesFromJson(String raw) async {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      _emitDevicesNotice('剪贴板为空', RuntimeTaskState.unavailable);
+      return false;
+    }
+    List<LocalDeviceShortcut> decoded;
+    try {
+      decoded = LocalDeviceCodec.decode(trimmed);
+    } catch (_) {
+      _emitDevicesNotice('剪贴板不是有效设备列表', RuntimeTaskState.unavailable);
+      return false;
+    }
+    if (decoded.isEmpty) {
+      _emitDevicesNotice('剪贴板不是有效设备列表', RuntimeTaskState.unavailable);
+      return false;
+    }
+    deviceSeq = _maxImportedSeq(decoded);
+    emit(state.copyWith(localDevices: decoded));
+    _persistDevices();
+    // 导入后按码查真实状态回填（对齐 legacy 写入后 refreshLocalDevices）。
+    await refreshLocalDevices();
+    return true;
+  }
+
+  /// 导入设备的 sortOrder 最大值 → deviceSeq 起点，避免后续新增撞号。
+  int _maxImportedSeq(List<LocalDeviceShortcut> list) {
+    var max = deviceSeq;
+    for (final d in list) {
+      if (d.sortOrder > max) {
+        max = d.sortOrder;
+      }
+    }
+    return max;
   }
 
   /// 持久化当前设备列表（fire-and-forget，对齐 shower798_actions._persist 范式）。

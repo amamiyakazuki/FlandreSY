@@ -47,14 +47,14 @@ class WasherOrderRoute extends ShuiRoute {
   final String qr;
 }
 
-/// 热水详情子页（H1）。归属 Home tab。
-class HotwaterDetailRoute extends ShuiRoute {
-  const HotwaterDetailRoute();
-}
-
 /// 更多选项子页（M1）。归属 Profile tab。
 class MoreOptionsRoute extends ShuiRoute {
   const MoreOptionsRoute();
+}
+
+/// 运行日志子页（M-REAL 日志与诊断）。归属 Profile tab（从更多选项进入）。
+class DiagnosticLogRoute extends ShuiRoute {
+  const DiagnosticLogRoute();
 }
 
 /// 每个非 Tab 路由在底栏上「归属」哪个 Tab（用于高亮 + 返回落点）。
@@ -66,8 +66,8 @@ extension ShuiRouteParent on ShuiRoute {
       DrinkingWaterRoute() => MainTab.devices,
       AccountDetailRoute() => MainTab.profile,
       WasherOrderRoute() => MainTab.devices,
-      HotwaterDetailRoute() => MainTab.home,
       MoreOptionsRoute() => MainTab.profile,
+      DiagnosticLogRoute() => MainTab.profile,
     };
   }
 

@@ -363,6 +363,8 @@ class AppCustomTokens {
       132.0; // legacy order_bottom_character 132dp
   static const double bottomCharacterContentPadding =
       124.0; // legacy 带底部角色页面内容底部预留 124dp
+  static const double bottomCharacterSeamPadding =
+      48.0; // legacy 底部角色 padding(bottom=48dp+navBottom)：< 底栏 68dp → 卡在交界（问题8）
 
   // ========== Module B2 - DrinkingWater 模块还原尺寸 ==========
   static const double infoLineLabelWidth = 70.0; // legacy InfoLine 标签列定宽 70dp

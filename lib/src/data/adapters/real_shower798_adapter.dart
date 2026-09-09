@@ -21,10 +21,17 @@ class RealShower798Adapter implements IShower798Adapter {
     String Function()? doubleRandom,
     String Function()? timestamp,
     String? token,
+    void Function(String message)? log,
   })  : _transport = transport,
         _doubleRandom = doubleRandom ?? _defaultDoubleRandom,
         _timestamp = timestamp ?? _defaultTimestamp,
-        _token = token;
+        _token = token,
+        _log = log ?? _noop;
+
+  static void _noop(String _) {}
+
+  /// M-REAL 诊断日志埋点（对齐 legacy [shower798-runtime] AppLogStore.append）。默认 no-op。
+  final void Function(String message) _log;
 
   final Shower798Transport _transport;
   final String Function() _doubleRandom;
@@ -99,6 +106,7 @@ class RealShower798Adapter implements IShower798Adapter {
       throw const Shower798Exception('登录返回缺少账号信息');
     }
     _token = token;
+    _log('798 洗浴登录成功 phone=${phone.trim()}');
     return Shower798SessionData(
       phone: phone.trim(),
       uid: _str(al, 'uid'),

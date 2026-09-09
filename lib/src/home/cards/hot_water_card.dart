@@ -18,7 +18,6 @@ class HotWaterCard extends StatelessWidget {
     required this.onStartHotwater,
     required this.onStopHotwater,
     required this.onSwitchBathSystem,
-    required this.onOpenDetail,
     super.key,
   });
 
@@ -26,7 +25,6 @@ class HotWaterCard extends StatelessWidget {
   final VoidCallback onStartHotwater;
   final VoidCallback onStopHotwater;
   final VoidCallback onSwitchBathSystem;
-  final VoidCallback onOpenDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +32,14 @@ class HotWaterCard extends StatelessWidget {
         state.bathSystemPreference == BathSystemPreference.shower798;
     final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
     final statusText = state.hotwaterStart.message ?? '热水待启动';
-    final warningText = state.hotwaterStart.message ?? '可在下方查看当前状态并执行操作';
+    // 问题2：警告框仅在「错误态」显示（开/关热水失败或需登录），正常时不出现——
+    // 正常状态信息由上方「当前状态」行体现即可。错误文案取自 start/stop 的失败消息。
+    final errorStatus = state.hotwaterStart.state == RuntimeTaskState.failure ||
+            state.hotwaterStart.state == RuntimeTaskState.loginRequired
+        ? state.hotwaterStart
+        : state.hotwaterStop.state == RuntimeTaskState.failure
+            ? state.hotwaterStop
+            : null;
     final statusColor = state.hotwaterRunning
         ? AppColors.serviceGreen
         : state.hotwaterStart.state == RuntimeTaskState.loginRequired
@@ -44,15 +49,7 @@ class HotWaterCard extends StatelessWidget {
     return SectionCard(
       child: Column(
         children: [
-          ShuiPressable(
-            soft: true,
-            onTap: onOpenDetail,
-            child: SectionTitle(
-              icon: ShuiAssets.shuiFire,
-              title: '热水控制',
-              trailing: '详情 ›',
-            ),
-          ),
+          SectionTitle(icon: ShuiAssets.shuiFire, title: '热水控制'),
           const SizedBox(height: AppCustomTokens.spaceXs),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -134,51 +131,55 @@ class HotWaterCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppCustomTokens.spaceXs),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: AppColors.primary
-                  .withValues(alpha: AppCustomTokens.alphaVeryLow),
-              borderRadius: BorderRadius.circular(AppCustomTokens.radiusMedium),
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              child: DashedBorderBox(
-                color: AppColors.primaryLight,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppCustomTokens.spaceMd,
-                  vertical: AppCustomTokens.spaceXs,
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      '⚠',
-                      style: AppTypography.textTheme.titleMedium?.copyWith(
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: AppCustomTokens.spaceSm),
-                    Expanded(
-                      child: Text(
-                        warningText,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.textTheme.labelLarge?.copyWith(
-                          color: AppColors.primary,
+          // 问题2：警告框仅在错误态出现（正常/成功态不显示，信息由上方状态行承载）。
+          if (errorStatus != null) ...[
+            const SizedBox(height: AppCustomTokens.spaceXs),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.serviceOrange
+                    .withValues(alpha: AppCustomTokens.alphaVeryLow),
+                borderRadius:
+                    BorderRadius.circular(AppCustomTokens.radiusMedium),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: DashedBorderBox(
+                  color: AppColors.serviceOrange,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppCustomTokens.spaceMd,
+                    vertical: AppCustomTokens.spaceXs,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '⚠',
+                        style: AppTypography.textTheme.titleMedium?.copyWith(
+                          color: AppColors.serviceOrange,
                         ),
                       ),
-                    ),
-                    DecorativeImage(
-                      ShuiAssets.shuiBianfu,
-                      size: AppCustomTokens.scanBatSize -
-                          AppCustomTokens.spaceXs / 2,
-                      opacity: AppCustomTokens.alphaDisabled,
-                    ),
-                  ],
+                      const SizedBox(width: AppCustomTokens.spaceSm),
+                      Expanded(
+                        child: Text(
+                          errorStatus.message ?? '操作失败，请重试',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.textTheme.labelLarge?.copyWith(
+                            color: AppColors.serviceOrange,
+                          ),
+                        ),
+                      ),
+                      DecorativeImage(
+                        ShuiAssets.shuiBianfu,
+                        size: AppCustomTokens.scanBatSize -
+                            AppCustomTokens.spaceXs / 2,
+                        opacity: AppCustomTokens.alphaDisabled,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

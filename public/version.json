@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "release_date": "2026-07-07",
+  "changelog": [
+    "FlandreSY 2.0 正式版发布",
+    "真实后端、订单持久化与扫码/支付链路整合",
+    "修复设备状态、热水历史与文本截断等 beta 收尾问题"
+  ],
+  "downloads": {
+    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/latest"
+  }
+}

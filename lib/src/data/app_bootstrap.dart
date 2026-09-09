@@ -6,11 +6,13 @@
 import '../runtime/models/account_session.dart';
 import '../runtime/models/hotwater_history.dart';
 import '../runtime/models/local_device.dart';
+import '../runtime/models/water_order.dart';
 import '../runtime/runtime_status.dart';
 import 'account_session_repository.dart';
 import 'history_repository.dart';
 import 'local_device_repository.dart';
 import 'settings_repository.dart';
+import 'water_order_repository.dart';
 
 /// 启动时从持久化层恢复的聚合快照。main() 预加载注入 → 消除首帧闪烁（P1 Major 1 模式）；
 /// runtime 也用同一 [AppBootstrap.load] 异步恢复，避免预加载/恢复逻辑双源。
@@ -23,6 +25,8 @@ class PersistedSnapshot {
     this.shower798,
     this.localDevices,
     this.hotwaterHistory,
+    this.currentWaterOrder,
+    this.waterHistory,
   });
 
   final BathSystemPreference bathSystem;
@@ -40,6 +44,12 @@ class PersistedSnapshot {
 
   /// 热水历史（PHIST）。null = 从未持久化过（首启走 adapter 拉取）；非 null = 写入 hotwater.history。
   final List<HotwaterHistoryUi>? hotwaterHistory;
+
+  /// 当前进行中的接水订单（PWATER 问题7）。null = 无当前订单（未持久化或已完成）。
+  final WaterOrderUi? currentWaterOrder;
+
+  /// 已完成的接水历史（PWATER 问题7）。null = 从未持久化过（首启无饮水历史）。
+  final List<WaterOrderHistoryUi>? waterHistory;
 }
 
 /// 合并 SettingsRepository + AccountSessionRepository + LocalDeviceRepository +
@@ -52,6 +62,7 @@ class AppBootstrap {
     AccountSessionRepository sessions,
     LocalDeviceRepository devices,
     HistoryRepository history,
+    WaterOrderRepository water,
   ) async {
     final bathSystem = await settings.loadBathSystem();
     final useSimulatedBackend = await settings.loadUseSimulatedBackend();
@@ -60,6 +71,7 @@ class AppBootstrap {
     final shower798 = await sessions.loadShower798();
     final localDevices = await devices.loadDevices();
     final hotwaterHistory = await history.loadHistory();
+    final waterSnapshot = await water.load();
     return PersistedSnapshot(
       bathSystem: bathSystem,
       useSimulatedBackend: useSimulatedBackend,
@@ -68,6 +80,8 @@ class AppBootstrap {
       shower798: shower798,
       localDevices: localDevices,
       hotwaterHistory: hotwaterHistory,
+      currentWaterOrder: waterSnapshot?.currentOrder,
+      waterHistory: waterSnapshot?.history,
     );
   }
 }

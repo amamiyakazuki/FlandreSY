@@ -204,7 +204,10 @@ class EmptyDevicesView extends StatelessWidget {
   }
 }
 
-/// 底部角色插画（order_bottom_character），固定在底栏上方居中偏右。
+/// 底部角色插画（order_bottom_character）。问题8：应「卡在」底栏与白背景交界——
+/// 下半部叠在波浪底栏上、上半部在白背景，而非浮空。对齐 legacy：底 padding 比底栏
+/// 总高矮约 20dp（bottom = 48 + navBottom < 68 + navBottom）使其下探进底栏，
+/// 再 offset(x=+14, y=+6) 微调。
 class _BottomCharacter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -212,13 +215,16 @@ class _BottomCharacter extends StatelessWidget {
     return Positioned(
       left: 0,
       right: 0,
-      bottom: AppCustomTokens.bottomBarHeight +
-          bottomInset +
-          AppCustomTokens.spaceLg,
+      // 48dp（< 底栏 68dp）→ 人物底边落在底栏内部，下半压底栏、上半在白背景。
+      bottom: AppCustomTokens.bottomCharacterSeamPadding + bottomInset,
       child: Align(
         alignment: Alignment.bottomCenter,
-        child: Padding(
-          padding: const EdgeInsets.only(left: AppCustomTokens.spaceMd),
+        child: Transform.translate(
+          // legacy offset(x=+14, y=+6)：略右移 + 下探，卡在交界。
+          offset: const Offset(
+            AppCustomTokens.spaceMd - AppCustomTokens.spaceXs / 2,
+            AppCustomTokens.spaceXs + AppCustomTokens.spaceXs / 2,
+          ),
           child: DecorativeImage(
             ShuiAssets.orderBottomCharacter,
             size: AppCustomTokens.bottomCharacterSize,

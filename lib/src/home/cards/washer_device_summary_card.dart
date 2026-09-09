@@ -49,25 +49,11 @@ class WasherDeviceSummaryCard extends StatelessWidget {
                     AppCustomTokens.spaceLg,
                 child: Column(
                   children: [
-                    Stack(
-                      alignment: Alignment.bottomCenter,
-                      children: [
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: DecorativeImage(
-                            ShuiAssets.washerCharacter,
-                            size: AppCustomTokens.washerCharacterSize -
-                                AppCustomTokens.spaceLg,
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.bottomLeft,
-                          child: DecorativeImage(
-                            ShuiAssets.washerMachine,
-                            size: AppCustomTokens.compactActionHeight,
-                          ),
-                        ),
-                      ],
+                    // 问题5：删掉左下多余的小洗衣机图标（legacy 本无此图），
+                    // 人物放大到 legacy 112dp 并居中，填满右侧空间。
+                    DecorativeImage(
+                      ShuiAssets.washerCharacter,
+                      size: AppCustomTokens.washerCharacterSize,
                     ),
                     const SizedBox(height: AppCustomTokens.spaceXs),
                     PrimaryGradientButton(
@@ -136,8 +122,8 @@ class _WasherMetricsPanel extends StatelessWidget {
           ),
           Expanded(
             child: _WasherMetric(
-              label: '空闲 / 未知',
-              value: '$availableCount / ${washerCount - availableCount}',
+              label: '空闲设备',
+              value: '$availableCount',
               suffix: '台',
               color: AppColors.serviceGreen,
             ),

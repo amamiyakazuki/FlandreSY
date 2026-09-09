@@ -29,11 +29,18 @@ class RealZhuliAdapter implements IHotwaterAdapter {
     String Function()? nonce,
     String Function()? timestamp,
     ZhuliSessionData? session,
+    void Function(String message)? log,
   })  : _transport = transport,
         _ble = ble ?? const SkeletonBleTransport(),
         _nonce = nonce ?? _defaultNonce,
         _timestamp = timestamp ?? _defaultTimestamp,
-        _session = session;
+        _session = session,
+        _log = log ?? _noop;
+
+  static void _noop(String _) {}
+
+  /// M-REAL 诊断日志埋点（对齐 legacy [hotwater-runtime] AppLogStore.append）。默认 no-op。
+  final void Function(String message) _log;
 
   static const String kPlatformBase = 'https://pm.whxinna.com';
   static const String kPlatformKey = '6d5dbb85b949447a95ff8fda9a9b759b';
@@ -108,6 +115,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
       secretKey: secretKey,
     );
     _session = session;
+    _log('住理登录成功 phone=$phone');
     return session;
   }
 
@@ -202,6 +210,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
         'hex': startResp,
       });
 
+      _log('热水启动完成 deviceId=$deviceId orderId=$orderId');
       return HotwaterActionResult(
         deviceId: deviceId,
         statusText: '热水启动完成，供应中',
@@ -241,6 +250,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
         'hex': endResp,
       });
       _lastIsn = '';
+      _log('热水已关闭 deviceId=$deviceId');
       return HotwaterActionResult(deviceId: deviceId, statusText: '热水已关闭');
     } finally {
       await conn.close();

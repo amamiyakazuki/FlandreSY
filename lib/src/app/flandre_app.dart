@@ -14,6 +14,8 @@ import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
 import '../data/settings_repository.dart';
+import '../data/water_order_repository.dart';
+import '../runtime/diagnostic_log.dart';
 import '../runtime/fake_shui_runtime.dart';
 import '../runtime/live_clock.dart';
 import '../shell/shui_shell.dart';
@@ -24,11 +26,14 @@ class FlandreApp extends StatelessWidget {
     this.sessions,
     this.devices,
     this.history,
+    this.water,
     this.secure,
     this.clock,
     this.ujing,
     this.hotwater,
     this.shower798,
+    this.diagnosticLog,
+    this.appVersion,
     this.initial,
     super.key,
   });
@@ -45,6 +50,9 @@ class FlandreApp extends StatelessWidget {
   /// 可选注入的热水历史持久化（测试传内存实现）。
   final HistoryRepository? history;
 
+  /// 可选注入的饮水订单持久化（PWATER 问题7；测试传内存实现）。
+  final WaterOrderRepository? water;
+
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
   final SecureSessionRepository? secure;
 
@@ -59,6 +67,12 @@ class FlandreApp extends StatelessWidget {
 
   /// 可选注入的 798 洗浴适配器（默认 FakeShower798Adapter；真机验证注入 RealShower798Adapter）。
   final IShower798Adapter? shower798;
+
+  /// 可选注入的诊断日志器（M-REAL）。main() 注入持久化实现 + adapter 埋点。
+  final DiagnosticLog? diagnosticLog;
+
+  /// 可选注入的真实 App 版本号（M-REAL PackageInfo.version）。null → 常量兜底。
+  final String? appVersion;
 
   /// 可选预加载的持久化快照（main() 已 await 读出，消除首帧闪烁）。
   final PersistedSnapshot? initial;
@@ -80,11 +94,14 @@ class FlandreApp extends StatelessWidget {
         sessions: sessions,
         devices: devices,
         history: history,
+        water: water,
         secure: secure,
         clock: clock,
         ujing: ujing,
         hotwater: hotwater,
         shower798: shower798,
+        diagnosticLog: diagnosticLog,
+        appVersion: appVersion,
         initial: initial,
         child: const ShuiShell(),
       ),
