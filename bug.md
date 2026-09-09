@@ -33,3 +33,8 @@
 - 现象：测试中的 `MockClient` 直接以字符串字节构造响应，中文 JSON 在 `http` 解码时触发非法字符错误，误判为网络失败。
 - 原因：`StreamedResponse` 的 body 必须是 UTF-8 字节流，不能直接传 `String.codeUnits`。
 - 处理：改用 `http.Response.bytes(utf8.encode(...), 200)`，并补充远程清单成功、失败和 semver 回归测试。
+
+## 2026-09-09 develop 合并后 iOS 构建失败
+- 现象：`flutter analyze` 报 10 个编译错误，GitHub iOS workflow 无法进入有效的 Xcode 构建阶段。
+- 原因：合并远程 2.0 整理与 2.1 重构时，启动快照、运行时依赖、热水详情路由和首页回调保留了不同版本的接口。
+- 处理：统一饮水仓库、诊断日志和版本注入，补回热水详情路由与首页回调，并保留热水/饮水轮询和持久化；本地 `flutter build ios --no-codesign --release` 已成功。

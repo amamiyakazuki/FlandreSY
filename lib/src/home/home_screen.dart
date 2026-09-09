@@ -22,6 +22,7 @@ class HomeScreen extends StatelessWidget {
     required this.onScan,
     required this.onWasherSummary,
     required this.onSwitchBathSystem,
+    required this.onOpenHotwaterDetail,
     super.key,
   });
 
@@ -33,6 +34,7 @@ class HomeScreen extends StatelessWidget {
   final VoidCallback onScan;
   final VoidCallback onWasherSummary;
   final VoidCallback onSwitchBathSystem;
+  final VoidCallback onOpenHotwaterDetail;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +49,8 @@ class HomeScreen extends StatelessWidget {
     final characterTop = topInset +
         AppCustomTokens.topHeaderContentHeight -
         AppCustomTokens.headerCharacterSizeSmall +
-        AppCustomTokens.spaceSm - AppCustomTokens.spaceXs / 2;
+        AppCustomTokens.spaceSm -
+        AppCustomTokens.spaceXs / 2;
     return Scaffold(
       body: Stack(
         children: [
@@ -75,6 +78,7 @@ class HomeScreen extends StatelessWidget {
                         onStartHotwater: onStartHotwater,
                         onStopHotwater: onStopHotwater,
                         onSwitchBathSystem: onSwitchBathSystem,
+                        onOpenDetail: onOpenHotwaterDetail,
                       ),
                       const SizedBox(height: AppCustomTokens.sectionGap),
                       ScanCard(onScan: onScan),

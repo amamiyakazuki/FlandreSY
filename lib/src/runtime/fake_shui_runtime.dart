@@ -17,6 +17,8 @@ import '../data/shared_prefs_account_session_repository.dart';
 import '../data/shared_prefs_history_repository.dart';
 import '../data/shared_prefs_local_device_repository.dart';
 import '../data/shared_prefs_settings_repository.dart';
+import '../data/shared_prefs_water_order_repository.dart';
+import '../data/water_order_repository.dart';
 import 'actions/account_actions.dart';
 import 'actions/devices_actions.dart';
 import 'actions/home_actions.dart';
@@ -25,6 +27,7 @@ import 'actions/shower798_actions.dart';
 import 'actions/washer_actions.dart';
 import 'actions/water_actions.dart';
 import 'live_clock.dart';
+import 'diagnostic_log.dart';
 import 'shui_runtime_base.dart';
 
 export 'runtime_status.dart';
@@ -46,11 +49,14 @@ class FakeShuiRuntime extends ShuiRuntimeBase
     super.sessions,
     super.devices,
     super.history,
+    super.water,
     super.secure,
     super.clock,
     super.ujing,
     super.hotwater,
     super.shower798,
+    super.diagnosticLog,
+    super.appVersion,
     super.initial,
   });
 }
@@ -62,11 +68,14 @@ class ShuiRuntimeScope extends StatefulWidget {
     this.sessions,
     this.devices,
     this.history,
+    this.water,
     this.secure,
     this.clock,
     this.ujing,
     this.hotwater,
     this.shower798,
+    this.diagnosticLog,
+    this.appVersion,
     this.initial,
     super.key,
   });
@@ -85,6 +94,8 @@ class ShuiRuntimeScope extends StatefulWidget {
   /// 可选注入的热水历史持久化（测试传内存实现）。默认生产用 shared_preferences。
   final HistoryRepository? history;
 
+  final WaterOrderRepository? water;
+
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
   final SecureSessionRepository? secure;
 
@@ -99,6 +110,9 @@ class ShuiRuntimeScope extends StatefulWidget {
 
   /// 可选注入的 798 洗浴适配器（默认 FakeShower798Adapter；真机验证注入 RealShower798Adapter）。
   final IShower798Adapter? shower798;
+
+  final DiagnosticLog? diagnosticLog;
+  final String? appVersion;
 
   /// 可选预加载的持久化快照（main() 启动前已 await 读出，消除首帧闪烁）。
   /// 为 null 时由 runtime 异步从 repository 回填（测试路径）。
@@ -128,12 +142,15 @@ class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
       sessions: widget.sessions ?? SharedPrefsAccountSessionRepository(),
       devices: widget.devices ?? SharedPrefsLocalDeviceRepository(),
       history: widget.history ?? SharedPrefsHistoryRepository(),
+      water: widget.water ?? SharedPrefsWaterOrderRepository(),
       secure: widget
           .secure, // null → base 默认 InMemory；real 模式由 main() 注入 flutter_secure_storage
       clock: widget.clock,
       ujing: widget.ujing,
       hotwater: widget.hotwater,
       shower798: widget.shower798,
+      diagnosticLog: widget.diagnosticLog,
+      appVersion: widget.appVersion,
       initial: widget.initial,
     );
   }

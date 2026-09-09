@@ -2,9 +2,9 @@
   <img src="ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png" alt="FlandreSY App Icon" width="120">
 </p>
 
-# 芙兰水衣 FlandreSY 2.0
+# 芙兰水衣 FlandreSY 2.1
 
-`芙兰水衣`（FlandreSY）是一次面向真实使用场景的 Flutter 2.0 完全重构。它围绕校园/公寓生活中的洗衣、饮水、热水与 798 相关服务，重新整理了旧版 1.x 的交互、状态和发布链路，目标是做成一个更稳定、可维护、可跨平台演进的版本。
+`芙兰水衣`（FlandreSY）是一款面向校园与公寓生活场景的 Flutter 应用，统一管理洗衣、饮水、热水与慧生活 798 服务。2.1 版本重点重构了页面动效、账号入口、订单状态恢复和在线更新链路。
 
 ## 项目截图
 
@@ -21,24 +21,24 @@
 - 英文品牌名：`FlandreSY`
 - Android 包名：`com.flandresy`
 - iOS Bundle ID：`com.flandresy`
-- 正式版营销版本：`2.0.0`
-- Flutter 构建版本：见 [pubspec.yaml](/home/arizmi1a/FlandreSY2.0/pubspec.yaml:4)
+- 正式版营销版本：`2.1.0`
+- Flutter 构建版本：见 `pubspec.yaml`
 - 默认运行模式：真实后端
 
-## 2.0 重构目标
+## 2.1 版本重点
 
-- 统一 Android / iOS 的主业务体验
-- 拆掉 1.x 中难维护的耦合和“大文件”问题
-- 为真实接口、真机验证、发布分发和后续迭代留出清晰边界
-- 在保留 legacy 行为语义的前提下，逐步替换 fake / demo 阶段逻辑
+- 统一页面、弹窗、列表和操作反馈的动效节奏
+- 增加统一账号中心，并明确住理生活、慧生活 798 与 U净的状态
+- 持久化热水会话和饮水订单，恢复应用后继续核对状态
+- 在“更多选项”中在线检查版本并直接打开 APK 下载地址
 
 ## 主要能力
 
 - 洗衣流程：设备识别、下单、支付、订单状态与历史
 - 饮水流程：扫码、创建订单、刷新状态、历史保留
-- 热水流程：账号态、运行态、历史与真实 BLE 接入准备
-- 798 流程：账号、设备与扩展接入骨架
-- 更多选项：版本检查、诊断、权限与发布辅助能力
+- 热水流程：账号、设备、会话恢复、状态轮询、历史与真实 BLE 接入
+- 798 流程：账号、设备选择、洗浴控制与状态轮询
+- 更多选项：在线更新、诊断日志、权限检查与设备列表导入导出
 
 ## 仓库结构
 
@@ -46,7 +46,7 @@
 - `android/`：Android 工程与发布签名配置
 - `ios/`：iOS 工程、Podfile 与发布配置
 - `assets/legacy/`：从旧版整理出来并继续复用的图片/字体资源
-- `public/`：对外发布用的版本清单
+- `assets/public/`：应用内置及远程读取的版本清单
 - `tools/release/`：发布辅助脚本
 - `P_PLAN/`：规划、审查记录、发布清单与设计约束
 - `docx/`：README 展示用截图资源
@@ -68,21 +68,12 @@ flutter run --dart-define=SIMULATE_BACKEND=true
 
 ## 版本与更新链路
 
-- 内置离线版本清单：`public/version.json`
-- 远端版本检查优先级：
-  - `https://flandresy.pages.dev/version.json`
-  - `https://raw.githubusercontent.com/amamiyakazuki/FlandreSY/main/public/version.json`
+- 内置版本清单：`assets/public/version.json`
+- 远端版本清单：`https://raw.githubusercontent.com/amamiyakazuki/FlandreSY/main/assets/public/version.json`
 - GitHub Releases 下载页：
   - `https://github.com/amamiyakazuki/FlandreSY/releases/latest`
 
-### Pages 部署说明
-
-`flandresy.pages.dev` 是当前的主版本源。每次发版时需要把仓库根 `public/version.json` 同步部署到 Pages；如果 Pages 尚未刷新，应用会自动回退到 GitHub raw 版本清单。
-
-部署后至少确认：
-1. Pages 实际服务的是当前仓库根 `public/` 目录
-2. `public/version.json` 的版本号、发布日期和下载链接都已经更新
-3. 浏览器可以直接打开 `https://flandresy.pages.dev/version.json`
+发版时需同步更新 `pubspec.yaml` 与 `assets/public/version.json`，并确保清单中的下载地址指向已经上传的 GitHub Release asset。
 
 ## Android 发布
 
@@ -122,4 +113,4 @@ flutter build ios --no-codesign --release
 
 ## 开源许可
 
-This project is licensed under the GNU Affero General Public License v3.0. See [LICENSE](/home/arizmi1a/FlandreSY2.0/LICENSE:1) for details.
+This project is licensed under the GNU Affero General Public License v3.0. See `LICENSE` for details.

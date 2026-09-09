@@ -2,7 +2,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 
+import '../data/local_device_repository.dart';
 import '../devices/device_dialogs.dart';
 import '../data/permission_service.dart';
 import '../devices/devices_screen.dart';
@@ -10,6 +12,7 @@ import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
 import '../hotwater/hotwater_detail_screen.dart';
 import '../more/more_options_screen.dart';
+import '../more/log_screen.dart';
 import '../orders/orders_screen.dart';
 import '../profile/account_detail_screen.dart';
 import '../profile/account_hub_screen.dart';
@@ -417,9 +420,16 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
         ),
       MoreOptionsRoute() => MoreOptionsScreen(
           onBack: _handlePop,
-          onImportDevices: runtime.refreshLocalDevices,
+          onImportDevices: () => _importDevices(runtime),
+          onExportDevices: () => _exportDevices(runtime),
+          onOpenLogs: () => _setRoute(const DiagnosticLogRoute()),
+          appVersion: runtime.appVersion,
           useSimulatedBackend: runtime.state.useSimulatedBackend,
           onToggleSimulatedBackend: runtime.setUseSimulatedBackend,
+        ),
+      DiagnosticLogRoute() => LogScreen(
+          log: runtime.diagnosticLog,
+          onBack: _handlePop,
         ),
     };
     return KeyedSubtree(key: ValueKey(_routeKey(route)), child: body);
@@ -435,7 +445,22 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
       WasherOrderRoute(:final qr) => 'washer-$qr',
       HotwaterDetailRoute() => 'hotwater-detail',
       MoreOptionsRoute() => 'more-options',
+      DiagnosticLogRoute() => 'diagnostic-log',
     };
+  }
+
+  Future<void> _exportDevices(FakeShuiRuntime runtime) async {
+    final json = LocalDeviceCodec.encode(runtime.state.localDevices);
+    await Clipboard.setData(ClipboardData(text: json));
+    if (mounted) _showScanMessage('设备列表已复制到剪贴板');
+  }
+
+  Future<void> _importDevices(FakeShuiRuntime runtime) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final ok = await runtime.importLocalDevicesFromJson(data?.text ?? '');
+    if (mounted) {
+      _showScanMessage(ok ? '设备列表已从剪贴板导入' : '剪贴板不是有效设备列表 JSON');
+    }
   }
 
   Widget _tabBody(FakeShuiRuntime runtime, MainTab tab) {

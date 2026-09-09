@@ -54,7 +54,7 @@ class VersionCheckResult {
 const String kCurrentAppVersion = '2.1.0';
 const String kVersionManifestAsset = 'assets/public/version.json';
 const String kVersionManifestUrl =
-    'https://raw.githubusercontent.com/amamiyakazuki/FlandreSY/develop/assets/public/version.json';
+    'https://raw.githubusercontent.com/amamiyakazuki/FlandreSY/main/assets/public/version.json';
 
 Future<String> currentAppVersion() async {
   try {

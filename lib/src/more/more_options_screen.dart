@@ -9,6 +9,7 @@ import '../widgets/more_option_row.dart';
 import '../widgets/shui_header.dart';
 import '../widgets/shui_overlay_host.dart';
 import 'about_dialog.dart';
+import 'permission_check.dart';
 import 'version_check.dart';
 
 /// 更多选项页（M1）。6 行入口（对齐 legacy MoreOptionsScreen）+ 弹窗（About/版本/占位）。
@@ -17,8 +18,11 @@ class MoreOptionsScreen extends StatefulWidget {
   const MoreOptionsScreen({
     required this.onBack,
     required this.onImportDevices,
+    required this.onExportDevices,
+    required this.onOpenLogs,
     required this.useSimulatedBackend,
     required this.onToggleSimulatedBackend,
+    this.appVersion = kCurrentAppVersion,
     super.key,
   });
 
@@ -26,6 +30,9 @@ class MoreOptionsScreen extends StatefulWidget {
 
   /// 导入设备：fake 联动（刷新本地设备列表）。
   final VoidCallback onImportDevices;
+  final VoidCallback onExportDevices;
+  final VoidCallback onOpenLogs;
+  final String appVersion;
 
   /// 当前「使用模拟后端」开关值（Phase 0）。true = 模拟；false = 真实（默认）。
   final bool useSimulatedBackend;
@@ -60,7 +67,7 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
   Future<void> _checkVersion() async {
     if (_checkingVersion) return;
     setState(() => _checkingVersion = true);
-    final result = await checkLatestVersion();
+    final result = await checkLatestVersion(currentVersion: widget.appVersion);
     if (!mounted) {
       return;
     }
@@ -69,6 +76,11 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
       _versionResult = result;
       _overlay = _Overlay.version;
     });
+  }
+
+  Future<void> _checkPermissions() async {
+    final message = await runPermissionCheck();
+    if (mounted) _showInfo('权限检测', message);
   }
 
   @override
@@ -140,8 +152,10 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
                     : KeyedSubtree(
                         key: ValueKey(_overlay),
                         child: switch (_overlay) {
-                          _Overlay.about =>
-                            AboutDialogCard(onDismiss: _dismiss),
+                          _Overlay.about => AboutDialogCard(
+                              onDismiss: _dismiss,
+                              appVersion: widget.appVersion,
+                            ),
                           _Overlay.version => VersionCheckDialogCard(
                               result: _versionResult!,
                               onDismiss: _dismiss,
@@ -167,47 +181,32 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
       _OptionRowData(
         icon: ShuiAssets.shuiRed1,
         title: '权限检测',
-        subtitle: '打开系统应用权限设置',
-        onTap: () => _showInfo(
-          '权限检测',
-          '真实权限申请（蓝牙/相机/通知）跳转系统设置将在阶段4接入。',
-        ),
+        subtitle: '申请相机/蓝牙/定位权限',
+        onTap: _checkPermissions,
       ),
       _OptionRowData(
         icon: ShuiAssets.shuiRed2,
         title: '日志与诊断',
         subtitle: '查看本地运行日志',
-        onTap: () => _showInfo(
-          '日志与诊断',
-          '本地运行日志查看器（导出、过滤等）将在阶段4接入。',
-        ),
+        onTap: widget.onOpenLogs,
       ),
       _OptionRowData(
         icon: ShuiAssets.shuiRed3,
         title: '检查版本',
-        subtitle: _checkingVersion ? '正在检查更新…' : '当前版本 $kCurrentAppVersion',
+        subtitle: _checkingVersion ? '正在检查更新…' : '当前版本 ${widget.appVersion}',
         onTap: _checkVersion,
       ),
       _OptionRowData(
         icon: ShuiAssets.shuiRed4,
         title: '导出洗衣机设备列表',
-        subtitle: '复制本地设备到剪贴板',
-        onTap: () => _showInfo(
-          '导出设备列表',
-          '设备列表已复制（示例）。真实剪贴板导出将在阶段4接入。',
-        ),
+        subtitle: '复制本地设备 JSON 到剪贴板',
+        onTap: widget.onExportDevices,
       ),
       _OptionRowData(
         icon: ShuiAssets.shuiRed5,
         title: '导入洗衣机设备列表',
-        subtitle: '从剪贴板恢复本地设备',
-        onTap: () {
-          widget.onImportDevices();
-          _showInfo(
-            '导入设备列表',
-            '已触发设备列表刷新（示例）。真实剪贴板导入将在阶段4接入。',
-          );
-        },
+        subtitle: '从剪贴板恢复本地设备 JSON',
+        onTap: widget.onImportDevices,
       ),
       _OptionRowData(
         icon: ShuiAssets.shuiRed1,

@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../data/account_session_repository.dart';
+import '../data/diagnostic_log_repository.dart';
 import '../data/adapters/fake_hotwater_adapter.dart';
 import '../data/adapters/fake_shower798_adapter.dart';
 import '../data/adapters/fake_ujing_adapter.dart';
@@ -20,10 +21,14 @@ import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
 import '../data/settings_repository.dart';
+import '../data/water_order_repository.dart';
+import '../more/version_check.dart' show kCurrentAppVersion;
+import 'diagnostic_log.dart';
 import 'live_clock.dart';
 import 'models/account_session.dart';
 import 'models/hotwater_history.dart';
 import 'models/local_device.dart';
+import 'models/water_order.dart';
 import 'runtime_status.dart';
 import 'shui_home_state.dart';
 
@@ -38,21 +43,28 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     AccountSessionRepository? sessions,
     LocalDeviceRepository? devices,
     HistoryRepository? history,
+    WaterOrderRepository? water,
     SecureSessionRepository? secure,
     LiveClock? clock,
     IUjingAdapter? ujing,
     IHotwaterAdapter? hotwater,
     IShower798Adapter? shower798,
+    DiagnosticLog? diagnosticLog,
+    String? appVersion,
     PersistedSnapshot? initial,
   })  : settings = settings ?? InMemorySettingsRepository(),
         sessions = sessions ?? InMemoryAccountSessionRepository(),
         devices = devices ?? InMemoryLocalDeviceRepository(),
         history = history ?? InMemoryHistoryRepository(),
+        water = water ?? InMemoryWaterOrderRepository(),
         secure = secure ?? InMemorySecureSessionRepository(),
         clock = clock ?? const SystemLiveClock(),
         ujing = ujing ?? const FakeUjingAdapter(),
         hotwater = hotwater ?? FakeHotwaterAdapter(),
         shower798 = shower798 ?? FakeShower798Adapter(),
+        diagnosticLog = diagnosticLog ??
+            DiagnosticLog(repo: InMemoryDiagnosticLogRepository()),
+        appVersion = appVersion ?? kCurrentAppVersion,
         _state = initial == null ? seedState() : _applySnapshot(initial) {
     // 恢复 deviceSeq / hotwaterOrderSeq 起点，避免新增 id 与已持久化数据撞号。
     deviceSeq = _maxDeviceSeq(_state.localDevices);
@@ -89,6 +101,8 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   /// 热水历史持久化（PHIST）。同 settings/sessions/devices 解耦模式。
   final HistoryRepository history;
 
+  final WaterOrderRepository water;
+
   /// 敏感凭证持久化（PTOK）。token/secretKey 加密存储；action 层登录成功后写入。
   /// 默认 InMemory（测试确定）；生产 real 模式注入 flutter_secure_storage 实现。
   final SecureSessionRepository secure;
@@ -107,6 +121,9 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   /// 慧生活798 洗浴适配器（P4 S798）。生产默认注入 RealShower798Adapter；
   /// 未注入（null）→ FakeShower798Adapter（测试/golden/模拟模式）。
   final IShower798Adapter shower798;
+
+  final DiagnosticLog diagnosticLog;
+  final String appVersion;
 
   ShuiHomeState _state;
 
@@ -227,12 +244,15 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
                 message: '热水状态确认中',
               ),
             ),
+      currentWaterOrder: snap.currentWaterOrder,
+      waterHistory: snap.waterHistory ?? const <WaterOrderHistoryUi>[],
     );
   }
 
   /// 启动时回填已持久化状态（异步，完成后 emit 一次）。与预加载共用 AppBootstrap。
   Future<void> _restorePersisted() async {
-    final snap = await AppBootstrap.load(settings, sessions, devices, history);
+    final snap =
+        await AppBootstrap.load(settings, sessions, devices, history, water);
     final restored = _applySnapshot(snap);
     deviceSeq = _maxDeviceSeq(restored.localDevices);
     hotwaterOrderSeq = _maxOrderSeq(restored.hotwater.history);
@@ -285,6 +305,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
 
   /// Devices/Water 提示清理计时器。两个计时器独立，行为与拆分前一致。
   Timer? _deviceNoticeTimer;
+  Timer? _hotwaterErrorTimer;
   Timer? _waterPollingTimer;
   Timer? _hotwaterPollingTimer;
   Timer? _hotwaterDeadlineTimer;
@@ -355,6 +376,18 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     _deviceNoticeTimer = Timer(const Duration(seconds: 4), onClear);
   }
 
+  void scheduleHotwaterErrorClear(VoidCallback onClear) {
+    _hotwaterErrorTimer?.cancel();
+    _hotwaterErrorTimer = Timer(const Duration(seconds: 3), onClear);
+  }
+
+  void persistWaterOrders() {
+    unawaited(water.save(WaterOrderSnapshot(
+      currentOrder: state.currentWaterOrder,
+      history: state.waterHistory,
+    )));
+  }
+
   /// 记录首次权限引导已确认，避免下次启动重复弹出。
   void markPermissionIntroSeen() {
     if (state.permissionIntroSeen) {
@@ -369,6 +402,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     isDisposed = true;
     _homeBannerTimer?.cancel();
     _deviceNoticeTimer?.cancel();
+    _hotwaterErrorTimer?.cancel();
     stopWaterPolling();
     stopHotwaterPolling();
     super.dispose();

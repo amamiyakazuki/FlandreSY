@@ -69,51 +69,52 @@ class _ShuiOverlayHostState extends State<ShuiOverlayHost>
     return Material(
       type: MaterialType.transparency,
       child: Stack(
-      fit: StackFit.expand,
-      children: [
-        FadeTransition(
-          opacity: _visibility,
-          child: ModalBarrier(
-              color:
-                  AppColors.scrim.withValues(alpha: AppCustomTokens.alphaPopup),
-              dismissible: false),
-        ),
-        BlockSemantics(
-          child: FocusScope(
-            node: _scope,
-            child: IgnorePointer(
-              ignoring: widget.child == null,
-              child: ExcludeFocus(
-                excluding: widget.child == null,
-                child: FadeTransition(
-                  opacity: _visibility,
-                  child: ScaleTransition(
-                    scale: Tween(
-                            begin: ShuiMotion.reduced(context) ? 1.0 : 0.97,
-                            end: 1.0)
-                        .animate(CurvedAnimation(
-                            parent: _visibility, curve: ShuiMotion.easeOut)),
-                    child: AnimatedSwitcher(
-                      duration: ShuiMotion.duration(context, ShuiMotion.local),
-                      layoutBuilder: (current, previous) => Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          for (final child in previous)
-                            IgnorePointer(
-                                child: ExcludeSemantics(
-                                    child: ExcludeFocus(child: child))),
-                          if (current != null) current,
-                        ],
+        fit: StackFit.expand,
+        children: [
+          FadeTransition(
+            opacity: _visibility,
+            child: ModalBarrier(
+                color: AppColors.scrim
+                    .withValues(alpha: AppCustomTokens.alphaPopup),
+                dismissible: false),
+          ),
+          BlockSemantics(
+            child: FocusScope(
+              node: _scope,
+              child: IgnorePointer(
+                ignoring: widget.child == null,
+                child: ExcludeFocus(
+                  excluding: widget.child == null,
+                  child: FadeTransition(
+                    opacity: _visibility,
+                    child: ScaleTransition(
+                      scale: Tween(
+                              begin: ShuiMotion.reduced(context) ? 1.0 : 0.97,
+                              end: 1.0)
+                          .animate(CurvedAnimation(
+                              parent: _visibility, curve: ShuiMotion.easeOut)),
+                      child: AnimatedSwitcher(
+                        duration:
+                            ShuiMotion.duration(context, ShuiMotion.local),
+                        layoutBuilder: (current, previous) => Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            for (final child in previous)
+                              IgnorePointer(
+                                  child: ExcludeSemantics(
+                                      child: ExcludeFocus(child: child))),
+                            if (current != null) current,
+                          ],
+                        ),
+                        child: _retained,
                       ),
-                      child: _retained,
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
       ),
     );
   }

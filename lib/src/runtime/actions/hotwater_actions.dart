@@ -305,9 +305,8 @@ mixin HotwaterActions on ShuiRuntimeBase {
     scheduleHotwaterErrorClear(() {
       // 守卫：仅当到点时「仍处于错误态」才复位——若这 3 秒内用户已重试成功
       // （start=success）或正在处理（loading），保留那个新状态，不误清。
-      final startErr =
-          state.hotwaterStart.state == RuntimeTaskState.failure ||
-              state.hotwaterStart.state == RuntimeTaskState.loginRequired;
+      final startErr = state.hotwaterStart.state == RuntimeTaskState.failure ||
+          state.hotwaterStart.state == RuntimeTaskState.loginRequired;
       final stopErr = state.hotwaterStop.state == RuntimeTaskState.failure;
       if (!startErr && !stopErr) {
         return;

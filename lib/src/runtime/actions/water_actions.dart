@@ -94,6 +94,7 @@ mixin WaterActions on ShuiRuntimeBase {
         ),
       ),
     );
+    persistWaterOrders();
     startWaterPolling();
   }
 
@@ -195,6 +196,7 @@ mixin WaterActions on ShuiRuntimeBase {
           ),
         ),
       );
+      persistWaterOrders();
       stopWaterPolling();
       return;
     }
@@ -209,6 +211,7 @@ mixin WaterActions on ShuiRuntimeBase {
         ),
       ),
     );
+    persistWaterOrders();
   }
 
   /// 离开饮水页时清理 ready/banner（不删历史）。

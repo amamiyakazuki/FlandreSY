@@ -12,9 +12,14 @@ import 'version_check.dart';
 
 /// 关于弹窗（sleep 插图 + 版本 + 支持说明 + 知道啦）。对齐 legacy AboutDialog。
 class AboutDialogCard extends StatelessWidget {
-  const AboutDialogCard({required this.onDismiss, super.key});
+  const AboutDialogCard({
+    required this.onDismiss,
+    this.appVersion = kCurrentAppVersion,
+    super.key,
+  });
 
   final VoidCallback onDismiss;
+  final String appVersion;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +44,7 @@ class AboutDialogCard extends StatelessWidget {
           ),
           const SizedBox(height: AppCustomTokens.spaceSm),
           Text(
-            '版本 $kCurrentAppVersion\n'
+            '版本 $appVersion\n'
             '当前支持住理热水、慧生活798洗浴、U净洗衣与饮水流程；洗衣支付暂时只支持支付宝。',
             textAlign: TextAlign.center,
             style: textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
