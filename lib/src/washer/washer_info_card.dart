@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors, AppTypography.textTheme, AppCustomTokens space/radius/washer sizing.
 // Reference: legacy ShuiScreens.kt WasherRuntimeInfoCard (1104) + §4.5.
 
@@ -38,14 +36,16 @@ class WasherRuntimeInfoCard extends StatelessWidget {
                   maxLines: 2,
                   softWrap: true,
                   overflow: TextOverflow.ellipsis,
-                  style: textTheme.titleMedium?.copyWith(color: AppColors.deepText),
+                  style: textTheme.titleMedium
+                      ?.copyWith(color: AppColors.deepText),
                 ),
                 const SizedBox(height: AppCustomTokens.spaceXs),
                 Text(
                   '设备号：${p?.deviceNo ?? '未识别'}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
+                  style:
+                      textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
                 ),
                 Text(
                   '门店：${p?.storeName ?? '未知门店'}',
@@ -53,16 +53,15 @@ class WasherRuntimeInfoCard extends StatelessWidget {
                   maxLines: 2,
                   softWrap: true,
                   overflow: TextOverflow.ellipsis,
-                  style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
+                  style:
+                      textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
                 ),
               ],
             ),
           ),
           const SizedBox(width: AppCustomTokens.spaceSm),
           StatusPill(
-            text: p == null
-                ? '待扫码'
-                : (p.createOrderEnabled ? '可下单' : '不可下单'),
+            text: p == null ? '待扫码' : (p.createOrderEnabled ? '可下单' : '不可下单'),
             color: p != null && p.createOrderEnabled
                 ? AppColors.serviceGreen
                 : AppColors.serviceOrange,

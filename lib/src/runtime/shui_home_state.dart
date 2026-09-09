@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Immutable aggregate UI state (no visual constants). Split out of fake_shui_runtime.dart.
 
 import 'package:flutter/foundation.dart';
@@ -24,13 +22,15 @@ class ShuiHomeState {
       message: '扫描饮水机或洗衣机二维码',
     ),
     this.washerScan = const RuntimeActionStatus(),
-    this.bathSystemPreference = BathSystemPreference.zhuli,
+    this.bathSystemPreference = BathSystemPreference.none,
     this.useSimulatedBackend = false,
+    this.permissionIntroSeen = false,
     this.localDevices = const <LocalDeviceShortcut>[],
     this.localDevicesLastRefreshed = '',
     this.devicesRefresh = const RuntimeActionStatus(),
     this.waterReady,
     this.currentWaterOrder,
+    this.waterResult,
     this.waterOrder = const RuntimeActionStatus(),
     this.waterHistory = const <WaterOrderHistoryUi>[],
     // ===== H1 热水控制子状态（默认待启动；进行中任务由 homeTasks 从真实运行态派生）=====
@@ -48,12 +48,17 @@ class ShuiHomeState {
   /// 「使用模拟后端」开关（Phase 0）。反映持久化/待生效值；改后需重启才真正切换 adapter。
   final bool useSimulatedBackend;
 
+  /// 首次权限引导是否已经确认。只记录引导完成，不代表系统权限已授予。
+  final bool permissionIntroSeen;
+
   // ===== H1 热水控制子状态 =====
   /// 热水控制子状态（running/start/stop/history）。
   final HotwaterState hotwater;
 
   // 便捷委托 getter：保持既有读取路径稳定（state.hotwaterRunning 等）。
   bool get hotwaterRunning => hotwater.running;
+  BathSystemPreference get hotwaterControlSystem =>
+      hotwater.session?.system ?? bathSystemPreference;
   RuntimeActionStatus get hotwaterStart => hotwater.start;
   RuntimeActionStatus get hotwaterStop => hotwater.stop;
   List<HotwaterHistoryUi> get hotwaterHistory => hotwater.history;
@@ -72,6 +77,9 @@ class ShuiHomeState {
 
   /// 当前接水订单（创建后存在，完成后清空，B2）。
   final WaterOrderUi? currentWaterOrder;
+
+  /// 当前流程最近一次已确认的结果，仅供接水页展示，离开流程后清理。
+  final WaterOrderUi? waterResult;
 
   /// 饮水订单动作状态（scan/create/refresh 的 loading/success/failure）。
   final RuntimeActionStatus waterOrder;
@@ -98,7 +106,8 @@ class ShuiHomeState {
   RuntimeActionStatus get shower798Login => account.shower798Login;
   RuntimeActionStatus get shower798Captcha => account.shower798Captcha;
   int get shower798CaptchaSentAtMillis => account.shower798CaptchaSentAtMillis;
-  String? get shower798CaptchaImageBase64 => account.shower798CaptchaImageBase64;
+  String? get shower798CaptchaImageBase64 =>
+      account.shower798CaptchaImageBase64;
   List<Shower798DeviceUi> get shower798Devices => account.shower798Devices;
   String get currentShower798DeviceId => account.currentShower798DeviceId;
 
@@ -135,13 +144,12 @@ class ShuiHomeState {
   List<HomeTaskUi> get homeTasks {
     final tasks = <HomeTaskUi>[];
     // 热水：开热水成功且未关闭（对齐 legacy hotwaterActive 判据）。
-    final hotwaterActive =
-        hotwaterStart.state == RuntimeTaskState.success &&
-            hotwaterStop.state != RuntimeTaskState.success;
+    final hotwaterActive = hotwater.session != null || hotwaterRunning;
     if (hotwaterActive) {
       tasks.add(
         HomeTaskUi(
           target: HomeTaskTarget.hotwater,
+          id: hotwater.session?.id ?? 'hotwater',
           title: '热水使用中',
           extra: hotwaterStart.message ?? '热水已开启',
           asset: 'shui_reshui.png',
@@ -154,6 +162,7 @@ class ShuiHomeState {
       tasks.add(
         HomeTaskUi(
           target: HomeTaskTarget.washer,
+          id: washerOrder.orderId,
           title: _washerTaskTitle(washerOrder),
           extra: _washerTaskExtra(washerOrder),
           asset: 'shui_yifu.png',
@@ -166,6 +175,7 @@ class ShuiHomeState {
       tasks.add(
         HomeTaskUi(
           target: HomeTaskTarget.drinking,
+          id: waterOrder.orderId,
           title: _waterTaskTitle(waterOrder),
           extra: _waterTaskExtra(waterOrder),
           asset: 'shui_jieshui.png',
@@ -250,6 +260,7 @@ class ShuiHomeState {
     RuntimeActionStatus? washerScan,
     BathSystemPreference? bathSystemPreference,
     bool? useSimulatedBackend,
+    bool? permissionIntroSeen,
     List<LocalDeviceShortcut>? localDevices,
     String? localDevicesLastRefreshed,
     RuntimeActionStatus? devicesRefresh,
@@ -297,12 +308,15 @@ class ShuiHomeState {
     bool clearWaterReady = false,
     WaterOrderUi? currentWaterOrder,
     bool clearCurrentWaterOrder = false,
+    WaterOrderUi? waterResult,
+    bool clearWaterResult = false,
   }) {
     return ShuiHomeState(
       waterScan: waterScan ?? this.waterScan,
       washerScan: washerScan ?? this.washerScan,
       bathSystemPreference: bathSystemPreference ?? this.bathSystemPreference,
       useSimulatedBackend: useSimulatedBackend ?? this.useSimulatedBackend,
+      permissionIntroSeen: permissionIntroSeen ?? this.permissionIntroSeen,
       localDevices: localDevices ?? this.localDevices,
       localDevicesLastRefreshed:
           localDevicesLastRefreshed ?? this.localDevicesLastRefreshed,
@@ -311,6 +325,7 @@ class ShuiHomeState {
       currentWaterOrder: clearCurrentWaterOrder
           ? null
           : (currentWaterOrder ?? this.currentWaterOrder),
+      waterResult: clearWaterResult ? null : (waterResult ?? this.waterResult),
       waterOrder: waterOrder ?? this.waterOrder,
       waterHistory: waterHistory ?? this.waterHistory,
       hotwater: hotwater ??

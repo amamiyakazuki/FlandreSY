@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors palette, AppTypography.textTheme, AppCustomTokens option sizing/radius/alpha.
 // Reference: legacy ShuiComponents.kt OptionCard (549) + ShuiScreens.kt OptionSection (1375).
 
@@ -43,7 +41,9 @@ class OptionCard extends StatelessWidget {
     final textTheme = AppTypography.textTheme;
     final hasSubtitle = item.subtitle != null;
     final labelColor = selected ? accent : AppColors.deepText;
-    return Container(
+    return AnimatedContainer(
+      duration: ShuiMotion.duration(context, ShuiMotion.local),
+      curve: ShuiMotion.easeOut,
       height: hasSubtitle
           ? AppCustomTokens.optionCardTallHeight
           : AppCustomTokens.optionCardHeight,
@@ -88,8 +88,8 @@ class OptionCard extends StatelessWidget {
                             item.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style:
-                                textTheme.titleSmall?.copyWith(color: labelColor),
+                            style: textTheme.titleSmall
+                                ?.copyWith(color: labelColor),
                           ),
                         ),
                         FittedBox(
@@ -134,24 +134,32 @@ class OptionCard extends StatelessWidget {
                     ),
             ),
           ),
-          if (selected && hasSubtitle)
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Container(
-                width: AppCustomTokens.optionCheckSize,
-                height: AppCustomTokens.optionCheckSize,
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(AppCustomTokens.radiusMedium),
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '✓',
-                  style: textTheme.labelSmall?.copyWith(color: AppColors.onPrimary),
-                ),
-              ),
+          if (hasSubtitle)
+            AnimatedSwitcher(
+              duration: ShuiMotion.duration(context, ShuiMotion.quick),
+              child: selected
+                  ? Align(
+                      key: const ValueKey('selected'),
+                      alignment: Alignment.bottomRight,
+                      child: Container(
+                        width: AppCustomTokens.optionCheckSize,
+                        height: AppCustomTokens.optionCheckSize,
+                        decoration: BoxDecoration(
+                          color: accent,
+                          borderRadius: const BorderRadius.only(
+                            topLeft:
+                                Radius.circular(AppCustomTokens.radiusMedium),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '✓',
+                          style: textTheme.labelSmall
+                              ?.copyWith(color: AppColors.onPrimary),
+                        ),
+                      ),
+                    )
+                  : const SizedBox(key: ValueKey('unselected')),
             ),
         ],
       ),

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Zhuli BLE (GATT) transport seam (no visual constants — these are protocol byte/UUID constants, not
 // UI). Splits "the GATT jump" (scan/connect/write/notify — needs a real BLE plugin + device,
 // verified ON-DEVICE by the user) from the signed HTTP layer. RealZhuliAdapter depends on this

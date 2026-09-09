@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors, AppTypography.textTheme, AppCustomTokens space/radius/captcha/sms sizing.
 // Reference: P_PLAN/...Reference.md §4.8 §5.4 + legacy ShuiScreens.kt Shower798AccountDetail (2800).
 
@@ -10,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
 import '../runtime/fake_shui_runtime.dart';
+import '../theme/shui_motion.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_text_field.dart';
@@ -27,6 +26,8 @@ class Shower798AccountDetail extends StatefulWidget {
     required this.onAddDevice,
     required this.onRefreshDevices,
     required this.onSelectDevice,
+    required this.isDefault,
+    required this.onDefaultChanged,
     super.key,
   });
 
@@ -41,6 +42,8 @@ class Shower798AccountDetail extends StatefulWidget {
   final ValueChanged<String> onAddDevice;
   final VoidCallback onRefreshDevices;
   final ValueChanged<String> onSelectDevice;
+  final bool isDefault;
+  final ValueChanged<bool> onDefaultChanged;
 
   @override
   State<Shower798AccountDetail> createState() => _Shower798AccountDetailState();
@@ -69,6 +72,15 @@ class _Shower798AccountDetailState extends State<Shower798AccountDetail> {
         widget.onRequestCaptcha();
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(Shower798AccountDetail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.state.shower798Account != null &&
+        oldWidget.state.shower798Account == null) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
   }
 
   @override
@@ -129,6 +141,8 @@ class _Shower798AccountDetailState extends State<Shower798AccountDetail> {
           onRefreshCaptcha: widget.onRequestCaptcha,
           onSendSms: () => widget.onSendSms(_phone.text, _imageCaptcha.text),
           onLogin: () => widget.onLogin(_phone.text, _smsCode.text),
+          isDefault: widget.isDefault,
+          onDefaultChanged: widget.onDefaultChanged,
         ),
         const SizedBox(height: AppCustomTokens.sectionGap),
         _DeviceCard(
@@ -159,6 +173,8 @@ class _LoginCard extends StatelessWidget {
     required this.onRefreshCaptcha,
     required this.onSendSms,
     required this.onLogin,
+    required this.isDefault,
+    required this.onDefaultChanged,
   });
 
   final ShuiHomeState state;
@@ -171,6 +187,8 @@ class _LoginCard extends StatelessWidget {
   final VoidCallback onRefreshCaptcha;
   final VoidCallback onSendSms;
   final VoidCallback onLogin;
+  final bool isDefault;
+  final ValueChanged<bool> onDefaultChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -182,64 +200,96 @@ class _LoginCard extends StatelessWidget {
           SectionTitle(icon: ShuiAssets.shuiHuisheng798, title: '慧生活798登录'),
           const SizedBox(height: AppCustomTokens.formFieldGap),
           RuntimeStatusBanner(status: state.shower798Login),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('设为默认洗浴系统'),
+            value: isDefault,
+            onChanged: (value) => onDefaultChanged(value ?? false),
+          ),
           if (state.shower798Captcha.message != null) ...[
             const SizedBox(height: AppCustomTokens.spaceXs),
             RuntimeStatusBanner(status: state.shower798Captcha),
           ],
           const SizedBox(height: AppCustomTokens.formFieldGap),
-          ShuiTextField(
-            controller: phone,
-            label: '手机号',
-            keyboardType: TextInputType.phone,
-          ),
-          const SizedBox(height: AppCustomTokens.formFieldGap),
-          Text(
-            '图形验证码',
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
-          ),
-          const SizedBox(height: AppCustomTokens.spaceXs),
-          _CaptchaBox(
-            base64Image: state.shower798CaptchaImageBase64,
-            busy: captchaBusy,
-            onTap: onRefreshCaptcha,
-          ),
-          const SizedBox(height: AppCustomTokens.formFieldGap),
-          ShuiTextField(controller: imageCaptcha, label: '输入图形验证码'),
-          const SizedBox(height: AppCustomTokens.formFieldGap),
-          Row(
-            children: [
-              Expanded(
-                child: PrimaryGradientButton(
-                  label: captchaBusy
-                      ? '发送中'
-                      : (cooldown > 0 ? '等待${cooldown}s' : '发送验证码'),
-                  enabled: !captchaBusy && cooldown == 0,
-                  compact: true,
-                  onTap: onSendSms,
-                ),
-              ),
-              const SizedBox(width: AppCustomTokens.formFieldGap),
-              Expanded(
-                child: PrimaryGradientButton(
-                  label: '刷新图片',
-                  enabled: !captchaBusy,
-                  compact: true,
-                  onTap: onRefreshCaptcha,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppCustomTokens.formFieldGap),
-          ShuiTextField(
-            controller: smsCode,
-            label: '短信验证码',
-            keyboardType: TextInputType.number,
-          ),
-          const SizedBox(height: AppCustomTokens.formFieldGap),
-          PrimaryGradientButton(
-            label: loginBusy ? '登录中' : '登录慧生活798',
-            enabled: !loginBusy,
-            onTap: onLogin,
+          AnimatedSize(
+            duration: ShuiMotion.duration(context, ShuiMotion.local),
+            child: AnimatedSwitcher(
+              duration: ShuiMotion.duration(context, ShuiMotion.local),
+              child: state.shower798Account != null &&
+                      state.shower798Login.state !=
+                          RuntimeTaskState.loginRequired
+                  ? Text('已登录：${state.shower798Account!.mobile}',
+                      key: const ValueKey('798-account'))
+                  : Column(
+                      key: const ValueKey('798-form'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                          ShuiTextField(
+                            controller: phone,
+                            label: '手机号',
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          Text(
+                            '图形验证码',
+                            style: textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.deepText),
+                          ),
+                          const SizedBox(height: AppCustomTokens.spaceXs),
+                          _CaptchaBox(
+                            base64Image: state.shower798CaptchaImageBase64,
+                            busy: captchaBusy,
+                            onTap: onRefreshCaptcha,
+                          ),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          ShuiTextField(
+                              controller: imageCaptcha, label: '输入图形验证码'),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: PrimaryGradientButton(
+                                  label: captchaBusy
+                                      ? '发送中'
+                                      : (cooldown > 0
+                                          ? '等待${cooldown}s'
+                                          : '发送验证码'),
+                                  enabled: !captchaBusy && cooldown == 0,
+                                  compact: true,
+                                  onTap: onSendSms,
+                                ),
+                              ),
+                              const SizedBox(
+                                  width: AppCustomTokens.formFieldGap),
+                              Expanded(
+                                child: PrimaryGradientButton(
+                                  label: '刷新图片',
+                                  enabled: !captchaBusy,
+                                  compact: true,
+                                  onTap: onRefreshCaptcha,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          ShuiTextField(
+                            controller: smsCode,
+                            label: '短信验证码',
+                            keyboardType: TextInputType.number,
+                          ),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          AnimatedSwitcher(
+                            duration:
+                                ShuiMotion.duration(context, ShuiMotion.local),
+                            child: PrimaryGradientButton(
+                              key: ValueKey(loginBusy),
+                              label: loginBusy ? '登录中' : '登录慧生活798',
+                              enabled: !loginBusy,
+                              onTap: onLogin,
+                            ),
+                          ),
+                        ]),
+            ),
           ),
         ],
       ),
@@ -362,8 +412,7 @@ class _DeviceCard extends StatelessWidget {
           else
             ...devices.map(
               (device) => Padding(
-                padding:
-                    const EdgeInsets.only(bottom: AppCustomTokens.spaceSm),
+                padding: const EdgeInsets.only(bottom: AppCustomTokens.spaceSm),
                 child: Shower798DeviceTile(
                   device: device,
                   isCurrent: state.currentShower798DeviceId == device.id,

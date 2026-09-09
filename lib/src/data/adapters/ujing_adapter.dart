@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Ujing adapter interface (no visual constants). Separates data source (what the Ujing backend
 // returns) from state management (emit/notify in the runtime mixins). Fake + real HTTP both
 // implement this. Method shapes align with legacy UjingRuntimeAdapter.
@@ -69,7 +67,8 @@ abstract class IUjingAdapter {
   Future<WasherOrderUi> payWasherOrder(WasherOrderUi order);
 
   /// 启动洗衣机（status → '40' 运行；remainSeconds 由调用方按套餐时长给定）。
-  Future<WasherOrderUi> startWasherOrder(WasherOrderUi order, int remainSeconds);
+  Future<WasherOrderUi> startWasherOrder(
+      WasherOrderUi order, int remainSeconds);
 
   /// 提前停止（status → '50' 已结束）。
   Future<WasherOrderUi> stopWasherOrder(WasherOrderUi order);

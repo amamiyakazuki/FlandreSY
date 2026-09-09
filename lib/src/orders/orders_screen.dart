@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors service palette, AppTypography.textTheme, AppCustomTokens space/shell.
 // Reference: P_PLAN/...Reference.md §4.3 + legacy ShuiScreens.kt OrdersScreen (1927).
 
@@ -12,7 +10,9 @@ import '../runtime/fake_shui_runtime.dart';
 import '../runtime/live_clock.dart';
 import '../runtime/models/washer_order.dart';
 import '../theme/shui_assets.dart';
+import '../theme/shui_motion.dart';
 import '../widgets/order_list_item.dart';
+import '../widgets/shui_animated_list.dart';
 import '../widgets/shui_header.dart';
 import 'order_models.dart';
 
@@ -26,7 +26,7 @@ class OrdersScreen extends StatefulWidget {
     required this.onOpenWasherOrder,
     required this.onOpenDrinking,
     required this.onPollWasher,
-    required this.onLoadHotwaterHistory,
+    this.active = true,
     super.key,
   });
 
@@ -36,10 +36,7 @@ class OrdersScreen extends StatefulWidget {
   final VoidCallback onOpenWasherOrder;
   final VoidCallback onOpenDrinking;
   final VoidCallback onPollWasher;
-
-  /// 进入订单页时拉取热水历史（原本由已删的热水详情页触发；详情整删后由订单页接管，
-  /// 否则「热水」分类会空。对齐 legacy「进订单页即刷新历史」语义）。
-  final VoidCallback onLoadHotwaterHistory;
+  final bool active;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -51,15 +48,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Timer? _pollTimer;
 
   @override
-  void initState() {
-    super.initState();
-    // 进入订单页即拉一次热水历史（替换旧值，不 append），接管原详情页职责。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onLoadHotwaterHistory();
-    });
-  }
-
-  @override
   void dispose() {
     _tickTimer?.cancel();
     _pollTimer?.cancel();
@@ -69,7 +57,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
   /// 仅在洗衣分类 + 有运行中当前订单时启动每秒 tick（live 倒计时）+ 30s 轮询。
   void _syncTimers() {
     final order = widget.state.washer.currentOrder;
-    final needsLive = _category == OrderCategory.washer &&
+    final needsLive = widget.active &&
+        _category == OrderCategory.washer &&
         order != null &&
         !order.isTerminal;
     if (needsLive) {
@@ -110,7 +99,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 children: [
                   _buildChipRow(),
                   const SizedBox(height: AppCustomTokens.spaceSm),
-                  ..._buildCategoryContent(),
+                  AnimatedSwitcher(
+                    duration: ShuiMotion.duration(context, ShuiMotion.local),
+                    switchInCurve: ShuiMotion.easeOut,
+                    switchOutCurve: ShuiMotion.easeIn,
+                    child: Column(
+                      key: ValueKey(_category),
+                      children: _buildCategoryContent(),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -162,14 +159,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
       OrderCategory.drinking => _drinkingRows(),
       OrderCategory.washer => _washerRows(),
     };
-    if (rows.isEmpty) {
-      return [_emptyForCategory()];
-    }
     return [
-      for (final row in rows) ...[
-        OrderListItem(order: row),
-        const SizedBox(height: AppCustomTokens.spaceSm),
-      ],
+      ShuiAnimatedList<OrderRowUi>(
+        items: rows,
+        identity: (row) => row.id,
+        empty: _emptyForCategory(),
+        itemBuilder: (row, _) => Padding(
+            padding: const EdgeInsets.only(bottom: AppCustomTokens.spaceSm),
+            child: OrderListItem(order: row)),
+      ),
     ];
   }
 
@@ -194,6 +192,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return [
       for (final h in widget.state.hotwaterHistory)
         OrderRowUi(
+          id: 'hotwater-${h.orderId}',
           type: '热水',
           time: h.time,
           device: '热水设备 ${h.deviceId}',
@@ -214,9 +213,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (current != null) {
       rows.add(
         OrderRowUi(
+          id: 'water-${current.orderId}',
           type: '饮水',
           time: '当前订单',
-          device: '饮水机 ${current.deviceNo.isEmpty ? current.orderId : current.deviceNo}',
+          device:
+              '饮水机 ${current.deviceNo.isEmpty ? current.orderId : current.deviceNo}',
           amount: formatFenAmount((current.payment * 100).round()),
           status: current.statusRemark.isEmpty
               ? current.orderStatusName
@@ -230,6 +231,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     for (final h in s.waterHistory) {
       rows.add(
         OrderRowUi(
+          id: 'water-${h.orderId}',
           type: '饮水',
           time: h.completedAt,
           device: '饮水机 ${h.deviceNo.isEmpty ? h.orderId : h.deviceNo}',
@@ -258,6 +260,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           remain > 0 ? '剩余 ${formatSeconds(remain)}' : current.statusText;
       rows.add(
         OrderRowUi(
+          id: 'washer-${current.orderId}',
           type: '洗衣',
           time: timeText,
           device: '洗衣机 ${current.deviceNo}',
@@ -275,6 +278,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       }
       rows.add(
         OrderRowUi(
+          id: 'washer-${h.orderId}',
           type: '洗衣',
           time: h.orderId,
           device: '洗衣机 ${h.deviceNo}',

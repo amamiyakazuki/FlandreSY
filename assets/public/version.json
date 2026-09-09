@@ -1,0 +1,12 @@
+{
+  "version": "2.1.0",
+  "release_date": "2026-09-09",
+  "changelog": [
+    "重构页面动效与切换过渡",
+    "完善账号、设备、订单和接水结果交互",
+    "更多选项支持在线检查更新"
+  ],
+  "downloads": {
+    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.1.0/app-release.apk"
+  }
+}

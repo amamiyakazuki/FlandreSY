@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // 慧生活798 HTTP transport seam (no visual constants). Splits "build request + parse result JSON /
 // captcha bytes" (testable via fixtures) from "real socket IO" (IoShower798Transport, verified
 // ON-DEVICE by the user). RealShower798Adapter depends on this interface; tests inject a fake

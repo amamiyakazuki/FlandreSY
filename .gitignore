@@ -59,18 +59,17 @@ P_PLAN/reviews/*.backup
 *.local
 .env
 .env.local
+.env.*
+!.env.example
+android/key.properties
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+*.apk
+*.aab
 AGENTS.md
 
 # IDE (uncomment .vscode/ if you don't want to commit workspace settings)
 #.vscode/
-test/
 P_PLAN/
-/app/
-/docs
-/image/
-/gradle/wrapper/
-/build.gradle
-/settings.gradle
-/gradle.properties
-/gradlew
-/gradlew.bat

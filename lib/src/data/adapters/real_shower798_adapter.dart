@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Real 慧生活798 adapter (no visual constants). Orchestrates the token-auth HTTP endpoints for
 // captcha / sms / login / devices / start / stop / idle, faithful to legacy Shower798RuntimeAdapter.kt.
 // HTTP (build request + parse) is testable via fixtures through the injected Shower798Transport;
@@ -66,7 +64,8 @@ class RealShower798Adapter implements IShower798Adapter {
       path: 'captcha/',
       query: <String, Object?>{'s': s, 'r': r},
     ));
-    return Shower798CaptchaData(imageBase64: base64, doubleRandom: s, timestamp: r);
+    return Shower798CaptchaData(
+        imageBase64: base64, doubleRandom: s, timestamp: r);
   }
 
   @override
@@ -127,8 +126,7 @@ class RealShower798Adapter implements IShower798Adapter {
     if (!data.containsKey('account')) {
       // account 缺失 = 登录失效（对齐 legacy logout + 抛错）。authInvalid 触发 RELOG 同步清 secure。
       _token = null;
-      throw const Shower798Exception('798 洗浴登录已失效，请重新登录',
-          authInvalid: true);
+      throw const Shower798Exception('798 洗浴登录已失效，请重新登录', authInvalid: true);
     }
     final favos = data['favos'];
     final devices = <Shower798DeviceUi>[];

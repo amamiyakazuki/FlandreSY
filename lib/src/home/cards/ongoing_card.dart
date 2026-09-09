@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors surface/service palette, AppTypography.textTheme, AppCustomTokens spacing/radius/sizing/alpha.
 
 import 'package:flutter/material.dart';
@@ -23,25 +21,53 @@ class OngoingCard extends StatelessWidget {
         children: [
           SectionTitle(icon: ShuiAssets.shuiFire, title: '进行中'),
           const SizedBox(height: AppCustomTokens.spaceSm),
-          AnimatedSwitcher(
-            duration: ShuiMotion.normal,
-            switchInCurve: ShuiMotion.easeOut,
-            switchOutCurve: ShuiMotion.easeIn,
+          AnimatedSize(
+            duration: ShuiMotion.duration(context, ShuiMotion.local),
+            curve: ShuiMotion.easeOut,
             child: tasks.isEmpty
                 ? const _EmptyRunningCard()
-                : Row(
-                    key: ValueKey(tasks.map((task) => task.title).join('|')),
-                    children: tasks.take(3).map((task) {
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppCustomTokens.spaceXs,
-                          ),
-                          child: RunningStatusCard(task: task),
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                : LayoutBuilder(
+                    builder: (context, constraints) => Row(
+                          key: const ValueKey('running-task-row'),
+                          children: [
+                            HomeTaskTarget.hotwater,
+                            HomeTaskTarget.washer,
+                            HomeTaskTarget.drinking
+                          ].map((target) {
+                            final matching =
+                                tasks.where((task) => task.target == target);
+                            final task =
+                                matching.isEmpty ? null : matching.first;
+                            return AnimatedContainer(
+                              key: ValueKey(target),
+                              duration: ShuiMotion.duration(
+                                  context, ShuiMotion.local),
+                              width: task == null
+                                  ? 0
+                                  : constraints.maxWidth / tasks.length,
+                              clipBehavior: Clip.hardEdge,
+                              decoration: const BoxDecoration(),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppCustomTokens.spaceXs,
+                                ),
+                                child: AnimatedSwitcher(
+                                  duration: ShuiMotion.duration(
+                                    context,
+                                    ShuiMotion.local,
+                                  ),
+                                  child: task == null
+                                      ? const SizedBox.shrink()
+                                      : RunningStatusCard(
+                                          key: ValueKey(
+                                              '${task.target.name}-${task.id}'),
+                                          task: task,
+                                        ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        )),
           ),
         ],
       ),

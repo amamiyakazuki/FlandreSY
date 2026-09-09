@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors service palette, AppTypography.textTheme, AppCustomTokens space.
 // Reference: P_PLAN/...Reference.md §4.5 + legacy ShuiScreens.kt WasherOrderScreen (1171).
 
@@ -122,9 +120,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
     final models = program?.models.take(4).toList() ?? const [];
     final orderBusy = s.washerOrder.isBusy;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final bottomPadding = AppCustomTokens.bottomBarHeight +
-        bottomInset +
-        AppCustomTokens.bottomContentExtraPadding;
+    final bottomPadding = bottomInset + AppCustomTokens.spaceLg;
 
     return Scaffold(
       body: Column(
@@ -174,9 +170,8 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
                   const SizedBox(height: AppCustomTokens.spaceSm),
                   PriceBar(
                     amount: formatFenAmount(_totalFen),
-                    enabled: program != null &&
-                        _selectedModelId != 0 &&
-                        !orderBusy,
+                    enabled:
+                        program != null && _selectedModelId != 0 && !orderBusy,
                     buttonText: orderBusy ? '创建中' : '创建订单',
                     onCreate: () => widget.onCreateOrder(
                       _selectedModelId,
@@ -290,7 +285,8 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
             addedIcons: [ShuiAssets.disinfectLow, ShuiAssets.disinfectHigh],
             options: disinfect,
             selectedId: _selectedDisinfectantGearId,
-            onSelected: (id) => setState(() => _selectedDisinfectantGearId = id),
+            onSelected: (id) =>
+                setState(() => _selectedDisinfectantGearId = id),
           ),
         );
     }
@@ -307,7 +303,8 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
     required ValueChanged<int?> onSelected,
   }) {
     final items = <OptionItem>[
-      OptionItem(title: '不添加', iconAsset: noneIcon, iconColor: AppColors.primary),
+      OptionItem(
+          title: '不添加', iconAsset: noneIcon, iconColor: AppColors.primary),
       for (var i = 0; i < options.length; i++)
         OptionItem(
           title: options[i].name,

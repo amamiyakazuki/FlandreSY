@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Pure routing model (no visual constants).
 
 import 'shui_shell.dart';
@@ -33,6 +31,11 @@ class DrinkingWaterRoute extends ShuiRoute {
   final String cd;
 }
 
+/// 统一账号中心路由（P5-A）。
+class AccountHubRoute extends ShuiRoute {
+  const AccountHubRoute();
+}
+
 /// 账号详情登录子页（P2）。归属 Profile tab。
 class AccountDetailRoute extends ShuiRoute {
   const AccountDetailRoute(this.kind);
@@ -45,6 +48,11 @@ class WasherOrderRoute extends ShuiRoute {
   const WasherOrderRoute(this.qr);
 
   final String qr;
+}
+
+/// 热水控制详情页。
+class HotwaterDetailRoute extends ShuiRoute {
+  const HotwaterDetailRoute();
 }
 
 /// 更多选项子页（M1）。归属 Profile tab。
@@ -64,8 +72,10 @@ extension ShuiRouteParent on ShuiRoute {
       TabRoute(:final tab) => tab,
       EmptyDevicesRoute() => MainTab.devices,
       DrinkingWaterRoute() => MainTab.devices,
+      AccountHubRoute() => MainTab.profile,
       AccountDetailRoute() => MainTab.profile,
       WasherOrderRoute() => MainTab.devices,
+      HotwaterDetailRoute() => MainTab.home,
       MoreOptionsRoute() => MainTab.profile,
       DiagnosticLogRoute() => MainTab.profile,
     };

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors, AppTypography.textTheme, AppCustomTokens space/radius.
 // Reference: P_PLAN/...Reference.md §4.8 + legacy ShuiScreens.kt ZhuliAccountDetail (2643).
 
@@ -7,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
 import '../runtime/fake_shui_runtime.dart';
+import '../theme/shui_motion.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_text_field.dart';
@@ -19,6 +18,8 @@ class ZhuliAccountDetail extends StatefulWidget {
     required this.onLogin,
     required this.onBindDeviceCode,
     required this.onCheckStatus,
+    required this.isDefault,
+    required this.onDefaultChanged,
     super.key,
   });
 
@@ -26,6 +27,8 @@ class ZhuliAccountDetail extends StatefulWidget {
   final void Function(String phone, String password) onLogin;
   final ValueChanged<String> onBindDeviceCode;
   final VoidCallback onCheckStatus;
+  final bool isDefault;
+  final ValueChanged<bool> onDefaultChanged;
 
   @override
   State<ZhuliAccountDetail> createState() => _ZhuliAccountDetailState();
@@ -37,6 +40,14 @@ class _ZhuliAccountDetailState extends State<ZhuliAccountDetail> {
   final TextEditingController _password = TextEditingController();
   late final TextEditingController _deviceCode =
       TextEditingController(text: widget.state.zhuli.deviceCode);
+
+  @override
+  void didUpdateWidget(ZhuliAccountDetail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.state.zhuli.isLoggedIn && !oldWidget.state.zhuli.isLoggedIn) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+  }
 
   @override
   void dispose() {
@@ -61,23 +72,56 @@ class _ZhuliAccountDetailState extends State<ZhuliAccountDetail> {
               SectionTitle(icon: ShuiAssets.shuiZhuli, title: '住理生活'),
               const SizedBox(height: AppCustomTokens.formFieldGap),
               RuntimeStatusBanner(status: s.hotwaterLogin),
-              const SizedBox(height: AppCustomTokens.formFieldGap),
-              ShuiTextField(
-                controller: _phone,
-                label: '手机号',
-                keyboardType: TextInputType.phone,
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('设为默认洗浴系统'),
+                value: widget.isDefault,
+                onChanged: (value) => widget.onDefaultChanged(value ?? false),
               ),
               const SizedBox(height: AppCustomTokens.formFieldGap),
-              ShuiTextField(
-                controller: _password,
-                label: '密码',
-                obscureText: true,
-              ),
-              const SizedBox(height: AppCustomTokens.formFieldGap),
-              PrimaryGradientButton(
-                label: busy ? '登录中' : (loggedIn ? '已登录' : '点击登录'),
-                enabled: !busy,
-                onTap: () => widget.onLogin(_phone.text, _password.text),
+              AnimatedSwitcher(
+                duration: ShuiMotion.duration(context, ShuiMotion.local),
+                child: loggedIn
+                    ? Column(
+                        key: const ValueKey('zhuli-signed-in'),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            '已登录：${s.zhuli.phone}',
+                            style: AppTypography.textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.serviceGreen),
+                          ),
+                          const SizedBox(height: AppCustomTokens.spaceSm),
+                          PrimaryGradientButton(
+                            label: busy ? '正在处理中' : '检查账号状态',
+                            enabled: !busy,
+                            onTap: widget.onCheckStatus,
+                          ),
+                        ],
+                      )
+                    : Column(
+                        key: const ValueKey('zhuli-login-form'),
+                        children: [
+                          ShuiTextField(
+                            controller: _phone,
+                            label: '手机号',
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          ShuiTextField(
+                            controller: _password,
+                            label: '密码',
+                            obscureText: true,
+                          ),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          PrimaryGradientButton(
+                            label: busy ? '登录中' : '点击登录',
+                            enabled: !busy,
+                            onTap: () =>
+                                widget.onLogin(_phone.text, _password.text),
+                          ),
+                        ],
+                      ),
               ),
             ],
           ),

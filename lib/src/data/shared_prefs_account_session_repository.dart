@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // SharedPreferences-backed AccountSessionRepository (no visual constants).
 
 import 'dart:convert';

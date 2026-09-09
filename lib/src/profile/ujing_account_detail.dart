@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors, AppTypography.textTheme, AppCustomTokens space/radius/sms sizing.
 // Reference: P_PLAN/...Reference.md §4.8 + legacy ShuiScreens.kt UjingAccountDetail (2712).
 
@@ -9,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
 import '../runtime/fake_shui_runtime.dart';
+import '../theme/shui_motion.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_text_field.dart';
@@ -48,6 +47,15 @@ class _UjingAccountDetailState extends State<UjingAccountDetail> {
 
   /// 已按哪个「发送时刻」seed 过 cooldown。避免每帧重复 seed 把本地倒计时顶回 30s。
   int _syncedSentAt = 0;
+
+  @override
+  void didUpdateWidget(UjingAccountDetail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.state.ujingAccount != null &&
+        oldWidget.state.ujingAccount == null) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+  }
 
   @override
   void dispose() {
@@ -111,71 +119,99 @@ class _UjingAccountDetailState extends State<UjingAccountDetail> {
                 RuntimeStatusBanner(status: s.ujingCaptcha),
               ],
               const SizedBox(height: AppCustomTokens.formFieldGap),
-              ShuiTextField(
-                controller: _mobile,
-                label: '手机号',
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: AppCustomTokens.formFieldGap),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: ShuiTextField(
-                      controller: _captcha,
-                      label: '验证码',
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                  const SizedBox(width: AppCustomTokens.spaceSm),
-                  SizedBox(
-                    width: AppCustomTokens.smsButtonWidth,
-                    height: AppCustomTokens.smsButtonHeight,
-                    child: PrimaryGradientButton(
-                      label: captchaLoading
-                          ? '发送中'
-                          : (_cooldown > 0 ? '${_cooldown}s' : '发送验证码'),
-                      enabled: !busy && _cooldown == 0,
-                      onTap: () => widget.onRequestCaptcha(_mobile.text),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppCustomTokens.formFieldGap),
-              Row(
-                children: [
-                  Expanded(
-                    child: PrimaryGradientButton(
-                      label: loginLoading
-                          ? '登录中'
-                          : (loggedIn ? '已登录' : '点击登录'),
-                      enabled: !busy,
-                      compact: true,
-                      onTap: () => widget.onLogin(_mobile.text, _captcha.text),
-                    ),
-                  ),
-                  const SizedBox(width: AppCustomTokens.formFieldGap),
-                  Expanded(
-                    child: PrimaryGradientButton(
-                      label: '查看状态',
-                      enabled: !busy,
-                      compact: true,
-                      onTap: widget.onCheckStatus,
-                    ),
-                  ),
-                ],
+              AnimatedSize(
+                duration: ShuiMotion.duration(context, ShuiMotion.local),
+                child: AnimatedSwitcher(
+                  duration: ShuiMotion.duration(context, ShuiMotion.local),
+                  child: loggedIn
+                      ? Column(
+                          key: const ValueKey('ujing-account'),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text('已登录：${account!.mobile}'),
+                            PrimaryGradientButton(
+                                label: '查看状态',
+                                enabled: !busy,
+                                onTap: widget.onCheckStatus),
+                          ],
+                        )
+                      : Column(key: const ValueKey('ujing-form'), children: [
+                          ShuiTextField(
+                            controller: _mobile,
+                            label: '手机号',
+                            keyboardType: TextInputType.phone,
+                          ),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: ShuiTextField(
+                                  controller: _captcha,
+                                  label: '验证码',
+                                  keyboardType: TextInputType.number,
+                                ),
+                              ),
+                              const SizedBox(width: AppCustomTokens.spaceSm),
+                              SizedBox(
+                                width: AppCustomTokens.smsButtonWidth,
+                                height: AppCustomTokens.smsButtonHeight,
+                                child: PrimaryGradientButton(
+                                  label: captchaLoading
+                                      ? '发送中'
+                                      : (_cooldown > 0
+                                          ? '${_cooldown}s'
+                                          : '发送验证码'),
+                                  enabled: !busy && _cooldown == 0,
+                                  onTap: () =>
+                                      widget.onRequestCaptcha(_mobile.text),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppCustomTokens.formFieldGap),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: PrimaryGradientButton(
+                                  label: loginLoading
+                                      ? '登录中'
+                                      : (loggedIn ? '已登录' : '点击登录'),
+                                  enabled: !busy,
+                                  compact: true,
+                                  onTap: () => widget.onLogin(
+                                      _mobile.text, _captcha.text),
+                                ),
+                              ),
+                              const SizedBox(
+                                  width: AppCustomTokens.formFieldGap),
+                              Expanded(
+                                child: PrimaryGradientButton(
+                                  label: '查看状态',
+                                  enabled: !busy,
+                                  compact: true,
+                                  onTap: widget.onCheckStatus,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ]),
+                ),
               ),
               const SizedBox(height: AppCustomTokens.spaceSm),
-              Text(
-                account != null
-                    ? '账号：${account.mobile} / 用户 ${account.userId}'
-                    : '暂无已登录账号',
-                // P2 截断修复：手机号 + userId 拼接超宽，允许两行不裁账号身份。
-                maxLines: 2,
-                softWrap: true,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.textTheme.bodySmall
-                    ?.copyWith(color: AppColors.mutedText),
+              AnimatedSwitcher(
+                duration: ShuiMotion.duration(context, ShuiMotion.local),
+                child: Text(
+                  key: ValueKey(account?.userId ?? 'signed-out'),
+                  account != null
+                      ? '账号：${account.mobile} / 用户 ${account.userId}'
+                      : '暂无已登录账号',
+                  maxLines: 2,
+                  softWrap: true,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.textTheme.bodySmall
+                      ?.copyWith(color: AppColors.mutedText),
+                ),
               ),
             ],
           ),

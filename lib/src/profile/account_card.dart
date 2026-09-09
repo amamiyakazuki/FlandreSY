@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors (serviceBlue/deepText/mutedText), AppTypography.textTheme,
 // AppCustomTokens space/radius/stroke/alpha/profile sizing.
 // Reference: legacy ShuiComponents.kt AccountCard (733+) + §4.7 ProfileScreen U净 card.
@@ -58,7 +56,8 @@ class AccountCard extends StatelessWidget {
               const SizedBox(width: AppCustomTokens.spaceSm),
               Text(
                 title,
-                style: textTheme.titleMedium?.copyWith(color: AppColors.deepText),
+                style:
+                    textTheme.titleMedium?.copyWith(color: AppColors.deepText),
               ),
               const SizedBox(width: AppCustomTokens.spaceXs),
               Text(
@@ -90,7 +89,8 @@ class AccountCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    DecorativeImage(logo, size: AppCustomTokens.accountLogoSize),
+                    DecorativeImage(logo,
+                        size: AppCustomTokens.accountLogoSize),
                     const SizedBox(width: AppCustomTokens.radiusCompact),
                     Expanded(
                       child: Column(
@@ -146,8 +146,8 @@ class AccountCard extends StatelessWidget {
                     borderRadius:
                         BorderRadius.circular(AppCustomTokens.radiusMedium),
                     border: Border.all(
-                      color: accent
-                          .withValues(alpha: AppCustomTokens.alphaPopup),
+                      color:
+                          accent.withValues(alpha: AppCustomTokens.alphaPopup),
                       width: AppCustomTokens.strokeThin,
                     ),
                   ),

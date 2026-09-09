@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors, AppTypography.textTheme, AppCustomTokens space/sizing.
 // Reference: legacy ShuiScreens.kt AboutDialog (3219) + VersionCheckDialog (3079).
 
@@ -13,7 +11,6 @@ import '../widgets/shui_components.dart';
 import 'version_check.dart';
 
 /// 关于弹窗（sleep 插图 + 版本 + 支持说明 + 知道啦）。对齐 legacy AboutDialog。
-/// [appVersion] 为真实 PackageInfo.version（main 注入）；缺省用常量兜底。
 class AboutDialogCard extends StatelessWidget {
   const AboutDialogCard({
     required this.onDismiss,
@@ -65,28 +62,42 @@ class VersionCheckDialogCard extends StatelessWidget {
   const VersionCheckDialogCard({
     required this.result,
     required this.onDismiss,
+    this.onRetry,
     super.key,
   });
 
   final VersionCheckResult result;
   final VoidCallback onDismiss;
+  final VoidCallback? onRetry;
+
+  Future<void> _openDownload(BuildContext context) async {
+    final latest = result.latest;
+    if (latest == null) return;
+    final uri = Uri.tryParse(latest.downloadUrl);
+    if (uri == null ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法打开下载地址，请稍后重试。')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = AppTypography.textTheme;
-    final isError = result.error != null;
-    final downloadUrl = result.latest.downloadUrl;
-    final canDownload = result.hasUpdate && downloadUrl.isNotEmpty;
-
-    final title = isError
-        ? '版本检查失败'
-        : (result.hasUpdate ? '发现新版本' : '已是最新版本');
-    final body = isError
-        ? '${result.error}\n（当前版本 ${result.current}）'
+    final title = result.failed
+        ? '检查更新失败'
         : result.hasUpdate
-            ? '最新版本 ${result.latest.version}（当前 ${result.current}）\n'
-                '${result.latest.changelog.join('；')}\n'
-                '可前往 GitHub Releases 下载更新。'
+            ? '发现新版本'
+            : '已是最新版本';
+    final body = result.failed
+        ? result.error!
+        : result.hasUpdate
+            ? '最新版本 ${result.latest!.version}（当前 ${result.current}）\n'
+                '${result.latest!.releaseDate.isEmpty ? '' : '发布日期：${result.latest!.releaseDate}\n'}'
+                '${result.latest!.changelog.join('；')}'
             : '当前版本 ${result.current} 已是最新。';
     return ShuiModalCard(
       onDismiss: onDismiss,
@@ -106,24 +117,25 @@ class VersionCheckDialogCard extends StatelessWidget {
             style: textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
           ),
           const SizedBox(height: AppCustomTokens.spaceMd),
-          PrimaryGradientButton(
-            label: canDownload ? '获取最新版' : '知道啦',
-            onTap: canDownload
-                ? () => _openDownload(downloadUrl)
-                : onDismiss,
-          ),
+          if (result.hasUpdate) ...[
+            PrimaryGradientButton(
+              label: '立即下载',
+              icon: Icons.download_rounded,
+              onTap: () => _openDownload(context),
+            ),
+            const SizedBox(height: AppCustomTokens.spaceSm),
+          ],
+          if (result.failed)
+            PrimaryGradientButton(
+              label: '重试',
+              icon: Icons.refresh_rounded,
+              onTap: onRetry ?? onDismiss,
+            )
+          else
+            PrimaryGradientButton(label: '知道啦', onTap: onDismiss),
         ],
       ),
     );
-  }
-
-  /// 打开下载链接（对齐 legacy ACTION_VIEW）。外部浏览器打开 GitHub Releases，随后关闭弹窗。
-  Future<void> _openDownload(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-    onDismiss();
   }
 }
 

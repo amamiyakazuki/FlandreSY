@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Fake Ujing adapter (no visual constants). Moves the fake data + timing that previously lived
 // inline in water/washer/account actions here, 1:1 (delays/values/text preserved) — so the
 // refactor is zero-behavior-change. Real values come from legacy 抓包 (133ml/2s/¥0.02, 海七套餐).
@@ -105,7 +103,8 @@ class FakeUjingAdapter implements IUjingAdapter {
       (m) => m.id == washModelId,
       orElse: () => program.models.first,
     );
-    final detergent = _findAddition(model, 'wp_detergentGearId', detergentGearId);
+    final detergent =
+        _findAddition(model, 'wp_detergentGearId', detergentGearId);
     final disinfect =
         _findAddition(model, 'wp_disinfectantGearId', disinfectantGearId);
     // 水温档价纳入 fake payPrice（同 UI _totalFen 共用 kWasherTemperaturePriceFen）→

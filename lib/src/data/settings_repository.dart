@@ -1,9 +1,8 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Persistence abstraction (no visual constants). Decouples runtime from storage IO
 // (roadmap §3/§4: keep persistence out of the runtime; inject via interface).
 
 import '../runtime/runtime_status.dart';
+import '../runtime/hotwater_state.dart';
 
 /// 设置持久化接口（P1 架构准备）。
 ///
@@ -16,11 +15,13 @@ import '../runtime/runtime_status.dart';
 abstract class SettingsRepository {
   /// 读取已保存的浴室系统偏好；无记录时返回 [fallback]（首启默认）。
   Future<BathSystemPreference> loadBathSystem({
-    BathSystemPreference fallback = BathSystemPreference.zhuli,
+    BathSystemPreference fallback = BathSystemPreference.none,
   });
 
   /// 持久化浴室系统偏好。
   Future<void> saveBathSystem(BathSystemPreference preference);
+  Future<HotwaterSession?> loadHotwaterSession();
+  Future<void> saveHotwaterSession(HotwaterSession? session);
 
   /// 读取「使用模拟后端」开关（Phase 0）；无记录时返回 [fallback]。
   /// true = 强制全 Fake + InMemory（无账号/设备的开发演示）；false = 真实后端（默认）。
@@ -29,6 +30,10 @@ abstract class SettingsRepository {
 
   /// 持久化「使用模拟后端」开关。因 adapter 在启动时一次性构造，改动需重启才生效。
   Future<void> saveUseSimulatedBackend(bool useSimulated);
+
+  Future<bool> loadPermissionIntroSeen({bool fallback = false});
+
+  Future<void> savePermissionIntroSeen(bool seen);
 }
 
 /// 内存实现：默认兜底 + 测试注入用。无 IO、无平台依赖。
@@ -41,10 +46,11 @@ class InMemorySettingsRepository implements SettingsRepository {
 
   BathSystemPreference? _bathSystem;
   bool? _useSimulatedBackend;
+  bool? _permissionIntroSeen;
 
   @override
   Future<BathSystemPreference> loadBathSystem({
-    BathSystemPreference fallback = BathSystemPreference.zhuli,
+    BathSystemPreference fallback = BathSystemPreference.none,
   }) async {
     return _bathSystem ?? fallback;
   }
@@ -52,6 +58,14 @@ class InMemorySettingsRepository implements SettingsRepository {
   @override
   Future<void> saveBathSystem(BathSystemPreference preference) async {
     _bathSystem = preference;
+  }
+
+  HotwaterSession? _hotwaterSession;
+  @override
+  Future<HotwaterSession?> loadHotwaterSession() async => _hotwaterSession;
+  @override
+  Future<void> saveHotwaterSession(HotwaterSession? session) async {
+    _hotwaterSession = session;
   }
 
   @override
@@ -62,5 +76,14 @@ class InMemorySettingsRepository implements SettingsRepository {
   @override
   Future<void> saveUseSimulatedBackend(bool useSimulated) async {
     _useSimulatedBackend = useSimulated;
+  }
+
+  @override
+  Future<bool> loadPermissionIntroSeen({bool fallback = false}) async =>
+      _permissionIntroSeen ?? fallback;
+
+  @override
+  Future<void> savePermissionIntroSeen(bool seen) async {
+    _permissionIntroSeen = seen;
   }
 }

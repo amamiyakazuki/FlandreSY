@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors, AppTypography.textTheme, AppCustomTokens order/chip sizing/radius.
 // Reference: legacy ShuiComponents.kt OrderListItem (664) + ShuiScreens.kt CategoryChip (2206).
 
@@ -33,13 +31,15 @@ class CategoryChip extends StatelessWidget {
     return ShuiPressable(
       soft: true,
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: ShuiMotion.duration(context, ShuiMotion.local),
         height: AppCustomTokens.categoryChipHeight,
         decoration: BoxDecoration(
           color: selected
               ? color
               : AppColors.surface.withValues(alpha: AppCustomTokens.alphaCard),
-          borderRadius: BorderRadius.circular(AppCustomTokens.categoryChipRadius),
+          borderRadius:
+              BorderRadius.circular(AppCustomTokens.categoryChipRadius),
           border: Border.all(
             color: color.withValues(alpha: AppCustomTokens.alphaAccent),
             width: AppCustomTokens.strokeThin,
@@ -49,7 +49,8 @@ class CategoryChip extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            DecorativeImage(iconAsset, size: AppCustomTokens.categoryChipIconSize),
+            DecorativeImage(iconAsset,
+                size: AppCustomTokens.categoryChipIconSize),
             const SizedBox(width: AppCustomTokens.spaceXs),
             Text(
               text,
@@ -92,12 +93,13 @@ class OrderListItem extends StatelessWidget {
                   order.type,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      textTheme.titleMedium?.copyWith(color: AppColors.deepText),
+                  style: textTheme.titleMedium
+                      ?.copyWith(color: AppColors.deepText),
                 ),
               ),
               const Spacer(),
-              StatusPill(text: order.status, color: order.statusColor, filled: true),
+              StatusPill(
+                  text: order.status, color: order.statusColor, filled: true),
             ],
           ),
           const SizedBox(height: AppCustomTokens.orderItemRowGap),
@@ -105,7 +107,8 @@ class OrderListItem extends StatelessWidget {
             children: [
               Text(
                 order.time,
-                style: textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
+                style:
+                    textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
               ),
               const SizedBox(width: AppCustomTokens.spaceLg),
               Expanded(
@@ -120,13 +123,15 @@ class OrderListItem extends StatelessWidget {
               const SizedBox(width: AppCustomTokens.spaceSm),
               Text(
                 order.amount,
-                style: textTheme.titleSmall?.copyWith(color: AppColors.deepText),
+                style:
+                    textTheme.titleSmall?.copyWith(color: AppColors.deepText),
               ),
               const SizedBox(width: AppCustomTokens.spaceSm),
               if (order.onTap != null)
                 Text(
                   '›',
-                  style: textTheme.titleLarge?.copyWith(color: AppColors.primary),
+                  style:
+                      textTheme.titleLarge?.copyWith(color: AppColors.primary),
                 ),
             ],
           ),

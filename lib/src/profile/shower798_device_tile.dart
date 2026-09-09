@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors (primary/serviceGreen/serviceOrange/cardBorder/deepText/mutedText),
 // AppTypography.textTheme, AppCustomTokens space/radius/stroke/alpha.
 // Reference: legacy ShuiScreens.kt Shower798AccountDetail device list item.
@@ -36,13 +34,18 @@ class Shower798DeviceTile extends StatelessWidget {
     return ShuiPressable(
       onTap: onSelect,
       soft: true,
-      child: Container(
+      child: AnimatedContainer(
+        duration: ShuiMotion.duration(context, ShuiMotion.local),
         width: double.infinity,
         padding: const EdgeInsets.symmetric(
           horizontal: AppCustomTokens.radiusMedium,
           vertical: AppCustomTokens.radiusMedium,
         ),
         decoration: BoxDecoration(
+          color: isCurrent
+              ? AppColors.primary
+                  .withValues(alpha: AppCustomTokens.alphaVeryLow)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(AppCustomTokens.radiusMedium),
           border: Border.all(
             color: AppColors.cardBorder

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // flutter_secure_storage-backed SecureSessionRepository (no visual constants). Stores auth tokens /
 // secrets encrypted via Android Keystore / iOS Keychain. THIS IS THE ONLY LAYER THAT TOUCHES REAL
 // secure storage, and it is NOT verified by Codex (no device / no platform channel under test) — real
@@ -19,6 +17,13 @@ class FlutterSecureSessionRepository implements SecureSessionRepository {
       : _storage = storage ?? const FlutterSecureStorage();
 
   final FlutterSecureStorage _storage;
+  @override
+  Future<String?> loadHotwaterIsn(String sessionId) =>
+      _storage.read(key: 'hotwater_isn_$sessionId');
+  @override
+  Future<void> saveHotwaterIsn(String sessionId, String? isn) => isn == null
+      ? _storage.delete(key: 'hotwater_isn_$sessionId')
+      : _storage.write(key: 'hotwater_isn_$sessionId', value: isn);
 
   static const String _ujingTokenKey = 'secure_ujing_token';
   static const String _zhuliSessionKey = 'secure_zhuli_session_json';
@@ -48,8 +53,8 @@ class FlutterSecureSessionRepository implements SecureSessionRepository {
   }
 
   @override
-  Future<void> saveZhuliSession(ZhuliSessionData session) =>
-      _storage.write(key: _zhuliSessionKey, value: jsonEncode(session.toJson()));
+  Future<void> saveZhuliSession(ZhuliSessionData session) => _storage.write(
+      key: _zhuliSessionKey, value: jsonEncode(session.toJson()));
 
   @override
   Future<void> clearZhuliSession() => _storage.delete(key: _zhuliSessionKey);

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Home tab actions (Module A). Mixin on ShuiRuntimeBase; behavior unchanged by the runtime split.
 
 import '../runtime_status.dart';
@@ -22,9 +20,7 @@ mixin HomeActions on ShuiRuntimeBase {
     final next = state.bathSystemPreference == BathSystemPreference.zhuli
         ? BathSystemPreference.shower798
         : BathSystemPreference.zhuli;
-    emit(state.copyWith(bathSystemPreference: next));
-    // 持久化偏好（P1）：通过注入的 repository 落盘，runtime 不直接碰 IO。
-    settings.saveBathSystem(next);
+    setBathSystem(next);
   }
 
   /// 切换「使用模拟后端」（Phase 0）。emit 新值让开关即时反映 + 持久化。

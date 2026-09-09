@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Account sub-state (no visual constants). Extracted from ShuiHomeState to keep the aggregate
 // from bloating as account services grow (Grok P2 Major: runtime aggregation). P3 (798) fields
 // will land here, not on the top-level state.

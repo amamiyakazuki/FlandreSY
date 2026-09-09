@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Account login actions (Module P2; U净 refactored in P4 A1 to orchestrate IUjingAdapter;
 // 住理 wired to IHotwaterAdapter in Z2-fix so real login populates the adapter session).
 // Boundary: Zhuli (住理) + Ujing (U净) login both go through their adapter (Fake by default,
@@ -22,7 +20,11 @@ mixin AccountActions on ShuiRuntimeBase {
   /// 真实（RealZhuliAdapter）：平台签名 HTTP 登录并在 adapter 内部持 session
   /// （startHotwater/stopHotwater 依赖 `_requireSession()`，否则「一点开水就显示未登录」）。
   Future<void> loginZhuli(String phone, String password) async {
-    if (state.hotwaterLogin.isBusy) {
+    await ready;
+    if (isDisposed ||
+        state.hotwaterStart.isBusy ||
+        state.hotwaterStop.isBusy ||
+        state.hotwaterLogin.isBusy) {
       return;
     }
     final normalizedPhone = phone.trim();
@@ -46,6 +48,7 @@ mixin AccountActions on ShuiRuntimeBase {
       ),
     );
     final ZhuliSessionData sessionData;
+    hotwaterAuthEpoch++;
     try {
       sessionData = await hotwater.loginZhuli(normalizedPhone, password.trim());
     } on HotwaterException catch (e) {
@@ -70,11 +73,13 @@ mixin AccountActions on ShuiRuntimeBase {
       ),
     );
     await sessions.saveZhuli(session);
+    await setBathSystem(BathSystemPreference.zhuli);
     // PTOK：real 模式下 adapter 返回带 secretKey 的真 session → 加密持久化（重启免重登）。
     // Fake 返回占位 session（secretKey='fake-secret'）也会存——无害（重启仍走 Fake adapter）。
     if (sessionData.isValid) {
       await secure.saveZhuliSession(sessionData);
     }
+    resumeHotwaterSession();
   }
 
   /// 绑定热水设备码（对齐 legacy bindHotwaterDeviceCode）。

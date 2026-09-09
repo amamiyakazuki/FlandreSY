@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Real Ujing HTTP transport (no visual constants). Uses dart:io HttpClient (faithful to legacy
 // UjingApi.java's HttpURLConnection: BASE + cookie jar + appCode/weex/brand/model headers + Bearer).
 // THIS IS THE ONLY LAYER THAT TOUCHES A REAL SOCKET, and it is NOT verified by Codex — real network

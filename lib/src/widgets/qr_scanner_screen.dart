@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors.background/deepText/primary/onPrimary/surface, AppTypography.textTheme,
 // AppCustomTokens spacing/radius.
 //
@@ -65,7 +63,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
   /// 其它类型异常（平台异常 / controllerNotAttached 超时等）controller 不会写入 value.error，
   /// 故此处自己捕获并存 [_startFailure]，保证任何失败都有诊断可见。「重试」也调用它。
   Future<void> _startScanner() async {
-    if (!mounted) {
+    if (!mounted || _handled || _starting) {
       return;
     }
     setState(() {
@@ -108,7 +106,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
   }
 
   void _onDetect(BarcodeCapture capture) {
-    if (_handled) {
+    if (_handled || !mounted || ModalRoute.of(context)?.isCurrent != true) {
       return;
     }
     for (final barcode in capture.barcodes) {
@@ -137,7 +135,10 @@ class _QrScannerScreenState extends State<QrScannerScreen>
         ),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            _handled = true;
+            Navigator.of(context).pop();
+          },
         ),
       ),
       body: Stack(
@@ -178,7 +179,8 @@ class _QrScannerScreenState extends State<QrScannerScreen>
                   color: AppColors.onPrimary,
                   width: AppCustomTokens.strokeThin,
                 ),
-                borderRadius: BorderRadius.circular(AppCustomTokens.radiusLarge),
+                borderRadius:
+                    BorderRadius.circular(AppCustomTokens.radiusLarge),
               ),
             ),
           ),

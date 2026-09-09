@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Fake 慧生活798 adapter (no visual constants). Moves the fake data + timing that previously lived
 // inline in shower798_actions + hotwater_actions (798 part) here, 1:1 (fakeCaptchaBase64 refresh
 // palette / 620ms / seed devices / idle-busy toggle on refresh) — so the refactor is

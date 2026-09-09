@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // App bootstrap: single source for loading persisted state (settings + account sessions).
 // Used by main() preload (no first-frame flash) and runtime async restore alike.
 
@@ -8,6 +6,7 @@ import '../runtime/models/hotwater_history.dart';
 import '../runtime/models/local_device.dart';
 import '../runtime/models/water_order.dart';
 import '../runtime/runtime_status.dart';
+import '../runtime/hotwater_state.dart';
 import 'account_session_repository.dart';
 import 'history_repository.dart';
 import 'local_device_repository.dart';
@@ -20,11 +19,13 @@ class PersistedSnapshot {
   const PersistedSnapshot({
     required this.bathSystem,
     this.useSimulatedBackend = false,
+    this.permissionIntroSeen = false,
     this.zhuli,
     this.ujing,
     this.shower798,
     this.localDevices,
     this.hotwaterHistory,
+    this.hotwaterSession,
     this.currentWaterOrder,
     this.waterHistory,
   });
@@ -34,6 +35,7 @@ class PersistedSnapshot {
   /// 「使用模拟后端」开关（Phase 0）。true = 强制 Fake + InMemory；false = 真实后端（默认）。
   /// main() 在 await 本快照后、建 adapter 前读取此值决定注入真实还是 Fake。
   final bool useSimulatedBackend;
+  final bool permissionIntroSeen;
 
   final ZhuliSession? zhuli;
   final UjingAccountUi? ujing;
@@ -44,11 +46,8 @@ class PersistedSnapshot {
 
   /// 热水历史（PHIST）。null = 从未持久化过（首启走 adapter 拉取）；非 null = 写入 hotwater.history。
   final List<HotwaterHistoryUi>? hotwaterHistory;
-
-  /// 当前进行中的接水订单（PWATER 问题7）。null = 无当前订单（未持久化或已完成）。
+  final HotwaterSession? hotwaterSession;
   final WaterOrderUi? currentWaterOrder;
-
-  /// 已完成的接水历史（PWATER 问题7）。null = 从未持久化过（首启无饮水历史）。
   final List<WaterOrderHistoryUi>? waterHistory;
 }
 
@@ -66,20 +65,24 @@ class AppBootstrap {
   ) async {
     final bathSystem = await settings.loadBathSystem();
     final useSimulatedBackend = await settings.loadUseSimulatedBackend();
+    final permissionIntroSeen = await settings.loadPermissionIntroSeen();
     final zhuli = await sessions.loadZhuli();
     final ujing = await sessions.loadUjing();
     final shower798 = await sessions.loadShower798();
     final localDevices = await devices.loadDevices();
     final hotwaterHistory = await history.loadHistory();
+    final hotwaterSession = await settings.loadHotwaterSession();
     final waterSnapshot = await water.load();
     return PersistedSnapshot(
       bathSystem: bathSystem,
       useSimulatedBackend: useSimulatedBackend,
+      permissionIntroSeen: permissionIntroSeen,
       zhuli: zhuli,
       ujing: ujing,
       shower798: shower798,
       localDevices: localDevices,
       hotwaterHistory: hotwaterHistory,
+      hotwaterSession: hotwaterSession,
       currentWaterOrder: waterSnapshot?.currentOrder,
       waterHistory: waterSnapshot?.history,
     );

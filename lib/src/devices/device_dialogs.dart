@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Design tokens used: AppColors palette, AppTypography.textTheme, AppCustomTokens space/radius/stroke/dialog sizing/alpha.
 // Reference: P_PLAN/FlandreSY-Complete-Functions-and-UI-Design-Reference.md §4.6；legacy ShuiComponents.kt AddWasherDialog/DeviceActionPopup, ShuiScreens.kt PresetWasherDeviceDialog/EditDeviceNameDialog.
 
@@ -30,10 +28,16 @@ class _DialogScaffold extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onDismiss,
       child: ColoredBox(
-        color: AppColors.scrim.withValues(alpha: overlayAlpha),
+        color: Colors.transparent,
         child: Center(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: horizontalMargin),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                horizontalMargin,
+                MediaQuery.paddingOf(context).top + AppCustomTokens.spaceMd,
+                horizontalMargin,
+                MediaQuery.viewInsetsOf(context).bottom +
+                    MediaQuery.paddingOf(context).bottom +
+                    AppCustomTokens.spaceMd),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {},
@@ -59,14 +63,14 @@ class _DialogTitleRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Spacer(),
-        Text(
+        Expanded(
+            child: Text(
           title,
           style: AppTypography.textTheme.titleLarge?.copyWith(
             color: AppColors.deepText,
           ),
-        ),
-        Expanded(
+        )),
+        SizedBox(
           child: Align(
             alignment: Alignment.centerRight,
             child: ShuiPressable(
@@ -205,11 +209,14 @@ class PresetDeviceDialog extends StatelessWidget {
             height: AppCustomTokens.presetGridHeight,
             child: GridView.builder(
               padding: EdgeInsets.zero,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount:
+                    MediaQuery.textScalerOf(context).scale(14) > 20 ? 2 : 3,
                 mainAxisSpacing: AppCustomTokens.spaceSm,
                 crossAxisSpacing: AppCustomTokens.spaceSm,
-                mainAxisExtent: AppCustomTokens.presetCellHeight,
+                mainAxisExtent: AppCustomTokens.presetCellHeight *
+                    MediaQuery.textScalerOf(context).scale(14) /
+                    14,
               ),
               itemCount: haiqiPresetWashers.length,
               itemBuilder: (context, index) {
@@ -276,7 +283,7 @@ class DeviceActionPopup extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onDismiss,
       child: ColoredBox(
-        color: AppColors.scrim.withValues(alpha: AppCustomTokens.alphaPopup),
+        color: Colors.transparent,
         child: Align(
           alignment: Alignment.centerRight,
           child: Padding(

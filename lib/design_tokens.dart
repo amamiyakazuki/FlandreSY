@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 import 'package:flutter/material.dart';
 
 /// FlandreSY 设计令牌 - 基于 Material 3 + 原生视觉精确提取
@@ -60,7 +58,8 @@ class AppColors {
   static const Color serviceOrange = Color(0xFFFFA93A);
   static const Color serviceGreen = Color(0xFF7DBF4C);
   static const Color serviceBrown = Color(0xFF7C4A50);
-  static const Color serviceViolet = Color(0xFF8D62E8); // 洗衣套餐第 4 色 (legacy OptionCard)
+  static const Color serviceViolet =
+      Color(0xFF8D62E8); // 洗衣套餐第 4 色 (legacy OptionCard)
   static const Color error = Color(0xFFBA1A1A);
 
   // Material 3 完整 ColorScheme (Light only，无暗黑模式)
@@ -380,9 +379,11 @@ class AppCustomTokens {
       104.0; // legacy profile_top_character 104dp
   static const double profileBottomDecorSize =
       258.0; // legacy shui_wode_bottom 258dp
-  static const double profileBottomDecorHeight =
-      86.0; // legacy 底部装饰容器高度 86dp
+  static const double profileBottomDecorHeight = 86.0; // legacy 底部装饰容器高度 86dp
   static const double accountLogoSize = 42.0; // legacy 账号 logo / 浴室系统 logo 42dp
+  static const double accountEntryDiameter = 96.0;
+  static const double accountEntryImageSize = 60.0;
+  static const double accountEntryWidth = 144.0;
   static const double accountSmallIconSize =
       22.0; // legacy AccountServiceRow / mini action 图标 22dp
   static const double accountLoginButtonWidth =
@@ -397,14 +398,12 @@ class AppCustomTokens {
   // ========== Module P2 - AccountDetail 登录页还原尺寸 ==========
   static const double smsButtonWidth =
       92.0; // legacy UjingAccountDetail「发送验证码」按钮宽 92dp
-  static const double smsButtonHeight =
-      52.0; // legacy 发送验证码按钮高 52dp（与输入框对齐）
+  static const double smsButtonHeight = 52.0; // legacy 发送验证码按钮高 52dp（与输入框对齐）
   static const int smsCooldownSeconds = 30; // legacy 验证码 30s cooldown
   static const double formFieldGap = 10.0; // legacy 登录卡内字段垂直间距 10dp
 
   // ========== Module P3 - 慧生活798 登录页还原尺寸 ==========
-  static const double captchaBoxHeight =
-      84.0; // legacy Shower798 图形验证码框高 84dp
+  static const double captchaBoxHeight = 84.0; // legacy Shower798 图形验证码框高 84dp
   static const double captchaBoxPadding = 8.0; // legacy 验证码图内边距 8dp
 
   // ========== Module W1 - Washer 下单页还原尺寸 ==========
@@ -412,8 +411,7 @@ class AppCustomTokens {
   static const double optionCardTallHeight =
       86.0; // legacy OptionCard 带副标题高 86dp
   static const double optionCardIconSize = 22.0; // legacy OptionCard 行内图标 22dp
-  static const double optionCardIconLarge =
-      31.0; // legacy OptionCard 竖排图标 31dp
+  static const double optionCardIconLarge = 31.0; // legacy OptionCard 竖排图标 31dp
   static const double optionCheckSize = 20.0; // legacy 选中角标 20dp
   static const double optionStroke = 1.3; // legacy OptionCard 描边 1.3dp
   static const double washerMachineInfoSize =
@@ -422,7 +420,8 @@ class AppCustomTokens {
   // ========== Module W2 - Orders 聚合页还原尺寸 ==========
   static const double categoryChipHeight = 44.0; // legacy CategoryChip 高 44dp
   static const double categoryChipRadius = 9.0; // legacy CategoryChip 圆角 9dp
-  static const double categoryChipIconSize = 22.0; // legacy CategoryChip 图标 22dp
+  static const double categoryChipIconSize =
+      22.0; // legacy CategoryChip 图标 22dp
   static const double orderItemIconSize = 28.0; // legacy OrderListItem 图标 28dp
   static const double orderItemRowGap = 16.0; // legacy OrderListItem 两行间距 16dp
 }

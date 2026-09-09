@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Washer sub-state (no visual constants). Extracted like AccountState to keep the aggregate
 // ShuiHomeState from bloating (Grok P2 Major pattern). Holds program/order/payment/history.
 

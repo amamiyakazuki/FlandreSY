@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Orders view models (no visual constants). Normalizes hotwater/drinking/washer orders into a
 // single OrderRowUi for the shared OrderListItem. Aligns with legacy OrderCategory + OrderUi.
 
@@ -12,6 +10,7 @@ enum OrderCategory { hotwater, drinking, washer }
 @immutable
 class OrderRowUi {
   const OrderRowUi({
+    this.id = '',
     required this.type,
     required this.time,
     required this.device,
@@ -23,6 +22,7 @@ class OrderRowUi {
   });
 
   final String type;
+  final String id;
   final String time;
   final String device;
   final String amount;

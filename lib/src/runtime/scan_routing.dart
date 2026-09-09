@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Pure scan-QR classification (no visual constants, no IO). 1:1 port of legacy
 // runtime/ShuiUiModels.kt `classifyScanRouting` + `ScanRouting`. The camera layer
 // (qr_scanner_screen.dart, mobile_scanner) feeds a raw QR string here; this file decides
@@ -75,8 +73,7 @@ String? _extractCd(String raw) {
   if (fromUri != null && fromUri.isNotEmpty) {
     return fromUri;
   }
-  final match =
-      RegExp(r'[?&]cd=([^&]+)', caseSensitive: false).firstMatch(raw);
+  final match = RegExp(r'[?&]cd=([^&]+)', caseSensitive: false).firstMatch(raw);
   final captured = match?.group(1)?.trim();
   if (captured != null && captured.isNotEmpty) {
     return captured;

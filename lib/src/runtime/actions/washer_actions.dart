@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Washer order actions (Module W1; refactored in P4 A1 to orchestrate IUjingAdapter).
 // The adapter supplies data + IO latency + status transitions; this mixin does validation,
 // emit, order-seq / history bookkeeping, refreshedAt stamping (clock), and autoStart timing.
@@ -145,9 +143,12 @@ mixin WasherActions on ShuiRuntimeBase {
 
   /// 支付宝支付（adapter 成功 → status=20；autoStart 则延时自动启动 → 40）。
   /// 对齐 legacy payCurrentWasherOrderWithAlipay。
-  Future<void> payCurrentWasherOrderWithAlipay(bool autoStartAfterPayment) async {
+  Future<void> payCurrentWasherOrderWithAlipay(
+      bool autoStartAfterPayment) async {
     final order = state.washer.currentOrder;
-    if (order == null || state.washer.washerPayment.isBusy) {
+    if (order == null ||
+        order.status != '10' ||
+        state.washer.washerPayment.isBusy) {
       return;
     }
     emit(
@@ -164,6 +165,7 @@ mixin WasherActions on ShuiRuntimeBase {
     try {
       paid = await ujing.payWasherOrder(order);
     } on UjingException catch (e) {
+      if (state.washer.currentOrder?.orderId != order.orderId) return;
       if (e.authInvalid) {
         await handleAuthInvalidation(AuthService.ujing);
         return;
@@ -180,11 +182,13 @@ mixin WasherActions on ShuiRuntimeBase {
       );
       return;
     }
+    if (state.washer.currentOrder?.orderId != order.orderId) return;
     emit(
       state.copyWith(
         washer: state.washer.copyWith(
           currentOrder: paid,
-          payment: WasherPaymentUi(orderId: order.orderId, paymentSucceeded: true),
+          payment:
+              WasherPaymentUi(orderId: order.orderId, paymentSucceeded: true),
           history: _appendHistory(paid),
           washerPayment: RuntimeActionStatus(
             state: RuntimeTaskState.success,
@@ -195,9 +199,12 @@ mixin WasherActions on ShuiRuntimeBase {
         ),
       ),
     );
-    if (autoStartAfterPayment) {
+    if (autoStartAfterPayment && paid.status == '20') {
       await Future<void>.delayed(const Duration(seconds: 3));
-      await startCurrentWasherOrder();
+      if (state.washer.currentOrder?.orderId == order.orderId &&
+          state.washer.currentOrder?.status == '20') {
+        await startCurrentWasherOrder();
+      }
     }
   }
 

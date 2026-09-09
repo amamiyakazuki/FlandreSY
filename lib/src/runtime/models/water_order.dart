@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Pure data models (no visual constants); UI consumers apply design tokens.
 
 import 'package:flutter/foundation.dart';

@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Hotwater history persistence abstraction (no visual constants). Same decoupling pattern as
 // LocalDeviceRepository (PDEV) / AccountSessionRepository. PHIST: the hotwater history list
 // (state.hotwater.history) previously lived only in memory (adapter-fetched + live start/stop

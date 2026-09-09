@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Real Zhuli signed-HTTP transport (no visual constants). Uses dart:io HttpClient (faithful to legacy
 // LegacyHotwaterActivity.ZhuliApi's HttpURLConnection: GET + sign in query + result==true). The
 // result-check + data decoding (incl. the base64url-encoded-JSON-string `data` case) lives in the

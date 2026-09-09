@@ -1,29 +1,30 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Routing orchestration only; visual chrome lives in shui_shell_chrome.dart (token-compliant).
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import '../data/local_device_repository.dart';
 import '../devices/device_dialogs.dart';
+import '../data/permission_service.dart';
 import '../devices/devices_screen.dart';
 import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
-import '../more/log_screen.dart';
+import '../hotwater/hotwater_detail_screen.dart';
 import '../more/more_options_screen.dart';
-import '../more/permission_check.dart';
+import '../more/log_screen.dart';
 import '../orders/orders_screen.dart';
 import '../profile/account_detail_screen.dart';
+import '../profile/account_hub_screen.dart';
 import '../profile/profile_screen.dart';
 import '../runtime/fake_shui_runtime.dart';
-import '../runtime/models/account_session.dart';
 import '../runtime/models/local_device.dart';
 import '../runtime/scan_routing.dart';
 import '../theme/shui_motion.dart';
 import '../washer/washer_order_screen.dart';
 import '../widgets/qr_scanner_screen.dart';
 import '../widgets/shui_components.dart';
+import '../widgets/shui_overlay_host.dart';
 import 'shui_route.dart';
 import 'shui_shell_chrome.dart';
 
@@ -39,6 +40,34 @@ enum MainTab {
   final String iconName;
 }
 
+class _ShuiDetailPage extends Page<void> {
+  const _ShuiDetailPage(
+      {required this.child, required this.reduced, required super.key});
+
+  final Widget child;
+  final bool reduced;
+
+  @override
+  Route<void> createRoute(BuildContext context) => _ShuiDetailRoute(this);
+}
+
+class _ShuiDetailRoute extends CupertinoPageRoute<void> {
+  _ShuiDetailRoute(_ShuiDetailPage page)
+      : super(settings: page, builder: (_) => page.child);
+
+  _ShuiDetailPage get page => settings as _ShuiDetailPage;
+
+  @override
+  Duration get transitionDuration =>
+      page.reduced ? Duration.zero : ShuiMotion.route;
+
+  @override
+  Duration get reverseTransitionDuration => transitionDuration;
+
+  @override
+  Widget buildContent(BuildContext context) => page.child;
+}
+
 class ShuiShell extends StatefulWidget {
   const ShuiShell({super.key});
 
@@ -46,22 +75,27 @@ class ShuiShell extends StatefulWidget {
   State<ShuiShell> createState() => _ShuiShellState();
 }
 
-class _ShuiShellState extends State<ShuiShell> {
+class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   /// 当前路由（替代原先的纯 tab 切换，支持 push 子页面 + 返回栈）。
-  ShuiRoute route = const TabRoute(MainTab.home);
+  MainTab _mainTab = MainTab.home;
+  final List<ShuiRoute> _details = [];
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  ShuiRoute get route => _details.isEmpty ? TabRoute(_mainTab) : _details.last;
+  int _routeDirection = 1;
+  bool _scannerOpen = false;
+  bool _foreground = true;
 
   bool openingVisible = true;
   bool permissionVisible = true;
+  final ShuiPermissionService _permissionService =
+      const ShuiPermissionService();
+  ShuiPermissionState? _permissionState;
 
   // Devices 模块的对话框/弹层状态（叠加在路由之上，由 PopScope 优先消费返回）。
   bool showAddDevice = false;
   bool showPresetPicker = false;
   LocalDeviceShortcut? menuDevice;
   LocalDeviceShortcut? editingDevice;
-
-  /// 标记当前饮水订单是否已创建过：用于「创建后被清空」=完成 的判定，
-  /// 避免进入页面初始 null 被误判为完成。
-  bool _drinkingOrderWasActive = false;
 
   bool get _hasOverlay =>
       showAddDevice ||
@@ -73,21 +107,85 @@ class _ShuiShellState extends State<ShuiShell> {
 
   MainTab get _selectedTab => route.parentTab;
 
+  bool get _showBottomBar => switch (route) {
+        DrinkingWaterRoute() || WasherOrderRoute() => false,
+        _ => true,
+      };
+
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(ShuiMotion.opening, () {
-      if (mounted) {
-        setState(() => openingVisible = false);
+    WidgetsBinding.instance.addObserver(this);
+    _refreshPermissions();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Future<void>.delayed(ShuiMotion.duration(context, ShuiMotion.opening),
+          () {
+        if (mounted) setState(() => openingVisible = false);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    setState(() => _foreground = state == AppLifecycleState.resumed);
+    if (state == AppLifecycleState.resumed) {
+      _refreshPermissions();
+    }
+  }
+
+  Future<void> _refreshPermissions() async {
+    final permissions = await _permissionService.check();
+    if (mounted) setState(() => _permissionState = permissions);
+  }
+
+  Future<void> _requestPermissions() async {
+    setState(() {
+      permissionVisible = false;
+    });
+    ShuiRuntimeScope.of(context).markPermissionIntroSeen();
+    final permissions = await _permissionService.requestAll();
+    if (mounted) setState(() => _permissionState = permissions);
+  }
+
+  void _selectTab(MainTab tab) {
+    final currentIndex = _selectedTab.index;
+    _cleanUpRoute(route);
+    setState(() {
+      _dismissOverlays();
+      _routeDirection = tab.index >= currentIndex ? 1 : -1;
+      _mainTab = tab;
+      _details.clear();
+    });
+  }
+
+  void _setRoute(ShuiRoute next, {bool returning = false}) {
+    if (_routeKey(next) == _routeKey(route)) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _dismissOverlays();
+      _routeDirection = returning ? -1 : 1;
+      if (next is TabRoute) {
+        _mainTab = next.tab;
+        _details.clear();
+      } else if (returning && _details.length > 1) {
+        _details.removeLast();
+      } else {
+        _details.add(next);
       }
     });
   }
 
-  void _selectTab(MainTab tab) {
-    setState(() {
-      _dismissOverlays();
-      route = TabRoute(tab);
-    });
+  void _cleanUpRoute(ShuiRoute leaving) {
+    final runtime = ShuiRuntimeScope.of(context);
+    if (leaving is WasherOrderRoute) runtime.resetWasherTransient();
+    if (leaving is DrinkingWaterRoute) runtime.resetDrinkingWaterTransient();
   }
 
   void _dismissOverlays() {
@@ -99,7 +197,6 @@ class _ShuiShellState extends State<ShuiShell> {
 
   /// 返回处理优先级：先关弹层 → 再关 popup → 再退子页面回 Tab。
   void _handlePop() {
-    final runtime = ShuiRuntimeScope.of(context);
     setState(() {
       if (editingDevice != null) {
         editingDevice = null;
@@ -109,12 +206,10 @@ class _ShuiShellState extends State<ShuiShell> {
         showAddDevice = false;
       } else if (menuDevice != null) {
         menuDevice = null;
-      } else if (route is WasherOrderRoute) {
-        // 退出洗衣下单页时清理瞬态（program/order/payment）。
-        runtime.resetWasherTransient();
-        route = TabRoute(route.parentTab);
-      } else if (route is! TabRoute) {
-        route = TabRoute(route.parentTab);
+      } else if (_details.isNotEmpty) {
+        _cleanUpRoute(route);
+        _routeDirection = -1;
+        _details.removeLast();
       }
     });
   }
@@ -126,13 +221,16 @@ class _ShuiShellState extends State<ShuiShell> {
       canPop: _canPop,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
-          _handlePop();
+          if (!_hasOverlay && _details.isNotEmpty) {
+            _navigatorKey.currentState?.maybePop();
+          } else {
+            _handlePop();
+          }
         }
       },
       child: AnimatedBuilder(
         animation: runtime,
         builder: (context, _) {
-          _maybeReturnAfterDrinkingComplete(runtime);
           return AdaptivePhoneContainer(
             // Shell 的根是裸 Stack（无 Scaffold/Material 祖先），WidgetsApp 的 fallback
             // DefaultTextStyle 带黄色双下划线 decoration（Flutter 用它提示「不在 Material 内」）。
@@ -143,34 +241,102 @@ class _ShuiShellState extends State<ShuiShell> {
               style: const TextStyle(decoration: TextDecoration.none),
               child: Stack(
                 children: [
+                  Navigator(
+                    key: _navigatorKey,
+                    pages: [
+                      MaterialPage<void>(
+                        key: const ValueKey('tabs'),
+                        child: Stack(
+                          children: [
+                            for (final tab in MainTab.values)
+                              Offstage(
+                                offstage: tab != _mainTab,
+                                child: TickerMode(
+                                  enabled: tab == _mainTab && _details.isEmpty,
+                                  child: TweenAnimationBuilder<double>(
+                                    tween: Tween(end: tab == _mainTab ? 1 : 0),
+                                    duration: ShuiMotion.duration(
+                                        context, ShuiMotion.route),
+                                    curve: ShuiMotion.easeOut,
+                                    builder: (context, value, child) =>
+                                        FractionalTranslation(
+                                      translation: Offset(
+                                          (1 - value) *
+                                              0.045 *
+                                              _routeDirection *
+                                              (Directionality.of(context) ==
+                                                      TextDirection.rtl
+                                                  ? -1
+                                                  : 1),
+                                          0),
+                                      child:
+                                          Opacity(opacity: value, child: child),
+                                    ),
+                                    child: _tabBody(runtime, tab),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      for (final destination in _details)
+                        _ShuiDetailPage(
+                          key: ValueKey(_routeKey(destination)),
+                          child: _routeBody(runtime, destination),
+                          reduced: ShuiMotion.reduced(context),
+                        ),
+                    ],
+                    onDidRemovePage: (page) {
+                      final index = _details.indexWhere(
+                          (entry) => ValueKey(_routeKey(entry)) == page.key);
+                      if (index < 0) return;
+                      _cleanUpRoute(_details[index]);
+                      setState(
+                          () => _details.removeRange(index, _details.length));
+                    },
+                  ),
                   AnimatedSwitcher(
-                    duration: ShuiMotion.route,
+                    duration: ShuiMotion.duration(context, ShuiMotion.route),
                     switchInCurve: ShuiMotion.easeOut,
                     switchOutCurve: ShuiMotion.easeIn,
-                    transitionBuilder: (child, animation) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    child: _routeBody(runtime),
+                    child: _showBottomBar
+                        ? Align(
+                            key: const ValueKey('bottom-bar-visible'),
+                            alignment: Alignment.bottomCenter,
+                            child: WavyBottomBar(
+                              selectedTab: _selectedTab,
+                              onTabSelected: _selectTab,
+                            ),
+                          )
+                        : const SizedBox.shrink(
+                            key: ValueKey('bottom-bar-hidden'),
+                          ),
                   ),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: WavyBottomBar(
-                      selectedTab: _selectedTab,
-                      onTabSelected: _selectTab,
-                    ),
+                  ShuiOverlayHost(
+                    child: !_hasOverlay
+                        ? null
+                        : KeyedSubtree(
+                            key: ValueKey(_overlayKey()),
+                            child: Stack(children: _overlays(runtime)),
+                          ),
                   ),
-                  ..._overlays(runtime),
                   AnimatedSwitcher(
-                    duration: ShuiMotion.normal,
+                    duration: ShuiMotion.duration(context, ShuiMotion.normal),
                     child: openingVisible
                         ? const OpeningMotionOverlay()
                         : const SizedBox.shrink(),
                   ),
                   AnimatedSwitcher(
-                    duration: ShuiMotion.normal,
-                    child: permissionVisible && !openingVisible
+                    duration: ShuiMotion.duration(context, ShuiMotion.normal),
+                    child: permissionVisible &&
+                            !openingVisible &&
+                            !runtime.state.permissionIntroSeen
                         ? FirstLaunchPermissionDialog(
-                            onConfirm: _confirmFirstLaunchPermissions,
+                            permissionState: _permissionState,
+                            onConfirm: _requestPermissions,
+                            onOpenSettings: () {
+                              _permissionService.openSettings();
+                            },
                           )
                         : const SizedBox.shrink(),
                   ),
@@ -183,24 +349,40 @@ class _ShuiShellState extends State<ShuiShell> {
     );
   }
 
-  Widget _routeBody(FakeShuiRuntime runtime) {
+  String _overlayKey() {
+    if (editingDevice != null) return 'edit-device';
+    if (menuDevice != null) return 'device-menu-${menuDevice!.id}';
+    if (showPresetPicker) return 'preset-picker';
+    if (showAddDevice) return 'add-device';
+    return 'no-overlay';
+  }
+
+  Widget _routeBody(FakeShuiRuntime runtime, ShuiRoute route) {
     final body = switch (route) {
       TabRoute(:final tab) => _tabBody(runtime, tab),
       EmptyDevicesRoute() => EmptyDevicesView(
-          onBack: () => _selectTab(MainTab.devices),
+          onBack: _handlePop,
           onAdd: () => setState(() => showAddDevice = true),
         ),
       DrinkingWaterRoute(:final cd) => DrinkingWaterScreen(
           cd: cd,
           state: runtime.state,
           onBack: () => _leaveDrinkingWater(runtime),
+          onReturnHome: () => _selectTab(MainTab.home),
           onRefresh: runtime.refreshCurrentDrinkingWaterOrder,
+        ),
+      AccountHubRoute() => AccountHubScreen(
+          state: runtime.state,
+          onBack: _handlePop,
+          onSelect: (kind) {
+            _setRoute(AccountDetailRoute(kind));
+          },
         ),
       AccountDetailRoute(:final kind) => AccountDetailScreen(
           kind: kind,
           state: runtime.state,
           nowMillis: runtime.clock.nowMillis(),
-          onBack: () => _selectTab(MainTab.profile),
+          onBack: _handlePop,
           onLoginZhuli: runtime.loginZhuli,
           onBindDeviceCode: runtime.bindHotwaterDeviceCode,
           onCheckZhuli: runtime.checkZhuliStatus,
@@ -213,6 +395,7 @@ class _ShuiShellState extends State<ShuiShell> {
           onAddShower798Device: runtime.addShower798Device,
           onRefreshShower798Devices: runtime.refreshShower798Devices,
           onSelectShower798Device: runtime.selectShower798Device,
+          onSetDefaultSystem: (system) => runtime.setBathSystem(system),
         ),
       WasherOrderRoute() => WasherOrderScreen(
           state: runtime.state,
@@ -229,34 +412,55 @@ class _ShuiShellState extends State<ShuiShell> {
           onStop: runtime.stopCurrentWasherOrder,
           onCancel: runtime.cancelCurrentWasherOrder,
         ),
+      HotwaterDetailRoute() => HotwaterDetailScreen(
+          state: runtime.state,
+          onBack: _handlePop,
+          onStart: () => _startHotwater(runtime),
+          onStop: () => _stopHotwater(runtime),
+        ),
       MoreOptionsRoute() => MoreOptionsScreen(
-          onBack: () => _selectTab(MainTab.profile),
+          onBack: _handlePop,
           onImportDevices: () => _importDevices(runtime),
           onExportDevices: () => _exportDevices(runtime),
-          onOpenLogs: () =>
-              setState(() => route = const DiagnosticLogRoute()),
+          onOpenLogs: () => _setRoute(const DiagnosticLogRoute()),
           appVersion: runtime.appVersion,
           useSimulatedBackend: runtime.state.useSimulatedBackend,
           onToggleSimulatedBackend: runtime.setUseSimulatedBackend,
         ),
       DiagnosticLogRoute() => LogScreen(
           log: runtime.diagnosticLog,
-          onBack: () => setState(() => route = const MoreOptionsRoute()),
+          onBack: _handlePop,
         ),
     };
-    return KeyedSubtree(key: ValueKey(_routeKey()), child: body);
+    return KeyedSubtree(key: ValueKey(_routeKey(route)), child: body);
   }
 
-  String _routeKey() {
+  String _routeKey(ShuiRoute route) {
     return switch (route) {
       TabRoute(:final tab) => 'tab-${tab.name}',
       EmptyDevicesRoute() => 'empty-devices',
       DrinkingWaterRoute(:final cd) => 'drinking-$cd',
+      AccountHubRoute() => 'account-hub',
       AccountDetailRoute(:final kind) => 'account-${kind.name}',
       WasherOrderRoute(:final qr) => 'washer-$qr',
+      HotwaterDetailRoute() => 'hotwater-detail',
       MoreOptionsRoute() => 'more-options',
       DiagnosticLogRoute() => 'diagnostic-log',
     };
+  }
+
+  Future<void> _exportDevices(FakeShuiRuntime runtime) async {
+    final json = LocalDeviceCodec.encode(runtime.state.localDevices);
+    await Clipboard.setData(ClipboardData(text: json));
+    if (mounted) _showScanMessage('设备列表已复制到剪贴板');
+  }
+
+  Future<void> _importDevices(FakeShuiRuntime runtime) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final ok = await runtime.importLocalDevicesFromJson(data?.text ?? '');
+    if (mounted) {
+      _showScanMessage(ok ? '设备列表已从剪贴板导入' : '剪贴板不是有效设备列表 JSON');
+    }
   }
 
   Widget _tabBody(FakeShuiRuntime runtime, MainTab tab) {
@@ -267,57 +471,43 @@ class _ShuiShellState extends State<ShuiShell> {
           onOpenDevices: () => _selectTab(MainTab.devices),
           onStartHotwater: () => _startHotwater(runtime),
           onStopHotwater: () => _stopHotwater(runtime),
+          onOpenHotwaterDetail: () {
+            runtime.loadHotwaterHistory();
+            _setRoute(const HotwaterDetailRoute());
+          },
           onScan: () => _scanFromHome(runtime),
           onWasherSummary: runtime.openWasherSummary,
-          onSwitchBathSystem: runtime.switchBathSystem,
+          onSwitchBathSystem: () => _setRoute(const AccountHubRoute()),
         ),
       MainTab.orders => OrdersScreen(
+          active: _foreground && _mainTab == MainTab.orders && _details.isEmpty,
           state: runtime.state,
           clock: runtime.clock,
           onBack: () => _selectTab(MainTab.home),
           onOpenWasherOrder: () {
             final order = runtime.state.washer.currentOrder;
             if (order != null) {
-              setState(() => route = WasherOrderRoute(order.deviceNo));
+              _setRoute(WasherOrderRoute(order.deviceNo));
             }
           },
           onOpenDrinking: () {
             final cd = runtime.state.currentWaterOrder?.deviceNo ?? '';
-            setState(() => route = DrinkingWaterRoute(cd));
+            _setRoute(DrinkingWaterRoute(cd));
           },
           onPollWasher: runtime.refreshCurrentWasherOrder,
-          onLoadHotwaterHistory: runtime.loadHotwaterHistory,
         ),
-      MainTab.devices => runtime.state.visibleDevices.isEmpty
-          ? EmptyDevicesView(
-              onBack: () => _selectTab(MainTab.home),
-              onAdd: () => setState(() => showAddDevice = true),
-            )
-          : DevicesScreen(
-              state: runtime.state,
-              onAdd: () => setState(() => showAddDevice = true),
-              onBack: () => _selectTab(MainTab.home),
-              onRefresh: runtime.refreshLocalDevices,
-              onOpenDevice: (device) => _openDevice(runtime, device),
-              onMenu: (device) => setState(() => menuDevice = device),
-            ),
+      MainTab.devices => DevicesScreen(
+          state: runtime.state,
+          onAdd: () => setState(() => showAddDevice = true),
+          onBack: () => _selectTab(MainTab.home),
+          onRefresh: runtime.refreshLocalDevices,
+          onOpenDevice: (device) => _openDevice(runtime, device),
+          onMenu: (device) => setState(() => menuDevice = device),
+        ),
       MainTab.profile => ProfileScreen(
           state: runtime.state,
-          onSwitchBathSystem: runtime.switchBathSystem,
-          onOpenBathAccount: () {
-            // 浴室系统卡：住理 / 798 分别进各自登录详情（对齐 legacy onOpen 分发）。
-            if (runtime.state.bathSystemPreference ==
-                BathSystemPreference.shower798) {
-              setState(
-                () => route = const AccountDetailRoute(AccountKind.shower798),
-              );
-            } else {
-              setState(() => route = const AccountDetailRoute(AccountKind.zhuli));
-            }
-          },
-          onOpenUjing: () =>
-              setState(() => route = const AccountDetailRoute(AccountKind.ujing)),
-          onOpenMore: () => setState(() => route = const MoreOptionsRoute()),
+          onOpenAccountHub: () => _setRoute(const AccountHubRoute()),
+          onOpenMore: () => _setRoute(const MoreOptionsRoute()),
         ),
     };
   }
@@ -325,21 +515,20 @@ class _ShuiShellState extends State<ShuiShell> {
   void _openDevice(FakeShuiRuntime runtime, LocalDeviceShortcut device) {
     if (device.deviceType == LocalDeviceType.drinkingWater) {
       final cd = device.cd ?? '';
-      setState(() => route = DrinkingWaterRoute(cd));
+      _setRoute(DrinkingWaterRoute(cd));
       // 进入饮水页自动 ready + 创建接水订单（对齐 legacy 扫码后一步式流程）。
       runtime.scanDrinkingWaterAndCreateOrder(cd);
       return;
     }
     // 洗衣机（W1）：进入下单页并 fake 扫码识别 program。
     final qr = device.qrUrl ?? '';
-    setState(() => route = WasherOrderRoute(qr));
+    _setRoute(WasherOrderRoute(qr));
     runtime.scanWasher(qr);
   }
 
   /// 离开洗衣下单页：清理 washer 瞬态，回到 Devices tab。
   void _leaveWasherOrder(FakeShuiRuntime runtime) {
-    runtime.resetWasherTransient();
-    _selectTab(MainTab.devices);
+    _handlePop();
   }
 
   /// 首页扫码卡 → 打开真实相机（RSCAN）→ 得 qr → classifyScanRouting 分类 →
@@ -357,10 +546,10 @@ class _ShuiShellState extends State<ShuiShell> {
         // 洗衣机需反复使用 → 首页扫码也自动加到设备页（addScannedDeviceFromQr
         // 内部按 qrUrl 去重 + 持久化，重复扫不会重复加），再进下单页。
         runtime.addScannedDeviceFromQr(qr);
-        setState(() => route = WasherOrderRoute(qr));
+        _setRoute(WasherOrderRoute(qr));
         runtime.scanWasher(qr);
       case ScanRoutingDrinkingWater(:final cd):
-        setState(() => route = const TabRoute(MainTab.home));
+        _setRoute(DrinkingWaterRoute(cd));
         runtime.scanDrinkingWaterAndCreateOrder(cd);
       case ScanRoutingUnknown(:final reason):
         _showScanMessage(reason);
@@ -378,13 +567,19 @@ class _ShuiShellState extends State<ShuiShell> {
   }
 
   /// 打开全屏扫码页，返回识别到的 qr 字符串（取消返回 null）。
-  Future<String?> _openScanner() {
-    return Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        builder: (_) => const QrScannerScreen(),
-        fullscreenDialog: true,
-      ),
-    );
+  Future<String?> _openScanner() async {
+    if (_scannerOpen) return null;
+    _scannerOpen = true;
+    try {
+      return await Navigator.of(context).push<String>(
+        MaterialPageRoute<String>(
+          builder: (_) => const QrScannerScreen(),
+          fullscreenDialog: true,
+        ),
+      );
+    } finally {
+      _scannerOpen = false;
+    }
   }
 
   void _showScanMessage(String message) {
@@ -393,43 +588,16 @@ class _ShuiShellState extends State<ShuiShell> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// 首次启动权限引导「好，开启权限」：真实一次性申请相机/蓝牙/定位（M-REAL，取代旧 fake 空操作）。
-  /// 先收起对话框（避免申请系统弹窗时叠在引导框上），再申请；被永久拒绝走兜底跳系统设置。
-  Future<void> _confirmFirstLaunchPermissions() async {
-    setState(() => permissionVisible = false);
-    await runPermissionCheck();
-  }
-
-  /// 导出本地设备列表到剪贴板（M-REAL，对齐 legacy exportDevices）。
-  Future<void> _exportDevices(FakeShuiRuntime runtime) async {
-    final json = LocalDeviceCodec.encode(runtime.state.localDevices);
-    await Clipboard.setData(ClipboardData(text: json));
-    if (!mounted) {
-      return;
-    }
-    _showScanMessage('设备列表已复制到剪贴板');
-  }
-
-  /// 从剪贴板导入本地设备列表（M-REAL，对齐 legacy importDevices）。
-  /// 读剪贴板 → runtime 校验/写入/刷新 → snackbar 成功或失败。
-  Future<void> _importDevices(FakeShuiRuntime runtime) async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final ok = await runtime.importLocalDevicesFromJson(data?.text ?? '');
-    if (!mounted) {
-      return;
-    }
-    _showScanMessage(ok ? '设备列表已从剪贴板导入' : '剪贴板不是有效设备列表 JSON');
-  }
-
   /// 按浴室偏好路由热水启动：798（已登录+选设备）走洗浴，否则走住理热水。
   bool _use798(FakeShuiRuntime runtime) {
     final s = runtime.state;
-    return s.bathSystemPreference == BathSystemPreference.shower798 &&
-        s.shower798Account != null &&
-        s.currentShower798DeviceId.isNotEmpty;
+    return s.hotwaterControlSystem == BathSystemPreference.shower798;
   }
 
   void _startHotwater(FakeShuiRuntime runtime) {
+    if (runtime.state.hotwaterControlSystem == BathSystemPreference.none) {
+      return;
+    }
     if (_use798(runtime)) {
       runtime.startShower798();
     } else {
@@ -438,42 +606,12 @@ class _ShuiShellState extends State<ShuiShell> {
   }
 
   void _stopHotwater(FakeShuiRuntime runtime) {
-    if (_use798(runtime)) {
-      runtime.stopShower798();
-    } else {
-      runtime.stopHotwater();
-    }
+    runtime.stopActiveHotwater();
   }
 
   /// 离开饮水页：清理 ready/banner，回到 Devices tab。
   void _leaveDrinkingWater(FakeShuiRuntime runtime) {
-    _drinkingOrderWasActive = false;
-    runtime.resetDrinkingWaterTransient();
-    _selectTab(MainTab.devices);
-  }
-
-  /// 饮水完成自动回 Home（对齐 legacy onCompleted）：
-  /// 当前在饮水页、订单曾创建、现已被清空且消息含「完成」→ 下一帧回 Home。
-  void _maybeReturnAfterDrinkingComplete(FakeShuiRuntime runtime) {
-    if (route is! DrinkingWaterRoute) {
-      return;
-    }
-    final s = runtime.state;
-    if (s.currentWaterOrder != null) {
-      _drinkingOrderWasActive = true;
-      return;
-    }
-    final completed = _drinkingOrderWasActive &&
-        s.waterOrder.state == RuntimeTaskState.success &&
-        (s.waterOrder.message?.contains('完成') ?? false);
-    if (completed) {
-      _drinkingOrderWasActive = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && route is DrinkingWaterRoute) {
-          setState(() => route = const TabRoute(MainTab.home));
-        }
-      });
-    }
+    _handlePop();
   }
 
   List<Widget> _overlays(FakeShuiRuntime runtime) {
