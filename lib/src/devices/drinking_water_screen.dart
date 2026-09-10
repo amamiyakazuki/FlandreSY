@@ -290,7 +290,7 @@ class _HistoryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '接水记录',
+            '本机接水记录',
             style: textTheme.titleMedium?.copyWith(color: AppColors.deepText),
           ),
           const SizedBox(height: AppCustomTokens.spaceSm),

@@ -99,6 +99,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 children: [
                   _buildChipRow(),
                   const SizedBox(height: AppCustomTokens.spaceSm),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      switch (_category) {
+                        OrderCategory.hotwater => '住理账号近 30 天记录',
+                        OrderCategory.drinking => '仅显示本机完成的接水订单',
+                        OrderCategory.washer => '仅显示本机操作过的洗衣订单',
+                      },
+                      style: AppTypography.textTheme.bodySmall
+                          ?.copyWith(color: AppColors.mutedText),
+                    ),
+                  ),
+                  const SizedBox(height: AppCustomTokens.spaceSm),
                   AnimatedSwitcher(
                     duration: ShuiMotion.duration(context, ShuiMotion.local),
                     switchInCurve: ShuiMotion.easeOut,
@@ -179,11 +192,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ),
       OrderCategory.drinking => const EmptyOrderState(
           title: '暂无饮水订单',
-          detail: '扫描饮水机二维码后创建接水订单，接水由你在机器上按按钮决定。',
+          detail: '本机完成的接水订单会显示在这里。',
         ),
       OrderCategory.washer => const EmptyOrderState(
           title: '暂无洗衣订单',
-          detail: '在设备页点选洗衣机扫码并创建订单后，记录会显示在这里。',
+          detail: '本机操作过的洗衣订单会显示在这里。',
         ),
     };
   }
@@ -193,7 +206,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       for (final h in widget.state.hotwaterHistory)
         OrderRowUi(
           id: 'hotwater-${h.orderId}',
-          type: '热水',
+          type: '住理热水',
           time: h.time,
           device: '热水设备 ${h.deviceId}',
           amount: h.amount,

@@ -51,7 +51,7 @@ class VersionCheckResult {
   bool get failed => error != null;
 }
 
-const String kCurrentAppVersion = '2.1.0';
+const String kCurrentAppVersion = '2.1.1';
 const String kVersionManifestAsset = 'assets/public/version.json';
 const String kVersionManifestUrl =
     'https://raw.githubusercontent.com/amamiyakazuki/FlandreSY/main/assets/public/version.json';

@@ -23,6 +23,7 @@ import 'src/data/shared_prefs_diagnostic_log_repository.dart';
 import 'src/data/shared_prefs_local_device_repository.dart';
 import 'src/data/shared_prefs_settings_repository.dart';
 import 'src/data/shared_prefs_water_order_repository.dart';
+import 'src/data/shared_prefs_washer_history_repository.dart';
 import 'src/more/version_check.dart' show kCurrentAppVersion;
 import 'src/runtime/diagnostic_log.dart';
 import 'src/runtime/live_clock.dart';
@@ -45,8 +46,15 @@ Future<void> main() async {
   final devices = SharedPrefsLocalDeviceRepository();
   final history = SharedPrefsHistoryRepository();
   final water = SharedPrefsWaterOrderRepository();
-  final initial =
-      await AppBootstrap.load(settings, sessions, devices, history, water);
+  final washerHistory = SharedPrefsWasherHistoryRepository();
+  final initial = await AppBootstrap.load(
+    settings,
+    sessions,
+    devices,
+    history,
+    water,
+    washerHistory,
+  );
 
   // M-REAL 检查版本：真实 App 版本号（PackageInfo.version）。读失败回退常量兜底。
   String appVersion;
@@ -119,6 +127,7 @@ Future<void> main() async {
       devices: devices,
       history: history,
       water: water,
+      washerHistory: washerHistory,
       secure: secure,
       ujing: ujing,
       hotwater: hotwater,

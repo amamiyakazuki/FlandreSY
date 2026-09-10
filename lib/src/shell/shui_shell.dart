@@ -472,7 +472,10 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onStartHotwater: () => _startHotwater(runtime),
           onStopHotwater: () => _stopHotwater(runtime),
           onOpenHotwaterDetail: () {
-            runtime.loadHotwaterHistory();
+            if (runtime.state.hotwaterControlSystem ==
+                BathSystemPreference.zhuli) {
+              runtime.loadHotwaterHistory();
+            }
             _setRoute(const HotwaterDetailRoute());
           },
           onScan: () => _scanFromHome(runtime),

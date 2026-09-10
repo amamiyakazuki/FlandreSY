@@ -22,6 +22,7 @@ import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
 import '../data/settings_repository.dart';
 import '../data/water_order_repository.dart';
+import '../data/washer_history_repository.dart';
 import '../more/version_check.dart' show kCurrentAppVersion;
 import 'diagnostic_log.dart';
 import 'live_clock.dart';
@@ -44,6 +45,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     LocalDeviceRepository? devices,
     HistoryRepository? history,
     WaterOrderRepository? water,
+    WasherHistoryRepository? washerHistory,
     SecureSessionRepository? secure,
     LiveClock? clock,
     IUjingAdapter? ujing,
@@ -57,6 +59,8 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
         devices = devices ?? InMemoryLocalDeviceRepository(),
         history = history ?? InMemoryHistoryRepository(),
         water = water ?? InMemoryWaterOrderRepository(),
+        washerHistoryRepository =
+            washerHistory ?? InMemoryWasherHistoryRepository(),
         secure = secure ?? InMemorySecureSessionRepository(),
         clock = clock ?? const SystemLiveClock(),
         ujing = ujing ?? const FakeUjingAdapter(),
@@ -102,6 +106,8 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   final HistoryRepository history;
 
   final WaterOrderRepository water;
+
+  final WasherHistoryRepository washerHistoryRepository;
 
   /// 敏感凭证持久化（PTOK）。token/secretKey 加密存储；action 层登录成功后写入。
   /// 默认 InMemory（测试确定）；生产 real 模式注入 flutter_secure_storage 实现。
@@ -246,13 +252,20 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
             ),
       currentWaterOrder: snap.currentWaterOrder,
       waterHistory: snap.waterHistory ?? const <WaterOrderHistoryUi>[],
+      washer: base.washer.copyWith(history: snap.washerHistory),
     );
   }
 
   /// 启动时回填已持久化状态（异步，完成后 emit 一次）。与预加载共用 AppBootstrap。
   Future<void> _restorePersisted() async {
-    final snap =
-        await AppBootstrap.load(settings, sessions, devices, history, water);
+    final snap = await AppBootstrap.load(
+      settings,
+      sessions,
+      devices,
+      history,
+      water,
+      washerHistoryRepository,
+    );
     final restored = _applySnapshot(snap);
     deviceSeq = _maxDeviceSeq(restored.localDevices);
     hotwaterOrderSeq = _maxOrderSeq(restored.hotwater.history);

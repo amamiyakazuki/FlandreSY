@@ -26,12 +26,14 @@ class RealZhuliAdapter implements IHotwaterAdapter {
     BleTransport? ble,
     String Function()? nonce,
     String Function()? timestamp,
+    DateTime Function()? now,
     ZhuliSessionData? session,
     void Function(String message)? log,
   })  : _transport = transport,
         _ble = ble ?? const SkeletonBleTransport(),
         _nonce = nonce ?? _defaultNonce,
         _timestamp = timestamp ?? _defaultTimestamp,
+        _now = now ?? DateTime.now,
         _session = session,
         _log = log ?? _noop;
 
@@ -48,6 +50,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
   final BleTransport _ble;
   final String Function() _nonce;
   final String Function() _timestamp;
+  final DateTime Function() _now;
 
   ZhuliSessionData? _session;
 
@@ -279,10 +282,12 @@ class RealZhuliAdapter implements IHotwaterAdapter {
   @override
   Future<List<HotwaterHistoryUi>> loadHistory() async {
     final s = _requireSession();
+    final end = _now().toLocal();
+    final start = end.subtract(const Duration(days: 30));
     final rows = await _businessArray(s, 'consume/list_record_by_staffid', {
       'staff_id': s.userId,
-      'start': '',
-      'end': '',
+      'start': _formatDateTime(start),
+      'end': _formatDateTime(end),
     });
     final history = <HotwaterHistoryUi>[];
     for (final row in rows) {
@@ -291,10 +296,12 @@ class RealZhuliAdapter implements IHotwaterAdapter {
       }
       final m = row.cast<String, dynamic>();
       history.add(HotwaterHistoryUi(
-        time: _str(m, 'create_time', fallback: _str(m, 'time')),
-        deviceId: _str(m, 'device_id'),
-        amount: '¥${_str(m, 'money', fallback: '0')}',
-        status: _str(m, 'status_text', fallback: '已结束'),
+        time: _str(m, 'create_at',
+            fallback: _str(m, 'create_time', fallback: _str(m, 'time'))),
+        deviceId: _str(m, 'device_id', fallback: '-'),
+        amount: _formatMoney(m['consume_money'] ?? m['money']),
+        status: _str(m, 'status',
+            fallback: _str(m, 'status_text', fallback: '状态未知')),
         orderId: _str(m, 'order_id', fallback: _str(m, 'id')),
       ));
     }
@@ -339,26 +346,64 @@ class RealZhuliAdapter implements IHotwaterAdapter {
     String path,
     Map<String, Object?> extra,
   ) =>
-      _transport.getObject(_businessRequest(s, path, extra));
+      _runBusiness(
+        path,
+        () => _transport.getObject(_businessRequest(s, path, extra)),
+      );
 
   Future<String> _businessString(
     ZhuliSessionData s,
     String path,
     Map<String, Object?> extra,
   ) =>
-      _transport.getString(_businessRequest(s, path, extra));
+      _runBusiness(
+        path,
+        () => _transport.getString(_businessRequest(s, path, extra)),
+      );
 
   Future<List<dynamic>> _businessArray(
     ZhuliSessionData s,
     String path,
     Map<String, Object?> extra,
   ) =>
-      _transport.getArray(_businessRequest(s, path, extra));
+      _runBusiness(
+        path,
+        () => _transport.getArray(_businessRequest(s, path, extra)),
+      );
+
+  Future<T> _runBusiness<T>(String path, Future<T> Function() request) async {
+    try {
+      return await request();
+    } on HotwaterException catch (error) {
+      final code = error.code?.isNotEmpty == true ? error.code : 'unknown';
+      _log('住理接口失败 endpoint=$path code=$code');
+      rethrow;
+    } on Object catch (error) {
+      _log('住理接口失败 endpoint=$path type=${error.runtimeType}');
+      rethrow;
+    }
+  }
 
   // ===== 小工具 =====
 
   static String _defaultTimestamp() =>
       (DateTime.now().millisecondsSinceEpoch ~/ 1000).toString();
+
+  static String _formatDateTime(DateTime value) {
+    String twoDigits(int number) => number.toString().padLeft(2, '0');
+    return '${value.year.toString().padLeft(4, '0')}-'
+        '${twoDigits(value.month)}-${twoDigits(value.day)} '
+        '${twoDigits(value.hour)}:${twoDigits(value.minute)}:'
+        '${twoDigits(value.second)}';
+  }
+
+  static String _formatMoney(Object? value) {
+    if (value == null || '$value'.isEmpty) {
+      return '金额未知';
+    }
+    final amount = value is num ? value : num.tryParse('$value');
+    return amount == null ? '$value' : '¥${amount.toStringAsFixed(2)}';
+  }
 
   static String _defaultNonce() {
     // 非签名安全用途（对齐 legacy nonce）；避免 Math.random 依赖，用时钟派生。

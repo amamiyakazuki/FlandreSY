@@ -21,7 +21,7 @@
 - 英文品牌名：`FlandreSY`
 - Android 包名：`com.flandresy`
 - iOS Bundle ID：`com.flandresy`
-- 正式版营销版本：`2.1.0`
+- 正式版营销版本：`2.1.1`
 - Flutter 构建版本：见 `pubspec.yaml`
 - 默认运行模式：真实后端
 

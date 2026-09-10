@@ -97,9 +97,17 @@ class HotwaterDetailScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SectionTitle(
-                            icon: ShuiAssets.shuiReshui, title: '热水历史'),
+                          icon: ShuiAssets.shuiReshui,
+                          title: _use798 ? '洗浴记录' : '住理热水历史',
+                        ),
                         const SizedBox(height: AppCustomTokens.spaceSm),
-                        if (state.hotwaterHistory.isEmpty)
+                        if (_use798)
+                          Text(
+                            '慧生活798暂不提供账号历史，本页不会混入住理订单。',
+                            style: textTheme.bodySmall
+                                ?.copyWith(color: AppColors.mutedText),
+                          )
+                        else if (state.hotwaterHistory.isEmpty)
                           Text(
                             '暂无热水历史',
                             style: textTheme.bodySmall

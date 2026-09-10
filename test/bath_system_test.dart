@@ -6,7 +6,10 @@ import 'package:flandresy/src/data/app_bootstrap.dart';
 import 'package:flandresy/src/data/settings_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_settings_repository.dart';
 import 'package:flandresy/src/home/cards/hot_water_card.dart';
+import 'package:flandresy/src/hotwater/hotwater_detail_screen.dart';
 import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'package:flandresy/src/runtime/hotwater_state.dart';
+import 'package:flandresy/src/runtime/models/hotwater_history.dart';
 import 'package:flandresy/src/widgets/shui_components.dart';
 
 void main() {
@@ -74,4 +77,35 @@ void main() {
     expect(opened, isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('798 detail never renders cached Zhuli history', (tester) async {
+    const state = ShuiHomeState(
+      bathSystemPreference: BathSystemPreference.shower798,
+      hotwater: HotwaterState(
+        history: [
+          HotwaterHistoryUi(
+            time: '2026-09-10',
+            deviceId: 'zhuli-device',
+            amount: '¥9.99',
+            status: '已完成',
+            orderId: 'zhuli-order',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(const MaterialApp(
+      home: HotwaterDetailScreen(
+        state: state,
+        onBack: _noop,
+        onStart: _noop,
+        onStop: _noop,
+      ),
+    ));
+
+    expect(find.text('慧生活798暂不提供账号历史，本页不会混入住理订单。'), findsOneWidget);
+    expect(find.text('¥9.99'), findsNothing);
+    expect(find.textContaining('zhuli-device'), findsNothing);
+  });
 }
+
+void _noop() {}

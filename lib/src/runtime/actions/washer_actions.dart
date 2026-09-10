@@ -441,7 +441,7 @@ mixin WasherActions on ShuiRuntimeBase {
   void resetWasherTransient() {
     emit(
       state.copyWith(
-        washer: const WasherState(),
+        washer: WasherState(history: state.washer.history),
       ),
     );
   }
@@ -456,6 +456,8 @@ mixin WasherActions on ShuiRuntimeBase {
     );
     final existing =
         state.washer.history.where((h) => h.orderId != order.orderId).toList();
-    return [entry, ...existing];
+    final result = [entry, ...existing];
+    unawaited(washerHistoryRepository.saveHistory(result));
+    return result;
   }
 }

@@ -5,6 +5,7 @@ import '../runtime/models/account_session.dart';
 import '../runtime/models/hotwater_history.dart';
 import '../runtime/models/local_device.dart';
 import '../runtime/models/water_order.dart';
+import '../runtime/models/washer_order.dart';
 import '../runtime/runtime_status.dart';
 import '../runtime/hotwater_state.dart';
 import 'account_session_repository.dart';
@@ -12,6 +13,7 @@ import 'history_repository.dart';
 import 'local_device_repository.dart';
 import 'settings_repository.dart';
 import 'water_order_repository.dart';
+import 'washer_history_repository.dart';
 
 /// 启动时从持久化层恢复的聚合快照。main() 预加载注入 → 消除首帧闪烁（P1 Major 1 模式）；
 /// runtime 也用同一 [AppBootstrap.load] 异步恢复，避免预加载/恢复逻辑双源。
@@ -28,6 +30,7 @@ class PersistedSnapshot {
     this.hotwaterSession,
     this.currentWaterOrder,
     this.waterHistory,
+    this.washerHistory,
   });
 
   final BathSystemPreference bathSystem;
@@ -49,6 +52,7 @@ class PersistedSnapshot {
   final HotwaterSession? hotwaterSession;
   final WaterOrderUi? currentWaterOrder;
   final List<WaterOrderHistoryUi>? waterHistory;
+  final List<WasherOrderHistoryUi>? washerHistory;
 }
 
 /// 合并 SettingsRepository + AccountSessionRepository + LocalDeviceRepository +
@@ -62,6 +66,7 @@ class AppBootstrap {
     LocalDeviceRepository devices,
     HistoryRepository history,
     WaterOrderRepository water,
+    WasherHistoryRepository washerHistory,
   ) async {
     final bathSystem = await settings.loadBathSystem();
     final useSimulatedBackend = await settings.loadUseSimulatedBackend();
@@ -73,6 +78,7 @@ class AppBootstrap {
     final hotwaterHistory = await history.loadHistory();
     final hotwaterSession = await settings.loadHotwaterSession();
     final waterSnapshot = await water.load();
+    final washerHistorySnapshot = await washerHistory.loadHistory();
     return PersistedSnapshot(
       bathSystem: bathSystem,
       useSimulatedBackend: useSimulatedBackend,
@@ -85,6 +91,7 @@ class AppBootstrap {
       hotwaterSession: hotwaterSession,
       currentWaterOrder: waterSnapshot?.currentOrder,
       waterHistory: waterSnapshot?.history,
+      washerHistory: washerHistorySnapshot,
     );
   }
 }

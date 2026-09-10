@@ -1,12 +1,12 @@
 {
-  "version": "2.1.0",
-  "release_date": "2026-09-09",
+  "version": "2.1.1",
+  "release_date": "2026-09-10",
   "changelog": [
-    "重构页面动效与切换过渡",
-    "完善账号、设备、订单和接水结果交互",
-    "更多选项支持在线检查更新"
+    "修复住理热水启动参数与历史订单金额、时间、状态解析",
+    "隔离慧生活798与住理历史，避免跨系统订单混淆",
+    "明确U净本机订单范围并持久化洗衣历史"
   ],
   "downloads": {
-    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.1.0/app-release.apk"
+    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.1.1/app-release.apk"
   }
 }

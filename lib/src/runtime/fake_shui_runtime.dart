@@ -19,6 +19,8 @@ import '../data/shared_prefs_local_device_repository.dart';
 import '../data/shared_prefs_settings_repository.dart';
 import '../data/shared_prefs_water_order_repository.dart';
 import '../data/water_order_repository.dart';
+import '../data/washer_history_repository.dart';
+import '../data/shared_prefs_washer_history_repository.dart';
 import 'actions/account_actions.dart';
 import 'actions/devices_actions.dart';
 import 'actions/home_actions.dart';
@@ -50,6 +52,7 @@ class FakeShuiRuntime extends ShuiRuntimeBase
     super.devices,
     super.history,
     super.water,
+    super.washerHistory,
     super.secure,
     super.clock,
     super.ujing,
@@ -69,6 +72,7 @@ class ShuiRuntimeScope extends StatefulWidget {
     this.devices,
     this.history,
     this.water,
+    this.washerHistory,
     this.secure,
     this.clock,
     this.ujing,
@@ -95,6 +99,8 @@ class ShuiRuntimeScope extends StatefulWidget {
   final HistoryRepository? history;
 
   final WaterOrderRepository? water;
+
+  final WasherHistoryRepository? washerHistory;
 
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
   final SecureSessionRepository? secure;
@@ -143,6 +149,8 @@ class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
       devices: widget.devices ?? SharedPrefsLocalDeviceRepository(),
       history: widget.history ?? SharedPrefsHistoryRepository(),
       water: widget.water ?? SharedPrefsWaterOrderRepository(),
+      washerHistory:
+          widget.washerHistory ?? SharedPrefsWasherHistoryRepository(),
       secure: widget
           .secure, // null → base 默认 InMemory；real 模式由 main() 注入 flutter_secure_storage
       clock: widget.clock,
