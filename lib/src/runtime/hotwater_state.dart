@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'models/hotwater_history.dart';
 import 'runtime_status.dart';
 
+enum HotwaterSessionPhase { preparing, starting, uncertain, active }
+
 /// 热水控制子状态（H1）。不可变 + copyWith。由 [ShuiHomeState.hotwater] 持有。
 @immutable
 class HotwaterState {
@@ -64,6 +66,8 @@ class HotwaterSession {
     required this.deviceId,
     required this.startedAtMillis,
     required this.baselineOrderIds,
+    this.phase = HotwaterSessionPhase.preparing,
+    this.orderId = '',
   });
   final String id;
   final String account;
@@ -72,9 +76,35 @@ class HotwaterSession {
   final String deviceId;
   final int startedAtMillis;
   final List<String> baselineOrderIds;
+  final HotwaterSessionPhase phase;
+  final String orderId;
+
+  bool get canPoll =>
+      phase == HotwaterSessionPhase.active ||
+      phase == HotwaterSessionPhase.uncertain;
+
+  HotwaterSession copyWith({
+    HotwaterSessionPhase? phase,
+    String? orderId,
+  }) {
+    return HotwaterSession(
+      id: id,
+      account: account,
+      system: system,
+      simulated: simulated,
+      deviceId: deviceId,
+      startedAtMillis: startedAtMillis,
+      baselineOrderIds: baselineOrderIds,
+      phase: phase ?? this.phase,
+      orderId: orderId ?? this.orderId,
+    );
+  }
 
   // 比较已知订单集合而不是列表位置，避免排序变化被当成结束。
   bool hasNewConsumption(List<HotwaterHistoryUi> orders) => orders.any((order) {
+        if (orderId.isNotEmpty) {
+          return order.orderId == orderId;
+        }
         final time = DateTime.tryParse(order.time);
         return order.deviceId == deviceId &&
             order.orderId.isNotEmpty &&
@@ -84,7 +114,7 @@ class HotwaterSession {
       });
 
   Map<String, Object> toJson() => {
-        'version': 1,
+        'version': 2,
         'id': id,
         'account': account,
         'system': system.name,
@@ -92,28 +122,78 @@ class HotwaterSession {
         'deviceId': deviceId,
         'startedAtMillis': startedAtMillis,
         'baselineOrderIds': baselineOrderIds,
+        'phase': phase.name,
+        'orderId': orderId,
       };
 
   static HotwaterSession fromJson(Map<String, dynamic> json) {
-    final system = BathSystemPreference.values.byName(json['system'] as String);
-    final result = HotwaterSession(
-      id: json['id'] as String,
-      account: json['account'] as String,
-      system: system,
-      simulated: json['simulated'] as bool,
-      deviceId: json['deviceId'] as String,
-      startedAtMillis: json['startedAtMillis'] as int,
-      baselineOrderIds:
-          List<String>.unmodifiable(json['baselineOrderIds'] as List),
-    );
-    if (json['version'] != 1 ||
-        system == BathSystemPreference.none ||
-        result.id.isEmpty ||
-        result.account.isEmpty ||
-        result.deviceId.isEmpty ||
-        result.startedAtMillis <= 0) {
-      throw const FormatException('Invalid hotwater session');
+    try {
+      final rawVersion = json['version'];
+      final version = rawVersion == null
+          ? 1
+          : rawVersion is int
+              ? rawVersion
+              : throw const FormatException('Invalid hotwater session version');
+      if (version != 1 && version != 2) {
+        throw const FormatException('Unsupported hotwater session version');
+      }
+
+      final rawSystem = json['system'];
+      final system = rawSystem is String
+          ? BathSystemPreference.values.byName(rawSystem)
+          : throw const FormatException('Invalid hotwater session system');
+      final rawIds = json['baselineOrderIds'];
+      if (rawIds is! List || rawIds.any((id) => id is! String)) {
+        throw const FormatException('Invalid hotwater session baseline');
+      }
+      final rawOrderId = json['orderId'];
+      if (version == 2 && rawOrderId != null && rawOrderId is! String) {
+        throw const FormatException('Invalid hotwater session order');
+      }
+
+      final result = HotwaterSession(
+        id: _requiredString(json['id'], 'id'),
+        account: _requiredString(json['account'], 'account'),
+        system: system,
+        simulated: _requiredBool(json['simulated'], 'simulated'),
+        deviceId: _requiredString(json['deviceId'], 'deviceId'),
+        startedAtMillis: _requiredInt(
+          json['startedAtMillis'],
+          'startedAtMillis',
+        ),
+        baselineOrderIds: List<String>.unmodifiable(rawIds.cast<String>()),
+        phase: version == 1
+            ? HotwaterSessionPhase.uncertain
+            : HotwaterSessionPhase.values.byName(json['phase'] as String),
+        orderId: version == 2 ? (rawOrderId as String? ?? '') : '',
+      );
+      if (system == BathSystemPreference.none ||
+          result.id.isEmpty ||
+          result.account.isEmpty ||
+          result.deviceId.isEmpty ||
+          result.startedAtMillis <= 0) {
+        throw const FormatException('Invalid hotwater session');
+      }
+      return result;
+    } on FormatException {
+      rethrow;
+    } on Object catch (error) {
+      throw FormatException('Invalid hotwater session: $error');
     }
-    return result;
+  }
+
+  static String _requiredString(Object? value, String field) {
+    if (value is String) return value;
+    throw FormatException('Invalid hotwater session $field');
+  }
+
+  static bool _requiredBool(Object? value, String field) {
+    if (value is bool) return value;
+    throw FormatException('Invalid hotwater session $field');
+  }
+
+  static int _requiredInt(Object? value, String field) {
+    if (value is int) return value;
+    throw FormatException('Invalid hotwater session $field');
   }
 }

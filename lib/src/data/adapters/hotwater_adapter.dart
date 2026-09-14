@@ -3,6 +3,8 @@
 // Fake + real both implement this. Method shapes align with legacy ZhuliApi + HotwaterRuntimeAdapter.
 // Zhuli-only: 798 shower (HTTP, not BLE) stays inline in hotwater_actions (separate future adapter).
 
+import 'package:flutter/foundation.dart';
+
 import '../../runtime/models/hotwater_history.dart';
 
 /// Zhuli 热水后端错误（HTTP / 签名 / BLE）。actions 捕获后 emit failure。
@@ -82,6 +84,25 @@ class HotwaterActionResult {
   final String isn;
 }
 
+enum HotwaterStartStage { controlReady, orderCreated, commandSent }
+
+@immutable
+class HotwaterStartProgress {
+  const HotwaterStartProgress({
+    required this.stage,
+    this.isn = '',
+    this.orderId = '',
+  });
+
+  final HotwaterStartStage stage;
+  final String isn;
+  final String orderId;
+}
+
+typedef HotwaterStartProgressCallback = Future<void> Function(
+  HotwaterStartProgress progress,
+);
+
 class HotwaterStatusResult {
   const HotwaterStatusResult({required this.running, this.statusText = ''});
 
@@ -101,7 +122,10 @@ abstract class IHotwaterAdapter {
 
   /// 开热水（编排：device/get_by_id → BLE 握手 → heart_shark_response 得 isn →
   /// create_order 得 app_bytes → BLE 写 → start_consume_response）。内部保存 isn 供关水用。
-  Future<HotwaterActionResult> startHotwater(String deviceId);
+  Future<HotwaterActionResult> startHotwater(
+    String deviceId, {
+    HotwaterStartProgressCallback? onProgress,
+  });
 
   /// 关热水（编排：create_end_consume_cmd → BLE 写 → end_consume_response）。
   /// 依赖开水时保存的 isn（对齐 legacy last_isn）。

@@ -123,7 +123,10 @@ class RealZhuliAdapter implements IHotwaterAdapter {
   // ===== 开水（HTTP↔BLE 交织，对齐 legacy startHotwater 生命周期）=====
 
   @override
-  Future<HotwaterActionResult> startHotwater(String deviceId) async {
+  Future<HotwaterActionResult> startHotwater(
+    String deviceId, {
+    HotwaterStartProgressCallback? onProgress,
+  }) async {
     final s = _requireSession();
     if (deviceId.isEmpty) {
       throw const HotwaterException('设备码为空');
@@ -160,6 +163,10 @@ class RealZhuliAdapter implements IHotwaterAdapter {
         throw const HotwaterException('握手成功但没有拿到 isn');
       }
       _lastIsn = isn;
+      await onProgress?.call(HotwaterStartProgress(
+        stage: HotwaterStartStage.controlReady,
+        isn: isn,
+      ));
       final rateCmd = _str(heart, 'ratecmd');
       final handshakeResult = _str(heart, 'result');
 
@@ -199,8 +206,23 @@ class RealZhuliAdapter implements IHotwaterAdapter {
       });
       final appBytes = _str(order, 'app_bytes');
       final orderId = _str(order, 'order_id');
+      if (appBytes.isEmpty || orderId.isEmpty) {
+        throw const HotwaterException('创建热水订单后缺少启动指令或订单号');
+      }
+      await onProgress?.call(HotwaterStartProgress(
+        stage: HotwaterStartStage.orderCreated,
+        isn: isn,
+        orderId: orderId,
+      ));
 
-      // 8. BLE 写 app_bytes → 等 cmd_start_order（type 3/64）→ start_consume_response 确认。
+      // 8. 持久化“已尝试发送”的边界后再写 app_bytes；写入或确认响应失败都可能
+      // 已经触达设备，因此 runtime 必须保留 uncertain session。
+      await onProgress?.call(HotwaterStartProgress(
+        stage: HotwaterStartStage.commandSent,
+        isn: isn,
+        orderId: orderId,
+      ));
+      // BLE 写 app_bytes → 等 cmd_start_order（type 3/64）→ start_consume_response 确认。
       await conn.writeHex(appBytes);
       final startResp = await conn.awaitNotify(
         expectedTypes: ZhuliBleContract.typeStartOrder,

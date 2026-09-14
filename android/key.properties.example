@@ -1,0 +1,7 @@
+# Copy this file to android/key.properties and replace every placeholder.
+# The keystore path is resolved relative to the android/ directory when it is
+# not absolute. Never commit the filled-in key.properties or the keystore.
+storeFile=release-key.jks
+storePassword=replace-with-keystore-password
+keyAlias=replace-with-key-alias
+keyPassword=replace-with-key-password

@@ -26,7 +26,7 @@ mixin HotwaterActions on ShuiRuntimeBase {
 
   bool _current(HotwaterSession session, int epoch) =>
       !isDisposed &&
-      identical(state.hotwater.session, session) &&
+      state.hotwater.session?.id == session.id &&
       hotwaterAuthEpoch == epoch &&
       _matchesAccount(session);
 
@@ -67,6 +67,7 @@ mixin HotwaterActions on ShuiRuntimeBase {
     _emitStart(RuntimeTaskState.loading, '正在启动热水');
     final epoch = hotwaterAuthEpoch;
     HotwaterSession? session;
+    var commandSent = false;
     try {
       final baseline = system == BathSystemPreference.zhuli
           ? await hotwater.loadHistory()
@@ -77,7 +78,7 @@ mixin HotwaterActions on ShuiRuntimeBase {
       if (deviceOrders.any((row) => row.orderId.isEmpty)) {
         throw const HotwaterException('订单缺少标识，暂时无法建立热水会话');
       }
-      session = HotwaterSession(
+      final initialSession = HotwaterSession(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         account: account,
         deviceId: device,
@@ -87,44 +88,162 @@ mixin HotwaterActions on ShuiRuntimeBase {
         baselineOrderIds:
             List.unmodifiable(deviceOrders.map((row) => row.orderId)),
       );
+      session = initialSession;
       // 先落盘，再控制设备；意外退出时仍能找到待确认会话。
-      await settings.saveHotwaterSession(session);
+      await settings.saveHotwaterSession(initialSession);
       if (isDisposed) return;
       emit(state.copyWith(
           hotwater: state.hotwater.copyWith(
-        running: true,
-        session: session,
+        running: false,
+        session: initialSession,
         stop: const RuntimeActionStatus(),
       )));
-      if (!_current(session, epoch)) return;
+      if (!_current(initialSession, epoch)) return;
       if (system == BathSystemPreference.zhuli) {
-        final result = await hotwater.startHotwater(device);
-        await secure.saveHotwaterIsn(session.id, result.isn);
+        final result = await hotwater.startHotwater(
+          device,
+          onProgress: (progress) async {
+            final current = session;
+            if (current == null || !_current(current, epoch)) {
+              throw const HotwaterException('热水启动已取消');
+            }
+            if (progress.isn.isNotEmpty) {
+              await secure.saveHotwaterIsn(current.id, progress.isn);
+            }
+            if (progress.stage == HotwaterStartStage.commandSent) {
+              commandSent = true;
+            }
+            final updated = current.copyWith(
+              phase: commandSent
+                  ? HotwaterSessionPhase.uncertain
+                  : HotwaterSessionPhase.starting,
+              orderId:
+                  progress.orderId.isEmpty ? current.orderId : progress.orderId,
+            );
+            await settings.saveHotwaterSession(updated);
+            if (!_current(current, epoch)) {
+              throw const HotwaterException('热水启动已取消');
+            }
+            session = updated;
+            emit(state.copyWith(
+              hotwater: state.hotwater.copyWith(
+                running: updated.canPoll,
+                session: updated,
+                start: RuntimeActionStatus(
+                  state: RuntimeTaskState.loading,
+                  message: commandSent ? '启动指令已发送，正在确认' : '正在准备热水订单',
+                ),
+              ),
+            ));
+          },
+        );
+        final current = session;
+        if (current == null) {
+          throw const HotwaterException('热水启动会话已丢失');
+        }
+        await secure.saveHotwaterIsn(current.id, result.isn);
+        session = current.copyWith(
+          phase: HotwaterSessionPhase.active,
+          orderId: result.orderId.isEmpty ? current.orderId : result.orderId,
+        );
       } else {
+        final current = session;
+        final uncertain =
+            current.copyWith(phase: HotwaterSessionPhase.uncertain);
+        session = uncertain;
+        commandSent = true;
+        await settings.saveHotwaterSession(uncertain);
+        if (!_current(uncertain, epoch)) return;
+        emit(state.copyWith(
+          hotwater: state.hotwater.copyWith(
+            running: true,
+            session: uncertain,
+            start: const RuntimeActionStatus(
+              state: RuntimeTaskState.loading,
+              message: '启动请求已发送，正在确认',
+            ),
+          ),
+        ));
         await shower798.startShower(device);
+        final started = session;
+        session = started.copyWith(phase: HotwaterSessionPhase.active);
       }
-      if (!_current(session, epoch)) return;
+      final active = session;
+      if (active == null || !_current(active, epoch)) return;
+      await settings.saveHotwaterSession(active);
+      if (!_current(active, epoch)) return;
       emit(state.copyWith(
           hotwater: state.hotwater.copyWith(
+        running: true,
+        session: active,
         start: const RuntimeActionStatus(
             state: RuntimeTaskState.success, message: '热水使用中'),
       )));
     } catch (error) {
       if (isDisposed) return;
-      if (state.hotwater.session != null) {
-        _pending('启动结果待确认，请核对订单');
+      final current = session;
+      if (current != null && commandSent && _current(current, epoch)) {
+        final uncertain = current.copyWith(
+          phase: HotwaterSessionPhase.uncertain,
+        );
+        try {
+          await settings.saveHotwaterSession(uncertain);
+        } catch (_) {
+          _emitStart(RuntimeTaskState.failure, '启动结果无法保存，请重试');
+          return;
+        }
+        if (!_current(current, epoch)) return;
+        session = uncertain;
+        emit(state.copyWith(
+          hotwater: state.hotwater.copyWith(
+            running: true,
+            session: uncertain,
+          ),
+        ));
+        _pending('启动指令已发送但结果待确认，请核对设备');
+      } else if (current != null && _current(current, epoch)) {
+        final message =
+            error is HotwaterException ? error.message : '启动热水失败，请重试';
+        final cleared = await clearHotwaterSessionLocally(
+          expected: current,
+          resultState: RuntimeTaskState.failure,
+          message: message,
+        );
+        if (!cleared && _current(current, epoch)) {
+          _emitStart(RuntimeTaskState.failure, message);
+        }
       } else {
         _emitStart(RuntimeTaskState.failure,
             error is HotwaterException ? error.message : '无法保存或查询热水会话，请重试');
       }
     } finally {
       _sessionOperation = false;
-      if (!isDisposed && state.hotwater.session != null) startHotwaterPolling();
+      if (!isDisposed && state.hotwater.session?.canPoll == true) {
+        startHotwaterPolling();
+      }
     }
   }
 
   Future<void> stopHotwater() => stopActiveHotwater();
   Future<void> stopShower798() => stopActiveHotwater();
+
+  /// 清除无法安全自动核对的本地热水会话；不会调用设备控制接口。
+  Future<bool> clearUnreconciledHotwater() async {
+    await ready;
+    final session = state.hotwater.session;
+    if (isDisposed || session == null) return false;
+    final isn = session.system == BathSystemPreference.zhuli
+        ? await secure.loadHotwaterIsn(session.id)
+        : null;
+    final canClear = session.phase != HotwaterSessionPhase.active ||
+        isn == null ||
+        isn.isEmpty;
+    if (!canClear) return false;
+    return clearHotwaterSessionLocally(
+      expected: session,
+      message: '已清除本地热水状态，设备状态仍需现场确认',
+    );
+  }
 
   Future<void> stopActiveHotwater() async {
     await ready;
@@ -206,17 +325,16 @@ mixin HotwaterActions on ShuiRuntimeBase {
 
   Future<void> _finishSession(HotwaterSession session, String message) async {
     // 磁盘清除成功后才撤掉 UI，失败时下次查询仍可重试。
-    await settings.saveHotwaterSession(null);
-    if (isDisposed || !identical(state.hotwater.session, session)) return;
-    stopHotwaterPolling();
-    emit(state.copyWith(
-        hotwater: state.hotwater.copyWith(
-      running: false,
-      clearSession: true,
-      start: const RuntimeActionStatus(),
-      stop: RuntimeActionStatus(
-          state: RuntimeTaskState.success, message: message),
-    )));
+    final cleared = await clearHotwaterSessionLocally(
+      expected: session,
+      resultState: RuntimeTaskState.idle,
+      message: null,
+      stopStatus: RuntimeActionStatus(
+        state: RuntimeTaskState.success,
+        message: message,
+      ),
+    );
+    if (!cleared || isDisposed) return;
     if (session.system == BathSystemPreference.shower798) {
       emit(state.copyWith(
         shower798Devices: _mapDeviceStatus(session.deviceId, '空闲'),

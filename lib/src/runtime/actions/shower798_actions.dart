@@ -188,7 +188,7 @@ mixin Shower798Actions on ShuiRuntimeBase {
     if (session.token.isNotEmpty) {
       await secure.saveShower798Token(session.token);
     }
-    resumeHotwaterSession();
+    unawaited(resumeHotwaterSession());
   }
 
   /// 查看 798 状态（对齐 legacy checkShower798Status）。

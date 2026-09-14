@@ -8,6 +8,11 @@ val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasReleaseSigning = keystorePropertiesFile.exists()
 
+println(
+    "FlandreSY Android release signing mode: " +
+        if (hasReleaseSigning) "formal release keystore" else "debug fallback (local verification only)",
+)
+
 if (hasReleaseSigning) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }

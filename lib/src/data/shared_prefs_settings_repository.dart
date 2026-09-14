@@ -45,7 +45,17 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
     final p = await SharedPreferences.getInstance();
     final raw = p.getString(_hotwaterSessionKey);
     if (raw == null) return null;
-    return HotwaterSession.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Invalid hotwater session JSON');
+      }
+      return HotwaterSession.fromJson(decoded);
+    } on Object {
+      // A corrupt/unsupported local record must not prevent the app from booting.
+      await p.remove(_hotwaterSessionKey);
+      return null;
+    }
   }
 
   @override

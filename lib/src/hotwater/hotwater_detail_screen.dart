@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
 import '../runtime/fake_shui_runtime.dart';
+import '../runtime/hotwater_state.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
@@ -16,6 +17,7 @@ class HotwaterDetailScreen extends StatelessWidget {
     required this.onBack,
     required this.onStart,
     required this.onStop,
+    this.onClearLocal,
     super.key,
   });
 
@@ -23,6 +25,7 @@ class HotwaterDetailScreen extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onStart;
   final VoidCallback onStop;
+  final VoidCallback? onClearLocal;
 
   bool get _use798 =>
       state.hotwaterControlSystem == BathSystemPreference.shower798;
@@ -31,6 +34,10 @@ class HotwaterDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = AppTypography.textTheme;
     final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
+    final session = state.hotwater.session;
+    final canClearLocal = session != null &&
+        session.phase != HotwaterSessionPhase.active &&
+        onClearLocal != null;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final bottomPadding = AppCustomTokens.bottomBarHeight +
         bottomInset +
@@ -59,6 +66,16 @@ class HotwaterDetailScreen extends StatelessWidget {
                         if (state.hotwaterStop.message != null) ...[
                           const SizedBox(height: AppCustomTokens.spaceXs),
                           RuntimeStatusBanner(status: state.hotwaterStop),
+                        ],
+                        if (canClearLocal) ...[
+                          const SizedBox(height: AppCustomTokens.spaceXs),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: onClearLocal,
+                              child: const Text('仅清除本地状态'),
+                            ),
+                          ),
                         ],
                         const SizedBox(height: AppCustomTokens.spaceSm),
                         Row(

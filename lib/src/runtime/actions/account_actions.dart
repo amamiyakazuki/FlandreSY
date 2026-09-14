@@ -79,7 +79,7 @@ mixin AccountActions on ShuiRuntimeBase {
     if (sessionData.isValid) {
       await secure.saveZhuliSession(sessionData);
     }
-    resumeHotwaterSession();
+    unawaited(resumeHotwaterSession());
   }
 
   /// 绑定热水设备码（对齐 legacy bindHotwaterDeviceCode）。

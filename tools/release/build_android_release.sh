@@ -10,16 +10,20 @@ Usage:
   tools/release/build_android_release.sh [--validate-only]
 
 What it does:
-  1. Verifies pubspec.yaml version and public/version.json version stay aligned
+  1. Verifies pubspec.yaml version and assets/public/version.json stay aligned
   2. Verifies android/key.properties and the referenced keystore exist
-  3. Builds Android release artifacts:
+  3. Runs Dart analysis and the full Flutter test suite before packaging
+  4. Builds Android release artifacts:
      - split-per-abi APKs
+     - universal APK for the supported 64-bit targets
      - AAB bundle
-  4. Prints artifact paths and sha256 checksums
+  5. Prints artifact paths and sha256 checksums
 
 Notes:
   - Expects to be run from anywhere inside the repo
-  - Requires a real android/key.properties before running
+  - Requires a real android/key.properties before building or passing validation
+  - This script is the formal-signing distribution path; local debug-signed release
+    verification uses: flutter build apk --release
 EOF
 }
 
@@ -41,15 +45,18 @@ cd "$repo_root"
 
 pubspec_version="$(sed -n 's/^version: //p' pubspec.yaml | head -n1)"
 marketing_version="${pubspec_version%%+*}"
-manifest_version="$(sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' public/version.json | head -n1)"
+version_manifest_path="assets/public/version.json"
+manifest_version="$(sed -n 's/.*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$version_manifest_path" | head -n1)"
 
 if [[ -z "$pubspec_version" || -z "$manifest_version" ]]; then
-  echo "Failed to read version metadata from pubspec.yaml or public/version.json" >&2
+  echo "Failed to read version metadata from pubspec.yaml or $version_manifest_path" >&2
   exit 1
 fi
 
 if [[ "$marketing_version" != "$manifest_version" ]]; then
-  echo "Version mismatch: pubspec marketing version is '$marketing_version' but public/version.json is '$manifest_version'" >&2
+  echo "Version mismatch:" >&2
+  echo "  pubspec.yaml marketing version: '$marketing_version'" >&2
+  echo "  $version_manifest_path version: '$manifest_version'" >&2
   exit 1
 fi
 
@@ -89,9 +96,10 @@ fi
 echo "Release metadata looks good:"
 echo "  pubspec version: $pubspec_version"
 echo "  marketing version: $marketing_version"
-echo "  manifest version: $manifest_version"
+echo "  manifest version ($version_manifest_path): $manifest_version"
 echo "  key alias: $key_alias"
 echo "  keystore: $store_file"
+echo "  signing mode: formal release keystore"
 
 if [[ "$validate_only" == true ]]; then
   echo "Validation-only mode complete."
@@ -100,8 +108,16 @@ fi
 
 flutter clean
 flutter pub get
-flutter build apk --release --split-per-abi
-flutter build appbundle --release
+echo "Source validation: flutter analyze"
+flutter analyze
+echo "Source validation: flutter test"
+flutter test
+echo "Packaging formal release artifacts with the configured keystore"
+android_target_platforms="android-arm64,android-x64"
+echo "  target platforms: $android_target_platforms"
+flutter build apk --release --split-per-abi --target-platform "$android_target_platforms"
+flutter build apk --release --target-platform "$android_target_platforms"
+flutter build appbundle --release --target-platform "$android_target_platforms"
 
 echo
 echo "Artifacts:"

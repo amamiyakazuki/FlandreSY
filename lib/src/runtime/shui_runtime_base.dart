@@ -31,6 +31,7 @@ import 'models/hotwater_history.dart';
 import 'models/local_device.dart';
 import 'models/water_order.dart';
 import 'runtime_status.dart';
+import 'hotwater_state.dart';
 import 'shui_home_state.dart';
 
 /// 需重登的服务标识（RELOG）。action 层捕获 authInvalid 后据此清对应服务的凭证 + 账号 state。
@@ -87,10 +88,82 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   int hotwaterAuthEpoch = 0;
   bool get simulatedHotwater => hotwater is FakeHotwaterAdapter;
 
-  void resumeHotwaterSession() {
-    if (isDisposed || state.hotwater.session == null) return;
+  Future<void> resumeHotwaterSession() async {
+    final session = state.hotwater.session;
+    if (isDisposed || session == null) return;
+    if (!session.canPoll) {
+      await clearHotwaterSessionLocally(
+        expected: session,
+        resultState: RuntimeTaskState.failure,
+        message: '上次启动未发送到设备，已解除异常状态',
+      );
+      return;
+    }
+    if (session.system == BathSystemPreference.zhuli) {
+      final isn = await secure.loadHotwaterIsn(session.id);
+      if (isDisposed || state.hotwater.session?.id != session.id) return;
+      if (isn == null || isn.isEmpty) {
+        final uncertain = session.copyWith(
+          phase: HotwaterSessionPhase.uncertain,
+        );
+        await settings.saveHotwaterSession(uncertain);
+        if (isDisposed || state.hotwater.session?.id != session.id) return;
+        emit(state.copyWith(
+          hotwater: state.hotwater.copyWith(
+            running: true,
+            session: uncertain,
+            start: const RuntimeActionStatus(
+              state: RuntimeTaskState.unavailable,
+              message: '缺少关水凭据，请核对设备或解除本地状态',
+            ),
+          ),
+        ));
+      }
+    }
     startHotwaterPolling();
     unawaited(pollHotwaterStatusOnce());
+  }
+
+  /// 清除当前热水会话的本地记录，不调用任何设备或服务端控制接口。
+  /// [expected] 用于防止旧异步操作清理后来创建的新会话。
+  Future<bool> clearHotwaterSessionLocally({
+    HotwaterSession? expected,
+    RuntimeTaskState resultState = RuntimeTaskState.success,
+    String? message = '已清除本地热水状态',
+    RuntimeActionStatus? stopStatus,
+  }) async {
+    final session = state.hotwater.session;
+    if (isDisposed || session == null) return false;
+    if (expected != null && expected.id != session.id) return false;
+
+    try {
+      await secure.saveHotwaterIsn(session.id, null);
+      if (isDisposed || state.hotwater.session?.id != session.id) return false;
+      await settings.saveHotwaterSession(null);
+    } catch (_) {
+      if (!isDisposed && state.hotwater.session?.id == session.id) {
+        emit(state.copyWith(
+          hotwater: state.hotwater.copyWith(
+            start: const RuntimeActionStatus(
+              state: RuntimeTaskState.failure,
+              message: '本地热水状态清理失败，请重试',
+            ),
+          ),
+        ));
+      }
+      return false;
+    }
+    if (isDisposed || state.hotwater.session?.id != session.id) return false;
+    stopHotwaterPolling();
+    emit(state.copyWith(
+      hotwater: state.hotwater.copyWith(
+        running: false,
+        clearSession: true,
+        start: RuntimeActionStatus(state: resultState, message: message),
+        stop: stopStatus ?? const RuntimeActionStatus(),
+      ),
+    ));
+    return true;
   }
 
   /// 设置持久化（P1）。runtime 只依赖接口，生产注入 shared_prefs，测试注入内存实现。
@@ -244,10 +317,13 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
           : base.hotwater.copyWith(
               history: snap.hotwaterHistory,
               session: snap.hotwaterSession,
-              running: true,
-              start: const RuntimeActionStatus(
-                state: RuntimeTaskState.success,
-                message: '热水状态确认中',
+              running: snap.hotwaterSession!.canPoll,
+              start: RuntimeActionStatus(
+                state: snap.hotwaterSession!.canPoll
+                    ? RuntimeTaskState.unavailable
+                    : RuntimeTaskState.loading,
+                message:
+                    snap.hotwaterSession!.canPoll ? '热水状态确认中' : '正在恢复上次启动状态',
               ),
             ),
       currentWaterOrder: snap.currentWaterOrder,
@@ -374,7 +450,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   void setPollingPaused(bool paused) {
     final wasPaused = _pollingPaused;
     _pollingPaused = paused;
-    if (wasPaused && !paused) resumeHotwaterSession();
+    if (wasPaused && !paused) unawaited(resumeHotwaterSession());
   }
 
   /// 注册 Home banner 延后清理（4 秒）。重复调用取消上一个。

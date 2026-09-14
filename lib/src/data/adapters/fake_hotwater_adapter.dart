@@ -33,8 +33,25 @@ class FakeHotwaterAdapter implements IHotwaterAdapter {
   }
 
   @override
-  Future<HotwaterActionResult> startHotwater(String deviceId) async {
+  Future<HotwaterActionResult> startHotwater(
+    String deviceId, {
+    HotwaterStartProgressCallback? onProgress,
+  }) async {
     await Future<void>.delayed(_netDelay);
+    await onProgress?.call(const HotwaterStartProgress(
+      stage: HotwaterStartStage.controlReady,
+      isn: 'fake-isn',
+    ));
+    await onProgress?.call(const HotwaterStartProgress(
+      stage: HotwaterStartStage.orderCreated,
+      isn: 'fake-isn',
+      orderId: 'HW-fake',
+    ));
+    await onProgress?.call(const HotwaterStartProgress(
+      stage: HotwaterStartStage.commandSent,
+      isn: 'fake-isn',
+      orderId: 'HW-fake',
+    ));
     _running = true;
     return HotwaterActionResult(
       deviceId: deviceId,

@@ -1,12 +1,15 @@
 {
-  "version": "2.1.1",
-  "release_date": "2026-09-10",
+  "version": "2.1.2",
+  "release_date": "2026-09-14",
   "changelog": [
+    "修复设备不在蓝牙范围时热水启动异常会话卡住",
+    "增加旧会话恢复、本地解除和只读订单状态核对",
+    "修复 Android release 构建校验并区分本地验证签名",
     "修复住理热水启动参数与历史订单金额、时间、状态解析",
     "隔离慧生活798与住理历史，避免跨系统订单混淆",
     "明确U净本机订单范围并持久化洗衣历史"
   ],
   "downloads": {
-    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.1.1/app-release.apk"
+    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.1.2/app-release.apk"
   }
 }

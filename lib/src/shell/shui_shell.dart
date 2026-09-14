@@ -417,6 +417,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onBack: _handlePop,
           onStart: () => _startHotwater(runtime),
           onStop: () => _stopHotwater(runtime),
+          onClearLocal: () => _clearLocalHotwater(runtime),
         ),
       MoreOptionsRoute() => MoreOptionsScreen(
           onBack: _handlePop,
@@ -610,6 +611,35 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
 
   void _stopHotwater(FakeShuiRuntime runtime) {
     runtime.stopActiveHotwater();
+  }
+
+  Future<void> _clearLocalHotwater(FakeShuiRuntime runtime) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清除本地热水状态'),
+        content: const Text(
+          '只会删除本 App 的会话记录和关水凭据，不会向设备发送关水指令。设备是否仍在供水，需要到现场确认。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('确认清除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final cleared = await runtime.clearUnreconciledHotwater();
+    if (mounted) {
+      _showScanMessage(
+        cleared ? '已清除本地热水状态，设备状态仍需现场确认' : '本地状态清理失败，请重试',
+      );
+    }
   }
 
   /// 离开饮水页：清理 ready/banner，回到 Devices tab。

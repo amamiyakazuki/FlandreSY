@@ -59,3 +59,36 @@
 - 原因：测试调整为直接使用 `PersistedSnapshot` 后，不再需要单独导入账号模型。
 - 处理：删除多余 import，重新运行静态分析。
 - 结果：`flutter analyze` 无问题。
+
+## 2026-09-10 距离外启动热水形成永久异常会话
+- 现象：设备不在蓝牙范围内时点击启动，页面长期显示订单查询失败或状态待确认；重启仍恢复该状态，停止又因缺少 `isn` 无法完成。
+- 根因：代码在 BLE 扫描前即持久化 session；扫描、连接、握手、订单和启动确认的所有异常都被统一视为“可能已经启动”，没有保存启动阶段。重启逻辑又会无条件恢复 session 并启动轮询。
+- 关联问题：`_pending` 无条件设置 `running=true`；旧 session 无阶段信息；缺少 `isn` 时只有停止失败，没有安全的本地解除入口；启动指令发送后响应丢失与扫描超时需要采用不同处理。
+- 待处理：引入分阶段会话，发送前明确失败自动回滚，发送后不确定保留；为历史异常会话提供带说明的本地解除操作。
+
+## 2026-09-10 首页少量进行中任务被拉伸
+- 现象：首页“进行中”只有一个或两个任务时，人物/任务区域没有稳定靠左排列。
+- 根因：每项宽度使用 `constraints.maxWidth / tasks.length`，一个任务占整行、两个任务各占半行，布局会随数量拉伸。
+- 待处理：使用固定三列宽度并左对齐排列，一个任务占左一列、两个任务占左两列。
+
+## 2026-09-11 当前工作区 APK 构建失败
+- 现象：`flutter analyze` 报 4 个 Dart 错误；`flutter build apk --release` 在 `:app:compileFlutterBuildRelease` 的 kernel snapshot 阶段失败。
+- 根因：未完成的热水分阶段改动存在可空 `session` 传参、缺失 `_discardSession` 方法，以及未导入 `HotwaterSessionPhase` 三处代码问题。
+- 旁支：`bash tools/release/build_android_release.sh --validate-only` 读取根目录 `public/version.json`，与 `pubspec.yaml` 的 2.1.1 不一致；项目实际版本清单为 `assets/public/version.json`。当前也没有 `android/key.properties`，正式签名配置尚未提供。
+- 处理：已纳入 OpenSpec change `fix-hotwater-session-recovery-and-android-build`，Dart 编译阻塞、状态迁移、旧 session 清理、回归测试和发布脚本路径均已修复；正式签名配置仍由发布环境提供。
+
+## 2026-09-11 默认 APK 构建缺少 arm 引擎快照
+- 现象：`flutter build apk --release` 已进入 Gradle，但在 `:app:compileFlutterBuildRelease` 的 AOT 阶段失败。
+- 原因：当前 Flutter 缓存没有 `android-arm-release/darwin-x64/gen_snapshot`，默认多架构构建仍会尝试生成 32 位 ARM 产物；`android-arm64-release` 与 `android-x64-release` 缓存完整。
+- 处理：优先使用 `--target-platform android-arm64` 生成实际发布验证所需的单架构 APK；该环境问题不改变 Dart 源码编译结果。
+- 验证：`flutter build apk --release --target-platform android-arm64` 成功；产物为本地 debug 签名验证包，正式发布仍需补充 `android/key.properties` 和 keystore。
+
+## 2026-09-14 Flutter 3.44 正式发布目标不包含 32 位 ARM
+- 现象：正式发布脚本默认的 split APK/AAB 构建会尝试 `android-arm`，但 Flutter 3.44.4 本机没有 `android-arm-release/darwin-x64/gen_snapshot`，`flutter precache --android` 也不会提供该文件。
+- 影响：源码分析、全量测试和签名配置均通过，但默认发布脚本无法生成正式 APK/AAB。
+- 处理：发布脚本显式使用当前 SDK 可用的 `android-arm64,android-x64`，同时生成 split APK、通用 `app-release.apk` 和 AAB；32 位 ARM 设备不在本次正式包支持范围内。正式脚本已验证通过。
+
+## 2026-09-14 正式 AAB native library 符号剥离失败
+- 现象：arm64/x64 split APK 和通用 APK 构建成功，但 `flutter build appbundle --release` 在 `Release app bundle failed to strip debug symbols from native libraries` 处失败。
+- 影响：正式 AAB 尚未生成，当前只能核验 APK，不能宣称完整 Android 发布完成。
+- 处理：安装 Android Command-line Tools，并将其置于当前 Android SDK 的 `cmdline-tools/latest`；AAB 中已确认存在 arm64/x64 的 `libapp.so.sym` 与 `libflutter.so.sym`，完整正式发布脚本已通过。

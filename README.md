@@ -21,7 +21,7 @@
 - 英文品牌名：`FlandreSY`
 - Android 包名：`com.flandresy`
 - iOS Bundle ID：`com.flandresy`
-- 正式版营销版本：`2.1.1`
+- 正式版营销版本：`2.1.2`
 - Flutter 构建版本：见 `pubspec.yaml`
 - 默认运行模式：真实后端
 
@@ -77,6 +77,16 @@ flutter run --dart-define=SIMULATE_BACKEND=true
 
 ## Android 发布
 
+本地安装验证可以直接构建 release 模式 APK：
+
+```bash
+flutter build apk --release
+```
+
+如果没有 `android/key.properties`，Gradle 会明确打印 `debug fallback (local verification only)`；该 APK 只用于本地验证，不能作为正式分发包。
+
+正式发布使用下面的脚本。它会先校验版本、签名文件、Dart 分析和全量测试，再生成正式签名 APK/AAB：
+
 1. 复制 `android/key.properties.example` 为 `android/key.properties`
 2. 填入真实 keystore 路径、alias 与密码
 3. 运行统一校验与构建脚本：
@@ -84,6 +94,8 @@ flutter run --dart-define=SIMULATE_BACKEND=true
 ```bash
 bash tools/release/build_android_release.sh
 ```
+
+当前 Flutter SDK 的正式 Android 构建目标为 `android-arm64` 与 `android-x64`；脚本会生成这两种 split APK、包含两种架构的 `app-release.apk` 和 AAB。
 
 如果只想先检查签名配置是否齐全：
 
@@ -93,7 +105,7 @@ bash tools/release/build_android_release.sh --validate-only
 
 说明：
 - 仓库已经接好 release signing 自动读取逻辑
-- `android/key.properties` 缺失时，Gradle 会回退到 debug signing，只能用于本地验证，不可正式分发
+- 发布脚本强制使用正式 keystore；`android/key.properties` 缺失时会在构建前失败
 - 为保证 beta 用户可原地升级到正式版，Android `applicationId` 当前保持为 `com.flandresy`
 - 对于 GitHub Releases 分发，当前更推荐把 `app-release.apk` 作为主安装包
 
