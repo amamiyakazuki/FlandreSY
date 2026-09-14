@@ -92,3 +92,7 @@
 - 现象：arm64/x64 split APK 和通用 APK 构建成功，但 `flutter build appbundle --release` 在 `Release app bundle failed to strip debug symbols from native libraries` 处失败。
 - 影响：正式 AAB 尚未生成，当前只能核验 APK，不能宣称完整 Android 发布完成。
 - 处理：安装 Android Command-line Tools，并将其置于当前 Android SDK 的 `cmdline-tools/latest`；AAB 中已确认存在 arm64/x64 的 `libapp.so.sym` 与 `libflutter.so.sym`，完整正式发布脚本已通过。
+## 2026-09-14 GitHub release target 使用短 SHA 被拒绝
+- 现象：创建 `v2.1.2` 时传入短提交号 `b579008`，GitHub API 返回 `Release.target_commitish is invalid`。
+- 影响：第一次请求未创建 release，也未上传资产。
+- 处理：改用已推送的 `main` 分支作为 release target 重试。
