@@ -340,3 +340,10 @@
 
 - 自动化129项通过不覆盖真实BLE水流或支付宝包名/签名兼容；两者不能标为现场通过。
 - 当前尚缺手机系统、现场洗浴服务/设备、日志和支付业务/金额范围。先等待第一阶段条件确认，不自动执行支付或设备控制。
+# CI-02 / 2026-09-20：远端首跑 SDK 工具路径失败
+
+- 提交1bd382da2b67b522ace34417f067eb6db912f887已推送main；Flutter Android CI运行35479232027，分析与全量测试通过。
+- Prepare Android SDK明确报sdkmanager: command not found，退出127；Debug构建与artifact上传未执行。预装SDK工具不等于可直接从PATH调用，本地构建成功不能覆盖此Linux路径问题。
+- 待处理：显式解析runner Android SDK中的sdkmanager路径并检查可执行性，或配置专用Android setup步骤；当前仅记录，没有追加修改/推送。checkout/setup-java另有Node20及setup-java v4弃用告警，不是本次失败原因。
+- 用户已授权修复并再推送：按官方runner安装脚本确认的cmdline-tools/latest/bin布局，优先ANDROID_HOME、回退ANDROID_SDK_ROOT；检查空路径/不可执行，显式传sdk_root。无需改变构建/业务逻辑；远端结果待本次运行核实。
+- actionlint、bash语法与4种隔离路径场景通过。临时Ruby验证命令首次因谓词比较缺空格出现语法错误，修正后通过；不是workflow脚本错误。

@@ -60,8 +60,19 @@ jobs:
         run: flutter test --no-pub --reporter expanded
 
       - name: Prepare Android SDK
-        # GitHub-hosted Ubuntu provides sdkmanager and accepted SDK licenses.
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+        # The runner image installs command-line tools outside the default PATH.
+        run: |
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "$sdk_root" ]]; then
+            echo '::error::Android SDK root is not configured on this runner'
+            exit 1
+          fi
+          sdk_manager="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "$sdk_manager" ]]; then
+            echo "::error::Android SDK manager is not executable: $sdk_manager"
+            exit 1
+          fi
+          "$sdk_manager" --sdk_root="$sdk_root" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
 
       - name: Build Android debug ARM64
         run: flutter build apk --debug --target-platform android-arm64 --no-pub

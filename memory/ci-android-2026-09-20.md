@@ -1,5 +1,7 @@
 # CI A 决策与验证
 
+- 首次push 1bd382d远端分析/测试通过，但SDK步骤找不到PATH中的sdkmanager（运行35479232027）。用户授权修复再推送：显式用ANDROID_HOME/ANDROID_SDK_ROOT下cmdline-tools/latest/bin/sdkmanager，不再假设预装等于在PATH；远端结果以随后运行记录为准。
+
 - 用户选择A：静态分析、全量Flutter测试、Android Debug ARM64构建、保留APK；不增加Release检查或发布，不测试真实支付/BLE。热水用户现场通过已收口，支付按用户要求跳过。
 - 工作流`.github/workflows/flutter-android-ci.yml`：分支push/所有PR/手动触发，ubuntu-24.04、Flutter3.44.4、Temurin17；固定Action SHA。contents只读、checkout不保留凭据、按事件与ref取消旧运行、45分钟上限，产物7天。
 - SDK36/build-tools36.0.0/NDK28.2.13676358与当前Flutter/AGP相配；Gradle仅CI环境覆盖3GiB堆与2 workers，不改项目本地配置。锁文件强制解析，不自动更新依赖。
