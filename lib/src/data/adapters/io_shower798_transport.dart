@@ -4,12 +4,14 @@
 // and it is NOT verified by Codex — real network behavior must be verified ON-DEVICE by the user.
 // Not enabled by default. captcha image endpoint returns raw bytes -> base64.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'shower798_adapter.dart';
 import 'shower798_transport.dart';
+import 'http_request_deadline.dart';
 
 /// 真实 798 HTTP 传输：dart:io [HttpClient] 实现，对齐 legacy `Shower798RuntimeAdapter`。
 ///
@@ -17,7 +19,10 @@ import 'shower798_transport.dart';
 /// - token：登录后放 `Authorization` 头（无 Bearer 前缀，对齐 legacy）。
 /// - 校验：非 2xx 或响应 `code!=0` → 抛 [Shower798Exception]（msg/message）。
 class IoShower798Transport implements Shower798Transport {
-  IoShower798Transport({String baseUrl = kBaseUrl, HttpClient? client})
+  IoShower798Transport(
+      {String baseUrl = kBaseUrl,
+      HttpClient? client,
+      this.requestTimeout = const Duration(seconds: 15)})
       : _baseUrl = baseUrl,
         _client = client ?? HttpClient();
 
@@ -26,14 +31,26 @@ class IoShower798Transport implements Shower798Transport {
 
   final String _baseUrl;
   final HttpClient _client;
+  final Duration requestTimeout;
 
   @override
   Future<Map<String, dynamic>> send(Shower798Request request) async {
+    try {
+      return await HttpRequestDeadline.run(
+          requestTimeout, (deadline) => _send(request, deadline));
+    } on TimeoutException {
+      throw const Shower798Exception('请求超时，结果可能尚未确认，请查询状态后再操作');
+    }
+  }
+
+  Future<Map<String, dynamic>> _send(
+      Shower798Request request, HttpRequestDeadline deadline) async {
     final uri = _resolve(request);
     final HttpClientResponse resp;
     final String text;
     try {
       final req = await _client.openUrl(request.method, uri);
+      deadline.attach(req);
       req.headers.set('Accept', 'application/json');
       final token = request.token;
       if (token != null && token.isNotEmpty) {
@@ -83,9 +100,20 @@ class IoShower798Transport implements Shower798Transport {
 
   @override
   Future<String> getImageBase64(Shower798Request request) async {
+    try {
+      return await HttpRequestDeadline.run(
+          requestTimeout, (deadline) => _getImageBase64(request, deadline));
+    } on TimeoutException {
+      throw const Shower798Exception('验证码请求超时，请重试');
+    }
+  }
+
+  Future<String> _getImageBase64(
+      Shower798Request request, HttpRequestDeadline deadline) async {
     final uri = _resolve(request);
     try {
       final req = await _client.getUrl(uri);
+      deadline.attach(req);
       final resp = await req.close();
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         throw Shower798Exception('验证码 HTTP ${resp.statusCode}',

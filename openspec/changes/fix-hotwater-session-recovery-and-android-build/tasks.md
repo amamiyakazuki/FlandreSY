@@ -1,5 +1,7 @@
 ## 1. Session model and persistence
 
+> 下方 1–6 为历史完成记录。2026-09-19 热水规则已被 M1-B 替换；最新测试与验收见 P_PLAN/PLAN.md 和根目录 bug.md，不将历史轮询断言视为当前行为。
+
 - [x] 1.1 Reconcile the existing uncommitted hotwater changes with the approved state-machine design and preserve unrelated user work.
 - [x] 1.2 Implement versioned hotwater session phases (`preparing`, `starting`, `uncertain`, `active`) and optional startup order identity in the runtime model.
 - [x] 1.3 Make session decoding accept legacy version 1 data conservatively as `uncertain`, reject malformed data safely, and cover the migration codec with tests.

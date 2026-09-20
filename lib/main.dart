@@ -86,11 +86,23 @@ Future<void> main() async {
   // 真实模式用 flutter_secure_storage，并在建 adapter 前读出已持久化凭证注入回去（重启免重登）。
   final SecureSessionRepository? secure =
       useReal ? FlutterSecureSessionRepository() : null;
-  final String? ujingToken = useReal ? await secure!.loadUjingToken() : null;
+  Future<T?> loadCredential<T>(
+      String service, Future<T?> Function() load) async {
+    try {
+      return await load();
+    } catch (error) {
+      diagnosticLog.log(
+          'auth', '$service 凭据读取失败 type=${error.runtimeType}，需重新登录');
+      return null;
+    }
+  }
+
+  final String? ujingToken =
+      useReal ? await loadCredential('U净', secure!.loadUjingToken) : null;
   final ZhuliSessionData? zhuliSession =
-      useReal ? await secure!.loadZhuliSession() : null;
+      useReal ? await loadCredential('住理', secure!.loadZhuliSession) : null;
   final String? shower798Token =
-      useReal ? await secure!.loadShower798Token() : null;
+      useReal ? await loadCredential('798', secure!.loadShower798Token) : null;
 
   // 真实模式注入真实 HTTP adapter（+ RealPaymentLauncher，支付宝 SDK 原生那一跳由用户真机验证）；
   // 恢复 token 注入。模拟模式 null → runtime 默认 FakeUjingAdapter。

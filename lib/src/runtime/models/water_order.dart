@@ -43,6 +43,7 @@ class WaterOrderUi {
     required this.waterSeconds,
     required this.payment,
     this.payFlag = 0,
+    this.ownerAccountKey = '',
   });
 
   final String orderId;
@@ -65,13 +66,26 @@ class WaterOrderUi {
   /// 扣费金额（元）。
   final double payment;
   final int payFlag;
+  final String ownerAccountKey;
 
-  /// 终态判定，对齐 legacy `isTerminalWaterOrder`。
-  bool get isTerminal =>
-      orderStatus == '50' ||
-      orderStatusName.contains('完成') ||
-      statusRemark.contains('完成') ||
-      statusRemark.contains('结束');
+  WaterOrderUi copyWith({String? ownerAccountKey}) => WaterOrderUi(
+        orderId: orderId,
+        orderNo: orderNo,
+        serviceSubjectName: serviceSubjectName,
+        storeName: storeName,
+        deviceNo: deviceNo,
+        orderStatus: orderStatus,
+        orderStatusName: orderStatusName,
+        statusRemark: statusRemark,
+        warmWaterMl: warmWaterMl,
+        waterSeconds: waterSeconds,
+        payment: payment,
+        payFlag: payFlag,
+        ownerAccountKey: ownerAccountKey ?? this.ownerAccountKey,
+      );
+
+  /// 抓包确认的完成状态；文案与未知码不能作为清除活动订单的依据。
+  bool get isTerminal => orderStatus == '50';
 }
 
 /// 饮水完成历史记录。对齐 legacy `WaterOrderHistoryUi`。
@@ -85,6 +99,7 @@ class WaterOrderHistoryUi {
     required this.warmWaterMl,
     required this.waterSeconds,
     required this.completedAt,
+    this.ownerAccountKey = '',
   });
 
   final String orderId;
@@ -94,6 +109,7 @@ class WaterOrderHistoryUi {
   final int warmWaterMl;
   final int waterSeconds;
   final String completedAt;
+  final String ownerAccountKey;
 }
 
 /// 金额格式化：分 -> 「¥x.xx」。对齐 legacy `formatFenAmount`。

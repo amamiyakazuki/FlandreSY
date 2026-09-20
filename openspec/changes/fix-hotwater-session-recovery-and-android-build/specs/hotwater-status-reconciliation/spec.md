@@ -1,65 +1,100 @@
 ## MODIFIED Requirements
 
 ### Requirement: Hotwater sessions survive application restart
-The runtime SHALL capture a same-device order baseline before starting Zhuli hotwater and persist a session with its account, system, device, start time, baseline, explicit startup phase, and optional order identifier. The session SHALL distinguish `preparing`, `starting`, `uncertain`, and `active` states. Stop credentials SHALL be stored in secure storage before they are needed for an explicit stop. The runtime SHALL restore version 1 and current session formats safely after restart and immediately reconcile only sessions that may have reached the device-control boundary.
+The runtime SHALL persist the account, system, device, command-dispatch time, startup phase and available stop credential. On application startup or foreground resume, an active or uncertain session at most 40 minutes old SHALL restore the local running display; a session older than 40 minutes SHALL reset to the initial ready-to-start display and request the original account's Zhuli consumption history when that account is available. This reset SHALL NOT send a device stop command or claim that the device physically stopped. Preparing or starting sessions that have not reached command dispatch SHALL be cleared as incomplete attempts.
 
-#### Scenario: Application restarts during an active or uncertain session
-- **WHEN** an unfinished persisted session in `active` or `uncertain` phase is restored
-- **THEN** the app retains the original account, system, device, and order binding, immediately performs read-only reconciliation, and resumes foreground polling every 10 seconds
+#### Scenario: Restore within or exactly at 40 minutes
+- **WHEN** a session that may have started is restored no more than 40 minutes after command dispatch
+- **THEN** the app shows hotwater in use even if its local stop credential is missing and leaves both control buttons available
 
-#### Scenario: Application is suspended or terminated
-- **WHEN** the application cannot execute foreground polling
-- **THEN** it preserves the session and immediately reconciles it on its next start or foreground resume
+#### Scenario: Restore after 40 minutes
+- **WHEN** a session is restored more than 40 minutes after command dispatch
+- **THEN** the app clears the local session, shows ready to start, and refreshes available Zhuli consumption history without issuing device controls
 
-#### Scenario: Application restores a preparing or starting session
-- **WHEN** a persisted session is in `preparing` or `starting` phase and no device start command has crossed the durable dispatch boundary
-- **THEN** the app removes the local session and stop credential, does not start polling, and exposes a retryable startup failure without claiming that hotwater was running
+#### Scenario: Order refresh fails after expiry
+- **WHEN** the refresh fails after the local display was reset
+- **THEN** the app keeps its ready-to-start display and cached orders, exposes the refresh failure, and permits another manual operation
 
-#### Scenario: Application restores a legacy version 1 session
-- **WHEN** a persisted version 1 session has no startup phase or order identifier
-- **THEN** the app conservatively restores it as an uncertain session, preserves its original identity, and exposes read-only reconciliation plus a user-confirmed local-clear option
+#### Scenario: Runtime remains in foreground
+- **WHEN** the app stays open beyond 40 minutes
+- **THEN** no periodic 10-second or one-hour status-reconciliation timer changes its running display; the time rule applies on the next recovery event
+
+#### Scenario: Restore occurs while a command is executing
+- **WHEN** a foreground recovery is requested while a start or stop is in flight
+- **THEN** recovery waits for the command and evaluates the resulting session instead of clearing its intermediate state
+
+
+## REMOVED Requirements
 
 ### Requirement: Read-only reconciliation determines session completion
-For Zhuli, the runtime SHALL infer completion from a same-device order absent from the baseline and dated after the session start, or from the persisted startup order identifier when one is known. For Shower798, it SHALL retain the existing read-only idle-state query. It SHALL NOT use start or stop operations as polling probes. A start failure before the durable dispatch boundary SHALL clear the local startup session; a failure after that boundary SHALL preserve an uncertain session. Successful explicit stop SHALL clear the session.
-
-#### Scenario: New consumption record appears
-- **WHEN** a Zhuli poll finds the known startup order, or a same-device non-baseline order with a parseable time later than the session start
-- **THEN** it infers session completion and clears the corresponding ongoing state
-
-#### Scenario: Session reaches one hour
-- **WHEN** a persisted session reaches one hour
-- **THEN** the app requests another reconciliation and does not clear the session solely because local time elapsed
-
-#### Scenario: Device is out of Bluetooth range before command dispatch
-- **WHEN** scanning, connecting, handshaking, or creating the startup order fails before the durable dispatch boundary
-- **THEN** the app removes the temporary session and secure stop credential, stops its polling timers, shows the actual retryable error, and allows a new start attempt
-
-#### Scenario: Startup response is lost after command dispatch
-- **WHEN** the device start command has been attempted and the response or confirmation is lost
-- **THEN** the app preserves the session as `uncertain`, keeps the available stop credential, and performs only read-only reconciliation on retry, restart, or foreground resume
+**Reason**: 用户明确取消按消费记录推断热水结束的旧规则。
+**Migration**: 改用恢复时的 40 分钟本地显示规则，订单查询仅更新记录。
 
 ### Requirement: Hotwater polling represents unknown status honestly
-The runtime SHALL preserve an explicit pending or unknown state when queries fail or order evidence is insufficient. Polls SHALL be mutually exclusive, bound to the session ID and account authorization epoch, and discard responses from obsolete sessions. Default-system changes SHALL NOT change the active session's control target. A local-clear action SHALL be available for sessions whose state cannot be safely reconciled.
+**Reason**: 不再使用热水自动状态轮询；查询状态与开水显示分离。
+**Migration**: 使用独立历史加载状态和手动控制的错误提示。
 
-#### Scenario: No live status and no terminal evidence
-- **WHEN** queries fail, orders remain unchanged, or records lack a usable identifier or timestamp
-- **THEN** the UI shows an unknown or awaiting-confirmation state and does not claim that hotwater stopped
+## ADDED Requirements
 
-#### Scenario: Account or unrelated records change
-- **WHEN** the logged-in account differs from the persisted session account, or only other devices' orders, list order, or missing old records change
-- **THEN** the app preserves the session and does not query using a different account or infer completion from those changes
+### Requirement: Manual hotwater controls remain available
+The home and detail start and stop buttons SHALL accept taps regardless of running, pending, idle or loading display state. Commands SHALL execute sequentially, coalesce consecutive identical requests and reject queued requests whose account authorization or target has changed. Login and device prerequisites SHALL produce feedback rather than silent rejection. Start SHALL NOT depend on a consumption-history baseline. A repeated start for the same account and device with an active or uncertain session SHALL return feedback without repeating the protocol or replacing the session, dispatch time or stop credential. Restore operations SHALL NOT break in-flight duplicate coalescing; stop and explicit local clear SHALL remain ordering barriers.
 
-#### Scenario: Obsolete poll response arrives
-- **WHEN** a poll response returns after logout, session replacement, or runtime disposal
-- **THEN** the response is discarded without changing the current session, history, or ongoing-state UI
+#### Scenario: Stop clicked during start
+- **WHEN** the user clicks stop while start is executing
+- **THEN** stop waits for start to finish and uses its resulting control information; consecutive duplicate taps do not dispatch duplicate commands
+
+#### Scenario: Start clicked while running
+- **WHEN** the user starts again after a prior start completes
+- **THEN** the adapter receives no additional start and the original session, credential and recovery reference are retained
+
+#### Scenario: Dispatch result or persistence is uncertain
+- **WHEN** the command dispatch stage was reached but confirmation or subsequent persistence failed, and the user starts again
+- **THEN** the in-memory uncertain session prevents another start, retains available stop credentials and reports uncertainty rather than suggesting a blind retry
+
+#### Scenario: Start stop start in quick succession
+- **WHEN** the user requests start, stop and start in that order
+- **THEN** commands preserve that order; the final start executes only after the preceding session has been successfully stopped and cleared
+
+#### Scenario: Repeated start fails before dispatch
+- **WHEN** a new start attempt fails before its device command is dispatched
+- **THEN** an earlier session and its credential are retained, or the failed temporary session is removed if no earlier session existed
+
+#### Scenario: Stop has no local Zhuli session or credential
+- **WHEN** a logged-in user clicks stop without local Zhuli control information
+- **THEN** the app refreshes account consumption history, reports the refresh result and does not block the controls or report a successful physical stop
+
+#### Scenario: Stop has a credential
+- **WHEN** the user clicks stop with valid local Zhuli control information
+- **THEN** the app uses the existing stop protocol, clears the local session after success and refreshes consumption history
+
+#### Scenario: Shower798 stop without local session
+- **WHEN** a logged-in Shower798 user with a selected device clicks stop
+- **THEN** the existing device stop endpoint is used even without a local hotwater session
+
+
+### Requirement: Order queries do not determine hotwater completion
+Queries SHALL update and persist consumption history only. A matching order, a completed status, an empty result or a query failure SHALL NOT change the running display or delete control information. Concurrent identical history requests SHALL be coalesced, and results obsolete after session replacement, account authorization changes, a newer control operation or runtime disposal SHALL be discarded. Shower798 SHALL NOT query Zhuli history or use device-idle polling to determine hotwater completion.
+
+#### Scenario: Matching completed order appears
+- **WHEN** a query returns the current order with a completed status
+- **THEN** history is updated and the existing local running display is preserved
+
+#### Scenario: Old history response arrives after a new operation
+- **WHEN** a history response belongs to an older session or authorization generation
+- **THEN** it is discarded without overwriting the new history or hotwater state
+
+#### Scenario: Stop error notice expires
+- **WHEN** a failed stop's temporary notice expires
+- **THEN** only that notice is cleared and an ongoing hotwater title remains running
+
 
 ### Requirement: User can clear an unreconciled local session
-The runtime SHALL provide a user-confirmed local-clear operation for a legacy, uncertain, or credentialless session that cannot be safely stopped or automatically reconciled. The operation SHALL remove the persisted session, secure stop credential, and polling timers without calling a device start/stop endpoint, and SHALL state that only the App's local record was cleared.
+A user-confirmed local clear SHALL be serialized with control and restore operations. The session SHALL be rechecked when the clear executes. Persisted session deletion SHALL precede credential deletion so a settings failure does not remove the credential of a retained session. A successful local clear SHALL remove only local state and SHALL NOT claim device shutdown.
 
-#### Scenario: User confirms local clear
-- **WHEN** the user confirms clearing an unreconciled session
-- **THEN** the app clears local session state and secure credentials, removes the item from the ongoing list, stops polling, and shows a neutral local-clear result
+#### Scenario: Clear during an in-flight start
+- **WHEN** an earlier confirmation reaches the runtime while a start is in flight
+- **THEN** clear waits for the command and rechecks eligibility, leaving a successfully started session with its credential intact
 
-#### Scenario: User cancels local clear
-- **WHEN** the user dismisses the confirmation
-- **THEN** the session, credentials, polling, and pending status remain unchanged
+#### Scenario: Persisted session deletion fails
+- **WHEN** local session storage rejects deletion
+- **THEN** the app retains the local session and its stop credential and reports the local cleanup failure

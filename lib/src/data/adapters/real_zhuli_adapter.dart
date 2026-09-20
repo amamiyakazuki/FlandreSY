@@ -54,6 +54,8 @@ class RealZhuliAdapter implements IHotwaterAdapter {
 
   ZhuliSessionData? _session;
 
+  bool get hasCredentials => _session?.isValid ?? false;
+
   /// 开水握手保存的 isn（对齐 legacy last_isn）；关水依赖它。
   String _lastIsn = '';
 
@@ -132,7 +134,10 @@ class RealZhuliAdapter implements IHotwaterAdapter {
       throw const HotwaterException('设备码为空');
     }
 
+    void stage(String name) => _log('热水启动阶段=$name deviceId=$deviceId');
+
     // 1. device/get_by_id → ble 名称/mac/类型。
+    stage('device_query');
     final device = await _business(s, 'device/get_by_id', {'id': deviceId});
     final bleName = _str(device, 'ble_name');
     final bleMac = _str(device, 'ble_mac');
@@ -141,19 +146,22 @@ class RealZhuliAdapter implements IHotwaterAdapter {
     final skipOptional = deviceType == '3' || deviceType == '5';
 
     // 2. 扫描 + 连接 BLE（骨架抛未实现；真机为真实 GATT）。
+    stage('ble_scan_connect');
     final conn = await _ble.scanAndConnect(bleName: bleName, bleMac: bleMac);
     try {
       // 3. 取握手 hex → BLE 写 → 等 cmd_hand_shark（type 1）。
+      stage('handshake_command');
       final handshakeHex =
           await _businessString(s, 'device/ble/create_hand_shake_cmd', {
         'device_id': deviceId,
       });
-      await conn.writeHex(handshakeHex);
-      final handshakeResp = await conn.awaitNotify(
+      final handshakeResp = await conn.writeHexAndAwait(
+        handshakeHex,
         expectedTypes: const [ZhuliBleContract.typeHandShark],
       );
 
       // 4. heart_shark_response → isn + 可选 ratecmd + result。
+      stage('handshake_confirm');
       final heart = await _business(s, 'device/ble/heart_shark_response', {
         'device_id': deviceId,
         'hex': handshakeResp,
@@ -172,21 +180,23 @@ class RealZhuliAdapter implements IHotwaterAdapter {
 
       // 5.（可选）set_rate：有 ratecmd 且设备类型非 3/5 → 写费率，等 cmd_set_rate（type 16）。
       if (!skipOptional && rateCmd.isNotEmpty) {
-        await conn.writeHex(rateCmd);
-        await conn.awaitNotify(
+        stage('rate_command');
+        await conn.writeHexAndAwait(
+          rateCmd,
           expectedTypes: const [ZhuliBleContract.typeSetRate],
         );
       }
 
       // 6.（可选）history_order：设备类型非 3/5 且握手 result≠3 → 同步旧订单。
       if (!skipOptional && handshakeResult != '3') {
+        stage('history_command');
         final historyHex =
             await _businessString(s, 'device/ble/create_history_order_cmd', {
           'device_id': deviceId,
           'isn': isn,
         });
-        await conn.writeHex(historyHex);
-        final historyResp = await conn.awaitNotify(
+        final historyResp = await conn.writeHexAndAwait(
+          historyHex,
           expectedTypes: ZhuliBleContract.typeHistoryOrder,
         );
         await _business(s, 'consume/ble/end_consume_response', {
@@ -196,6 +206,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
       }
 
       // 7. create_order → app_bytes + order_id。
+      stage('order_create');
       final order = await _business(s, 'consume/create_order', {
         'isn': isn,
         'device_id': deviceId,
@@ -223,8 +234,9 @@ class RealZhuliAdapter implements IHotwaterAdapter {
         orderId: orderId,
       ));
       // BLE 写 app_bytes → 等 cmd_start_order（type 3/64）→ start_consume_response 确认。
-      await conn.writeHex(appBytes);
-      final startResp = await conn.awaitNotify(
+      stage('start_command_confirm');
+      final startResp = await conn.writeHexAndAwait(
+        appBytes,
         expectedTypes: ZhuliBleContract.typeStartOrder,
       );
       await _business(s, 'consume/ble/start_consume_response', {
@@ -233,6 +245,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
         'hex': startResp,
       });
 
+      stage('completed');
       _log('热水启动完成 deviceId=$deviceId orderId=$orderId');
       return HotwaterActionResult(
         deviceId: deviceId,
@@ -266,8 +279,8 @@ class RealZhuliAdapter implements IHotwaterAdapter {
         'device_id': deviceId,
         'isn': sessionIsn,
       });
-      await conn.writeHex(endHex);
-      final endResp = await conn.awaitNotify(
+      final endResp = await conn.writeHexAndAwait(
+        endHex,
         expectedTypes: ZhuliBleContract.typeEndConsume,
       );
       await _business(s, 'consume/ble/end_consume_response', {

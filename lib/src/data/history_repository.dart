@@ -31,13 +31,12 @@ class HotwaterHistoryCodec {
     }
     final decoded = jsonDecode(json);
     if (decoded is! List) {
-      return const <HotwaterHistoryUi>[];
+      throw const FormatException('Invalid history list');
     }
     final out = <HotwaterHistoryUi>[];
     for (final item in decoded) {
-      if (item is Map) {
-        out.add(fromMap(item.cast<String, dynamic>()));
-      }
+      if (item is! Map) throw const FormatException('Invalid history entry');
+      out.add(fromMap(item.cast<String, dynamic>()));
     }
     return out;
   }

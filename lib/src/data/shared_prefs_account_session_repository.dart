@@ -6,9 +6,40 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../runtime/models/account_session.dart';
 import 'account_session_repository.dart';
+import 'recoverable_json.dart';
 
 /// 基于 shared_preferences 的账号 session 持久化实现（Android + iOS）。
 class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
+  Future<void> _save(SharedPreferences prefs, String key, String value) async {
+    if (!await prefs.setString(key, value)) throw StateError('账号状态保存失败');
+  }
+
+  @override
+  Future<void> clearZhuli() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.remove(_zhuliPhoneKey)) throw StateError('账号状态保存失败');
+  }
+
+  @override
+  Future<void> clearUjing() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in [
+      _ujingMobileKey,
+      _ujingUserIdKey,
+      _ujingServiceSubjectKey
+    ]) {
+      if (!await prefs.remove(key)) throw StateError('账号状态保存失败');
+    }
+  }
+
+  @override
+  Future<void> clearShower798() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in [_s798MobileKey, _s798UidKey, _s798EidKey]) {
+      if (!await prefs.remove(key)) throw StateError('账号状态保存失败');
+    }
+  }
+
   SharedPrefsAccountSessionRepository();
 
   static const String _zhuliPhoneKey = 'zhuli_phone';
@@ -27,11 +58,12 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   Future<ZhuliSession?> loadZhuli() async {
     final prefs = await SharedPreferences.getInstance();
     final phone = prefs.getString(_zhuliPhoneKey);
-    if (phone == null || phone.isEmpty) {
+    if ((phone == null || phone.isEmpty) &&
+        (prefs.getString(_zhuliDeviceCodeKey) ?? '').isEmpty) {
       return null;
     }
     return ZhuliSession(
-      phone: phone,
+      phone: phone ?? '',
       deviceCode: prefs.getString(_zhuliDeviceCodeKey) ?? '',
     );
   }
@@ -39,8 +71,8 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   @override
   Future<void> saveZhuli(ZhuliSession session) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_zhuliPhoneKey, session.phone);
-    await prefs.setString(_zhuliDeviceCodeKey, session.deviceCode);
+    await _save(prefs, _zhuliDeviceCodeKey, session.deviceCode);
+    await _save(prefs, _zhuliPhoneKey, session.phone);
   }
 
   @override
@@ -60,9 +92,9 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   @override
   Future<void> saveUjing(UjingAccountUi account) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_ujingMobileKey, account.mobile);
-    await prefs.setString(_ujingUserIdKey, account.userId);
-    await prefs.setString(_ujingServiceSubjectKey, account.serviceSubjectId);
+    await _save(prefs, _ujingUserIdKey, account.userId);
+    await _save(prefs, _ujingServiceSubjectKey, account.serviceSubjectId);
+    await _save(prefs, _ujingMobileKey, account.mobile);
   }
 
   @override
@@ -72,10 +104,15 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
     if (mobile == null || mobile.isEmpty) {
       return null;
     }
-    final devicesJson = prefs.getString(_s798DevicesKey);
     final devices = <Shower798DeviceUi>[];
-    if (devicesJson != null && devicesJson.isNotEmpty) {
-      final decoded = jsonDecode(devicesJson);
+    if (prefs.containsKey(_s798DevicesKey)) {
+      final decoded = await readRecoverableJson(prefs, _s798DevicesKey, (raw) {
+        final value = jsonDecode(raw);
+        if (value is! List || value.any((item) => item is! Map)) {
+          throw const FormatException('Invalid 798 devices');
+        }
+        return value;
+      });
       if (decoded is List) {
         for (final item in decoded) {
           if (item is Map) {
@@ -104,10 +141,9 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   @override
   Future<void> saveShower798(Shower798Persisted data) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_s798MobileKey, data.account.mobile);
-    await prefs.setString(_s798UidKey, data.account.uid);
-    await prefs.setString(_s798EidKey, data.account.eid);
-    await prefs.setString(_s798CurrentDeviceKey, data.currentDeviceId);
+    await _save(prefs, _s798UidKey, data.account.uid);
+    await _save(prefs, _s798EidKey, data.account.eid);
+    await _save(prefs, _s798CurrentDeviceKey, data.currentDeviceId);
     final devicesJson = jsonEncode(
       data.devices
           .map((d) => {
@@ -117,6 +153,7 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
               })
           .toList(),
     );
-    await prefs.setString(_s798DevicesKey, devicesJson);
+    await _save(prefs, _s798DevicesKey, devicesJson);
+    await _save(prefs, _s798MobileKey, data.account.mobile);
   }
 }

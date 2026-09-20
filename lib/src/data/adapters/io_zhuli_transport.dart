@@ -5,6 +5,7 @@
 // TOUCHES A REAL SOCKET here, and it is NOT verified by Codex — real network behavior (login/business
 // round-trips) must be verified ON-DEVICE by the user. Not enabled by default.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,9 +18,12 @@ import 'zhuli_transport.dart';
 /// - result 校验 + data 解码（含 base64url 编码 JSON 字符串）由 [ZhuliUnwrap] 负责（可 fixture 测）。
 /// - data 为对象/字符串/数组三种取法（getObject/getString/getArray）。
 class IoZhuliTransport implements ZhuliTransport {
-  IoZhuliTransport({HttpClient? client}) : _client = client ?? HttpClient();
+  IoZhuliTransport({HttpClient? client, Duration? requestTimeout})
+      : _client = client ?? HttpClient(),
+        _requestTimeout = requestTimeout ?? const Duration(seconds: 15);
 
   final HttpClient _client;
+  final Duration _requestTimeout;
 
   @override
   Future<Map<String, dynamic>> getObject(ZhuliRequest request) async {
@@ -62,12 +66,16 @@ class IoZhuliTransport implements ZhuliTransport {
 
     final HttpClientResponse resp;
     final String text;
+    HttpClientRequest? req;
     try {
-      final req = await _client.getUrl(uri);
+      req = await _client.getUrl(uri).timeout(_requestTimeout);
       req.headers.set('Accept', 'application/json, text/plain, */*');
       req.headers.contentType = ContentType('application', 'json');
-      resp = await req.close();
-      text = await resp.transform(utf8.decoder).join();
+      resp = await req.close().timeout(_requestTimeout);
+      text = await resp.transform(utf8.decoder).join().timeout(_requestTimeout);
+    } on TimeoutException {
+      req?.abort();
+      throw const HotwaterException('网络请求超时，请稍后重试');
     } on Exception catch (e) {
       throw HotwaterException('网络请求失败：$e');
     }

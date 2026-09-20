@@ -6,6 +6,7 @@ import '../runtime/runtime_status.dart';
 import '../runtime/hotwater_state.dart';
 import 'dart:convert';
 import 'settings_repository.dart';
+import 'recoverable_json.dart';
 
 /// 基于 shared_preferences 的设置持久化实现（Android + iOS）。
 /// 通过 [SettingsRepository] 接口被 runtime 消费，runtime 不直接依赖此类。
@@ -37,25 +38,21 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
   @override
   Future<void> saveBathSystem(BathSystemPreference preference) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_bathSystemKey, preference.name);
+    if (!await prefs.setString(_bathSystemKey, preference.name)) {
+      throw StateError('偏好保存失败');
+    }
   }
 
   @override
   Future<HotwaterSession?> loadHotwaterSession() async {
     final p = await SharedPreferences.getInstance();
-    final raw = p.getString(_hotwaterSessionKey);
-    if (raw == null) return null;
-    try {
+    return readRecoverableJson(p, _hotwaterSessionKey, (raw) {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException('Invalid hotwater session JSON');
       }
       return HotwaterSession.fromJson(decoded);
-    } on Object {
-      // A corrupt/unsupported local record must not prevent the app from booting.
-      await p.remove(_hotwaterSessionKey);
-      return null;
-    }
+    });
   }
 
   @override
@@ -76,7 +73,9 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
   @override
   Future<void> saveUseSimulatedBackend(bool useSimulated) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_useSimulatedBackendKey, useSimulated);
+    if (!await prefs.setBool(_useSimulatedBackendKey, useSimulated)) {
+      throw StateError('后端偏好保存失败');
+    }
   }
 
   @override
@@ -88,6 +87,8 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
   @override
   Future<void> savePermissionIntroSeen(bool seen) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_permissionIntroSeenKey, seen);
+    if (!await prefs.setBool(_permissionIntroSeenKey, seen)) {
+      throw StateError('权限引导状态保存失败');
+    }
   }
 }

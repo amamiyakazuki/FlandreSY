@@ -29,6 +29,8 @@ class SharedPrefsWaterOrderRepository implements WaterOrderRepository {
   @override
   Future<void> save(WaterOrderSnapshot snapshot) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_waterKey, WaterOrderCodec.encode(snapshot));
+    final saved =
+        await prefs.setString(_waterKey, WaterOrderCodec.encode(snapshot));
+    if (!saved) throw StateError('饮水订单保存失败');
   }
 }

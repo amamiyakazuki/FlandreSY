@@ -9,7 +9,6 @@ import 'dart:async';
 import '../../data/adapters/hotwater_adapter.dart';
 import '../../data/adapters/ujing_adapter.dart';
 import '../../data/adapters/ujing_http_adapter.dart';
-import '../models/account_session.dart';
 import '../runtime_status.dart';
 import '../shui_runtime_base.dart';
 
@@ -20,6 +19,23 @@ mixin AccountActions on ShuiRuntimeBase {
   /// 真实（RealZhuliAdapter）：平台签名 HTTP 登录并在 adapter 内部持 session
   /// （startHotwater/stopHotwater 依赖 `_requireSession()`，否则「一点开水就显示未登录」）。
   Future<void> loginZhuli(String phone, String password) async {
+    await ready;
+    if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
+      return;
+    }
+    hotwaterAuthChanging = true;
+    try {
+      await _loginZhuli(phone, password);
+    } catch (error) {
+      diagnosticLog.log('auth', '住理登录保存失败 type=${error.runtimeType}');
+      hotwaterAuthChanging = false;
+      await handleAuthInvalidation(AuthService.zhuli);
+    } finally {
+      hotwaterAuthChanging = false;
+    }
+  }
+
+  Future<void> _loginZhuli(String phone, String password) async {
     await ready;
     if (isDisposed ||
         state.hotwaterStart.isBusy ||
@@ -63,6 +79,11 @@ mixin AccountActions on ShuiRuntimeBase {
       return;
     }
     final session = state.zhuli.copyWith(phone: normalizedPhone);
+    if (sessionData.isValid) {
+      await sessions.clearZhuli();
+      await secure.saveZhuliSession(sessionData);
+    }
+    await sessions.saveZhuli(session);
     emit(
       state.copyWith(
         zhuli: session,
@@ -72,18 +93,14 @@ mixin AccountActions on ShuiRuntimeBase {
         ),
       ),
     );
-    await sessions.saveZhuli(session);
     await setBathSystem(BathSystemPreference.zhuli);
-    // PTOK：real 模式下 adapter 返回带 secretKey 的真 session → 加密持久化（重启免重登）。
-    // Fake 返回占位 session（secretKey='fake-secret'）也会存——无害（重启仍走 Fake adapter）。
-    if (sessionData.isValid) {
-      await secure.saveZhuliSession(sessionData);
-    }
     unawaited(resumeHotwaterSession());
   }
 
   /// 绑定热水设备码（对齐 legacy bindHotwaterDeviceCode）。
   Future<void> bindHotwaterDeviceCode(String deviceId) async {
+    await ready;
+    if (isDisposed || hotwaterAuthChanging) return;
     final normalized = deviceId.trim();
     if (normalized.isEmpty) {
       emit(
@@ -106,7 +123,19 @@ mixin AccountActions on ShuiRuntimeBase {
         ),
       ),
     );
-    await sessions.saveZhuli(session);
+    hotwaterAccountWriteCount++;
+    try {
+      await sessions.saveZhuli(session);
+    } catch (error) {
+      diagnosticLog.log('storage', '设备码保存失败 type=${error.runtimeType}');
+      emit(state.copyWith(
+          hotwaterLogin: const RuntimeActionStatus(
+        state: RuntimeTaskState.failure,
+        message: '设备码尚未保存，请重试',
+      )));
+    } finally {
+      hotwaterAccountWriteCount--;
+    }
   }
 
   /// 查看住理状态（对齐 legacy checkHotwaterStatus）。
@@ -180,7 +209,16 @@ mixin AccountActions on ShuiRuntimeBase {
   /// U净登录（经 IUjingAdapter；fake 派生账号，真实由接口返回）。
   /// 对齐 legacy loginUjing。
   Future<void> loginUjing(String phone, String captcha) async {
-    if (state.washerLogin.isBusy) {
+    await ready;
+    if (isDisposed || ujingAuthChanging || state.washerLogin.isBusy) {
+      return;
+    }
+    if (ujingMutationCount > 0) {
+      emit(state.copyWith(
+          washerLogin: const RuntimeActionStatus(
+        state: RuntimeTaskState.unavailable,
+        message: '订单操作正在处理，请完成后再切换账号',
+      )));
       return;
     }
     final mobile = phone.trim();
@@ -195,46 +233,72 @@ mixin AccountActions on ShuiRuntimeBase {
       );
       return;
     }
+    ujingAuthChanging = true;
+    beginUjingLoginEpoch();
+    stopWaterPolling();
     emit(
       state.copyWith(
+        clearWaterReady: true,
+        clearWaterResult: true,
+        devicesRefresh: const RuntimeActionStatus(),
+        waterScan: const RuntimeActionStatus(),
+        waterOrder: const RuntimeActionStatus(),
+        washer: state.washer.copyWith(
+          clearProgram: true,
+          clearPayment: true,
+          washerScan: const RuntimeActionStatus(),
+          washerOrder: const RuntimeActionStatus(),
+          washerPayment: const RuntimeActionStatus(),
+        ),
         washerLogin: const RuntimeActionStatus(
           state: RuntimeTaskState.loading,
           message: '正在登录 U净',
         ),
       ),
     );
-    final UjingAccountUi account;
     try {
-      account = await ujing.login(mobile, captcha.trim());
-    } on UjingException catch (e) {
+      final account = await ujing.login(mobile, captcha.trim());
+      if (isDisposed) return;
+      final adapter = ujing;
+      if (adapter is UjingHttpAdapter) {
+        final token = adapter.lastToken;
+        if (token == null || token.isEmpty) {
+          throw const UjingException('登录未返回有效凭据');
+        }
+        await sessions.clearUjing();
+        await secure.saveUjingToken(token);
+      }
+      await sessions.saveUjing(account);
       emit(
         state.copyWith(
-          washerLogin: RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: e.message,
+          ujingAccount: account,
+          washerLogin: const RuntimeActionStatus(
+            state: RuntimeTaskState.success,
+            message: 'U净登录成功',
           ),
         ),
       );
-      return;
-    }
-    emit(
-      state.copyWith(
-        ujingAccount: account,
-        washerLogin: const RuntimeActionStatus(
-          state: RuntimeTaskState.success,
-          message: 'U净登录成功',
-        ),
-      ),
-    );
-    await sessions.saveUjing(account);
-    // PTOK：real 模式下从 UjingHttpAdapter 读登录 token → 加密持久化（重启免重登）。
-    // Fake 无此 getter（不是 UjingHttpAdapter）→ 跳过，不落密钥。
-    final adapter = ujing;
-    if (adapter is UjingHttpAdapter) {
-      final token = adapter.lastToken;
-      if (token != null && token.isNotEmpty) {
-        await secure.saveUjingToken(token);
+    } catch (error) {
+      // 登录或落盘失败不能留下新 token + 旧账号的混合身份。
+      final adapter = ujing;
+      if (adapter is UjingHttpAdapter) adapter.invalidateAuth();
+      emit(state.copyWith(
+        clearUjingAccount: true,
+        washerLogin: RuntimeActionStatus(
+            state: RuntimeTaskState.failure,
+            message:
+                error is UjingException ? error.message : '登录状态保存失败，请重新登录'),
+      ));
+      try {
+        await Future.wait([secure.clearUjingToken(), sessions.clearUjing()]);
+      } catch (cleanupError) {
+        diagnosticLog.log('auth', '登录失败后清理失败 type=${cleanupError.runtimeType}');
       }
+    } finally {
+      ujingAuthChanging = false;
+    }
+    if (!isDisposed && state.ujingAccount != null) {
+      await resumeUjingOrders();
     }
   }
 

@@ -22,12 +22,19 @@ class UjingException implements Exception {
 
 /// 饮水扫码准备结果（一次调用返回 ready + 初始订单，对齐 legacy 一步式）。
 class WaterPrepareResult {
-  const WaterPrepareResult({required this.ready, required this.order});
+  const WaterPrepareResult({
+    required this.ready,
+    required this.order,
+    this.needsDetailRefresh = false,
+  });
 
   final WaterReadyUi ready;
 
   /// 初始接水订单（status='0'）。余额充足时非空；余额不足时为 null。
   final WaterOrderUi? order;
+
+  /// 创建响应只有最小订单时，由运行时先保存，再查询详情。
+  final bool needsDetailRefresh;
 }
 
 /// Ujing 后端适配器接口（P4 A1）。

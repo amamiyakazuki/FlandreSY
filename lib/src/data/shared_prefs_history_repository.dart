@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../runtime/models/hotwater_history.dart';
 import 'history_repository.dart';
+import 'recoverable_json.dart';
 
 /// 基于 shared_preferences 的热水历史持久化实现（Android + iOS）。
 class SharedPrefsHistoryRepository implements HistoryRepository {
@@ -21,13 +22,15 @@ class SharedPrefsHistoryRepository implements HistoryRepository {
     if (!prefs.containsKey(_historyKey)) {
       return null;
     }
-    final json = prefs.getString(_historyKey) ?? '';
-    return HotwaterHistoryCodec.decode(json);
+    return readRecoverableJson(prefs, _historyKey, HotwaterHistoryCodec.decode);
   }
 
   @override
   Future<void> saveHistory(List<HotwaterHistoryUi> history) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_historyKey, HotwaterHistoryCodec.encode(history));
+    if (!await prefs.setString(
+        _historyKey, HotwaterHistoryCodec.encode(history))) {
+      throw StateError('热水历史保存失败');
+    }
   }
 }

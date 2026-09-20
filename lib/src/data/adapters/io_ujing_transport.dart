@@ -4,11 +4,13 @@
 // behavior (login/scan/order round-trips) must be verified ON-DEVICE by the user. Used in the default
 // (real) mode; the simulate-backend toggle (or --dart-define=SIMULATE_BACKEND=true) swaps in Fake instead.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'ujing_adapter.dart';
 import 'ujing_transport.dart';
+import 'http_request_deadline.dart';
 
 /// 真实 Ujing HTTP 传输：dart:io [HttpClient] 实现，对齐 legacy `UjingApi.java`。
 ///
@@ -18,7 +20,10 @@ import 'ujing_transport.dart';
 /// - 逐请求头：`x-app-code`（appCode）、`weex-version`（weex，可选）、`authorization: Bearer <token>`（可选）。
 /// - 校验：非 2xx 或响应 `code!=0` → 抛 [UjingException]（message/code 来自响应）。
 class IoUjingTransport implements UjingTransport {
-  IoUjingTransport({String baseUrl = kUjingBaseUrl, HttpClient? client})
+  IoUjingTransport(
+      {String baseUrl = kUjingBaseUrl,
+      HttpClient? client,
+      this.requestTimeout = const Duration(seconds: 15)})
       : _baseUrl = baseUrl,
         _client = client ?? HttpClient();
 
@@ -33,16 +38,28 @@ class IoUjingTransport implements UjingTransport {
 
   final String _baseUrl;
   final HttpClient _client;
+  final Duration requestTimeout;
 
   /// 内存 cookie jar（name -> value），对齐 legacy UjingApi.cookies（本轮不落盘，重启即失）。
   final Map<String, String> _cookies = <String, String>{};
 
   @override
   Future<Map<String, dynamic>> send(UjingRequest request) async {
+    try {
+      return await HttpRequestDeadline.run(
+          requestTimeout, (deadline) => _send(request, deadline));
+    } on TimeoutException {
+      throw const UjingException('请求超时，结果可能尚未确认，请查询订单后再操作');
+    }
+  }
+
+  Future<Map<String, dynamic>> _send(
+      UjingRequest request, HttpRequestDeadline deadline) async {
     final uri = _resolve(request);
     final HttpClientRequest req;
     try {
       req = await _client.openUrl(request.method, uri);
+      deadline.attach(req);
     } on Exception catch (e) {
       throw UjingException('网络请求失败：$e');
     }
@@ -85,6 +102,7 @@ class IoUjingTransport implements UjingTransport {
     } on Exception catch (e) {
       throw UjingException('网络响应读取失败：$e');
     }
+    deadline.check();
     _rememberCookies(resp);
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {

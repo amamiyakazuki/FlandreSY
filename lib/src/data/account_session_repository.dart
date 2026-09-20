@@ -6,6 +6,9 @@ import '../runtime/models/account_session.dart';
 /// 账号 session 持久化接口（P2）。与 [SettingsRepository] 同构、分职责：
 /// 不做 god repository。P2 只覆盖 Zhuli + Ujing；798 在 P3 扩展同类方法。
 abstract class AccountSessionRepository {
+  Future<void> clearZhuli();
+  Future<void> clearUjing();
+  Future<void> clearShower798();
   Future<ZhuliSession?> loadZhuli();
   Future<void> saveZhuli(ZhuliSession session);
 
@@ -32,6 +35,17 @@ class Shower798Persisted {
 
 /// 内存实现：默认兜底 + 测试注入用。无 IO、无平台依赖。
 class InMemoryAccountSessionRepository implements AccountSessionRepository {
+  @override
+  Future<void> clearZhuli() async {
+    _zhuli = _zhuli?.copyWith(phone: '');
+  }
+
+  @override
+  Future<void> clearUjing() async => _ujing = null;
+
+  @override
+  Future<void> clearShower798() async => _shower798 = null;
+
   InMemoryAccountSessionRepository({
     ZhuliSession? zhuli,
     UjingAccountUi? ujing,

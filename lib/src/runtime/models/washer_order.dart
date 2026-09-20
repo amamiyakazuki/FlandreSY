@@ -87,6 +87,7 @@ class WasherOrderUi {
     this.remainTimeSeconds = 0,
     this.countDownSeconds = 0,
     this.refreshedAtMillis = 0,
+    this.ownerAccountKey = '',
   });
 
   final String orderId;
@@ -101,13 +102,10 @@ class WasherOrderUi {
 
   /// 该订单快照的刷新时刻（毫秒）。W2 结合当前时钟算 live 剩余；0 = 未打戳。
   final int refreshedAtMillis;
+  final String ownerAccountKey;
 
-  /// 终态判定（对齐 legacy isTerminalWasherOrder：status=50 或状态文案含完成/结束/取消）。
-  bool get isTerminal =>
-      status == '50' ||
-      statusText.contains('完成') ||
-      statusText.contains('结束') ||
-      statusText.contains('取消');
+  /// 仅已知完成码或成功取消操作生成的本地 cancelled；不猜测文案。
+  bool get isTerminal => status == '50' || status == 'cancelled';
 
   WasherOrderUi copyWith({
     String? statusText,
@@ -115,6 +113,7 @@ class WasherOrderUi {
     int? remainTimeSeconds,
     int? countDownSeconds,
     int? refreshedAtMillis,
+    String? ownerAccountKey,
   }) {
     return WasherOrderUi(
       orderId: orderId,
@@ -125,6 +124,7 @@ class WasherOrderUi {
       remainTimeSeconds: remainTimeSeconds ?? this.remainTimeSeconds,
       countDownSeconds: countDownSeconds ?? this.countDownSeconds,
       refreshedAtMillis: refreshedAtMillis ?? this.refreshedAtMillis,
+      ownerAccountKey: ownerAccountKey ?? this.ownerAccountKey,
     );
   }
 }
@@ -138,6 +138,7 @@ class WasherOrderHistoryUi {
     required this.status,
     required this.statusText,
     required this.payPrice,
+    this.ownerAccountKey = '',
   });
 
   final String orderId;
@@ -145,6 +146,7 @@ class WasherOrderHistoryUi {
   final String status;
   final String statusText;
   final String payPrice;
+  final String ownerAccountKey;
 }
 
 /// 支付结果（对齐 legacy WasherPaymentUi）。

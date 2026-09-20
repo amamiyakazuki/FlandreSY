@@ -55,6 +55,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             // 正式发布时请提供 android/key.properties + 真 keystore。
             // 若仓库内缺失签名文件，保留 debug fallback 便于验证 release 模式行为；

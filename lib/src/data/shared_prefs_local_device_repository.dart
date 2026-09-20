@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../runtime/models/local_device.dart';
 import 'local_device_repository.dart';
+import 'recoverable_json.dart';
 
 /// 基于 shared_preferences 的本地设备列表持久化实现（Android + iOS）。
 class SharedPrefsLocalDeviceRepository implements LocalDeviceRepository {
@@ -21,13 +22,14 @@ class SharedPrefsLocalDeviceRepository implements LocalDeviceRepository {
     if (!prefs.containsKey(_devicesKey)) {
       return null;
     }
-    final json = prefs.getString(_devicesKey) ?? '';
-    return LocalDeviceCodec.decode(json);
+    return readRecoverableJson(prefs, _devicesKey, LocalDeviceCodec.decode);
   }
 
   @override
   Future<void> saveDevices(List<LocalDeviceShortcut> devices) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_devicesKey, LocalDeviceCodec.encode(devices));
+    if (!await prefs.setString(_devicesKey, LocalDeviceCodec.encode(devices))) {
+      throw StateError('设备保存失败');
+    }
   }
 }

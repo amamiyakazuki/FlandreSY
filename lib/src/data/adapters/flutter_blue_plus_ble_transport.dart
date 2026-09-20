@@ -1,6 +1,6 @@
 // Real Zhuli BLE (GATT) transport using flutter_blue_plus (no visual constants — protocol only).
-// Faithful to legacy LegacyHotwaterActivity.BleDeviceSession: scan by ble_name / ble_mac / name-contains-"XN"
-// fallback (8s), connect with 3 retries (1s apart, 10s each), discover service ff12 / write ff01 /
+// Scan by authoritative ble_mac, or exact supplied ble_name when no MAC is supplied (8s),
+// connect with 3 retries (1s apart, 10s each), discover service ff12 / write ff01 /
 // notify ff02, enable notifications, write-with-response, and await a type-matched notify (index-2 byte).
 //
 // THIS IS THE ONLY LAYER THAT TOUCHES THE REAL BLE RADIO, and it is NOT verified by Codex (no BLE
@@ -16,6 +16,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'ble_transport.dart';
 import 'hotwater_adapter.dart';
+import 'ble_target.dart';
+import 'ble_response.dart';
 
 /// 真实 Zhuli BLE 传输：基于 flutter_blue_plus 的 [BleTransport] 实现。
 class FlutterBluePlusBleTransport implements BleTransport {
@@ -26,6 +28,9 @@ class FlutterBluePlusBleTransport implements BleTransport {
     required String bleName,
     required String bleMac,
   }) async {
+    if (bleName.trim().isEmpty && bleMac.trim().isEmpty) {
+      throw const HotwaterException('缺少目标蓝牙名称和地址，请重新识别设备');
+    }
     if (!await FlutterBluePlus.isSupported) {
       throw const HotwaterException('本机不支持蓝牙');
     }
@@ -35,23 +40,32 @@ class FlutterBluePlusBleTransport implements BleTransport {
     await _ensureAdapterOn();
 
     final device = await _scanForDevice(bleName: bleName, bleMac: bleMac);
-    final services = await _connectWithRetry(device);
+    try {
+      final services = await _connectWithRetry(device);
 
-    final service = services.firstWhere(
-      (s) => _sameUuid(s.uuid.str, ZhuliBleContract.serviceUuid),
-      orElse: () => throw const HotwaterException('未找到 Zhuli BLE 服务（ff12）'),
-    );
-    final write = service.characteristics.firstWhere(
-      (c) => _sameUuid(c.uuid.str, ZhuliBleContract.writeUuid),
-      orElse: () => throw const HotwaterException('未找到写特征（ff01）'),
-    );
-    final notify = service.characteristics.firstWhere(
-      (c) => _sameUuid(c.uuid.str, ZhuliBleContract.readUuid),
-      orElse: () => throw const HotwaterException('未找到通知特征（ff02）'),
-    );
+      final service = services.firstWhere(
+        (s) => _sameUuid(s.uuid.str, ZhuliBleContract.serviceUuid),
+        orElse: () => throw const HotwaterException('未找到 Zhuli BLE 服务（ff12）'),
+      );
+      final write = service.characteristics.firstWhere(
+        (c) => _sameUuid(c.uuid.str, ZhuliBleContract.writeUuid),
+        orElse: () => throw const HotwaterException('未找到写特征（ff01）'),
+      );
+      final notify = service.characteristics.firstWhere(
+        (c) => _sameUuid(c.uuid.str, ZhuliBleContract.readUuid),
+        orElse: () => throw const HotwaterException('未找到通知特征（ff02）'),
+      );
 
-    await notify.setNotifyValue(true);
-    return _FbpBleConnection(device: device, write: write, notify: notify);
+      await notify
+          .setNotifyValue(true)
+          .timeout(ZhuliBleContract.connectTimeout);
+      return _FbpBleConnection(device: device, write: write, notify: notify);
+    } catch (_) {
+      try {
+        await device.disconnect();
+      } catch (_) {/* 保留原错误 */}
+      rethrow;
+    }
   }
 
   /// 等蓝牙适配器变 on。用 adapterState 流（会向平台拉真实状态），10s 超时。
@@ -90,7 +104,7 @@ class FlutterBluePlusBleTransport implements BleTransport {
     }
   }
 
-  /// 扫描：名称精确 / mac 不分大小写 / 名称含「XN」fallback（对齐 legacy onScanResult）。
+  /// 指定 MAC 优先；仅无 MAC 时精确匹配指定名称，不猜测其它 XN 设备。
   Future<BluetoothDevice> _scanForDevice({
     required String bleName,
     required String bleMac,
@@ -103,11 +117,11 @@ class FlutterBluePlusBleTransport implements BleTransport {
             ? r.device.platformName
             : r.device.advName;
         final address = r.device.remoteId.str;
-        final nameMatch = bleName.isNotEmpty && bleName == name;
-        final macMatch =
-            bleMac.isNotEmpty && bleMac.toLowerCase() == address.toLowerCase();
-        final fallback = bleName.isEmpty && name.contains('XN');
-        if (nameMatch || macMatch || fallback) {
+        if (matchesZhuliBleTarget(
+            expectedName: bleName,
+            expectedMac: bleMac,
+            name: name,
+            address: address)) {
           if (!completer.isCompleted) {
             completer.complete(r.device);
           }
@@ -135,7 +149,9 @@ class FlutterBluePlusBleTransport implements BleTransport {
     for (var attempt = 0; attempt < ZhuliBleContract.gattRetry; attempt++) {
       try {
         await device.connect(timeout: ZhuliBleContract.connectTimeout);
-        return await device.discoverServices();
+        return await device
+            .discoverServices()
+            .timeout(ZhuliBleContract.connectTimeout);
       } on Exception catch (e) {
         lastError = e;
         try {
@@ -152,11 +168,16 @@ class FlutterBluePlusBleTransport implements BleTransport {
         'BLE 连接失败（已重试 ${ZhuliBleContract.gattRetry} 次）：$lastError');
   }
 
-  /// UUID 比较：忽略大小写（flutter_blue_plus 可能返回 16-bit 短式，故也比末段）。
+  /// UUID 比较：16/32位短式标准化后精确比较，不能使用包含匹配。
   static bool _sameUuid(String a, String full) {
-    final la = a.toLowerCase();
-    final lf = full.toLowerCase();
-    return la == lf || lf.contains(la) || la.contains(lf);
+    String normalize(String uuid) {
+      final lower = uuid.toLowerCase();
+      if (lower.length == 4) return '0000$lower-0000-1000-8000-00805f9b34fb';
+      if (lower.length == 8) return '$lower-0000-1000-8000-00805f9b34fb';
+      return lower;
+    }
+
+    return normalize(a) == normalize(full);
   }
 }
 
@@ -180,6 +201,15 @@ class _FbpBleConnection implements ZhuliBleConnection {
   }
 
   @override
+  Future<String> writeHexAndAwait(String hex,
+      {required List<int> expectedTypes}) async {
+    return writeAndAwaitZhuliFrame(
+        notifications: notify.onValueReceived,
+        write: () => writeHex(hex),
+        expectedTypes: expectedTypes);
+  }
+
+  @override
   Future<String> awaitNotify({required List<int> expectedTypes}) async {
     final completer = Completer<String>();
     late final StreamSubscription<List<int>> sub;
@@ -200,6 +230,12 @@ class _FbpBleConnection implements ZhuliBleConnection {
         case ZhuliFrameVerdict.ignore:
           // 不足 3 字节或非期望类型（如穿插的 set_rate/history 帧）→ 继续等待。
           break;
+      }
+    }, onError: (Object error, StackTrace stack) {
+      if (!completer.isCompleted) completer.completeError(error, stack);
+    }, onDone: () {
+      if (!completer.isCompleted) {
+        completer.completeError(const HotwaterException('蓝牙通知已断开'));
       }
     });
 

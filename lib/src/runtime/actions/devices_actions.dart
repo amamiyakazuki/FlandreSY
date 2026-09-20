@@ -125,9 +125,11 @@ mixin DevicesActions on ShuiRuntimeBase {
   /// createOrderEnabled/reason → 回填 lastStatus（真实模式=真实后端；模拟模式=fake adapter 的合理值）。
   /// 单台失败不中断整批（保留原状态）；authInvalid 停止并走 RELOG。饮水机无单台状态查询，跳过。
   Future<void> refreshLocalDevices() async {
-    if (state.devicesRefresh.isBusy) {
+    await ready;
+    if (isDisposed || ujingAuthChanging || state.devicesRefresh.isBusy) {
       return;
     }
+    final epoch = ujingAuthEpoch;
     emit(
       state.copyWith(
         devicesRefresh: const RuntimeActionStatus(
@@ -146,21 +148,24 @@ mixin DevicesActions on ShuiRuntimeBase {
       }
       try {
         final program = await ujing.scanWasher(qr);
+        if (!isUjingRequestCurrent(epoch)) return;
         // 真实语义（对齐 washer_info_card：createOrderEnabled → 可下单 / 否则 reason 或不可下单）。
         final status = program.createOrderEnabled
             ? '可下单'
             : (program.reason.isEmpty ? '不可下单' : program.reason);
         updated.add(d.copyWith(lastStatus: status));
       } on UjingException catch (e) {
+        if (!isUjingRequestCurrent(epoch)) return;
         if (e.authInvalid) {
           // 凭证失效：停止批量刷新，走统一 RELOG 清理 + 引导重登。
-          await handleAuthInvalidation(AuthService.ujing);
+          await handleAuthInvalidation(AuthService.ujing, expectedEpoch: epoch);
           return;
         }
         updated.add(d); // 单台失败：保留原状态，不中断其余。
       }
     }
 
+    if (!isUjingRequestCurrent(epoch)) return;
     emit(
       state.copyWith(
         localDevices: updated,
@@ -215,8 +220,19 @@ mixin DevicesActions on ShuiRuntimeBase {
 
   /// 持久化当前设备列表（fire-and-forget，对齐 shower798_actions._persist 范式）。
   /// 每次改动 localDevices 后调用；失败不阻塞 UI（真机由用户观察）。
+  Future<void> _deviceSaveTail = Future<void>.value();
   void _persistDevices() {
-    unawaited(devices.saveDevices(state.localDevices));
+    final snapshot = state.localDevices;
+    _deviceSaveTail = _deviceSaveTail
+        .then((_) => devices.saveDevices(snapshot))
+        .catchError((Object error) {
+      diagnosticLog.log('storage', '设备保存失败 type=${error.runtimeType}');
+      emit(state.copyWith(
+          devicesRefresh: const RuntimeActionStatus(
+        state: RuntimeTaskState.failure,
+        message: '设备修改尚未保存，请重试，暂勿关闭 App',
+      )));
+    });
   }
 
   void _emitDevicesNotice(String message, RuntimeTaskState taskState) {

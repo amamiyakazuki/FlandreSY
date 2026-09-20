@@ -19,7 +19,9 @@ class DiagnosticLog {
   })  : _repo = repo,
         _clock = clock ?? const SystemLiveClock() {
     // 载入已持久化的缓冲（fire-and-forget；首次读时可能尚未回填，可接受）。
-    unawaited(_restore());
+    unawaited(_restore().catchError((Object _) {
+      _buffer.write('[storage] 诊断历史读取失败，本次日志保留在内存\n');
+    }));
   }
 
   /// 最大字符数（对齐 legacy AppLogStore.MAX_CHARS）。超出裁掉最旧的头部。
@@ -28,6 +30,7 @@ class DiagnosticLog {
   final DiagnosticLogRepository _repo;
   final LiveClock _clock;
   final StringBuffer _buffer = StringBuffer();
+  Future<void> _saveTail = Future<void>.value();
 
   Future<void> _restore() async {
     if (_buffer.isNotEmpty) {
@@ -49,7 +52,10 @@ class DiagnosticLog {
     _buffer
       ..clear()
       ..write(merged);
-    unawaited(_repo.save(merged));
+    _saveTail =
+        _saveTail.then((_) => _repo.save(merged)).catchError((Object _) {
+      // 日志存储自身故障不得引发未捕获异常或递归写日志。
+    });
   }
 
   /// 当前完整日志（供日志页显示 / 复制）。

@@ -48,22 +48,23 @@ class WaterOrderCodec {
   }
 
   static WaterOrderSnapshot decode(String json) {
-    if (json.isEmpty) {
-      return const WaterOrderSnapshot();
-    }
+    if (json.isEmpty) throw const FormatException('饮水订单快照为空');
     final decoded = jsonDecode(json);
     if (decoded is! Map) {
-      return const WaterOrderSnapshot();
+      throw const FormatException('饮水订单快照不是对象');
     }
     final map = decoded.cast<String, dynamic>();
     final currentRaw = map['currentOrder'];
     final historyRaw = map['history'];
+    if (historyRaw is! List || (currentRaw != null && currentRaw is! Map)) {
+      throw const FormatException('饮水订单快照字段损坏');
+    }
     final history = <WaterOrderHistoryUi>[];
-    if (historyRaw is List) {
-      for (final item in historyRaw) {
-        if (item is Map) {
-          history.add(historyFromMap(item.cast<String, dynamic>()));
-        }
+    for (final item in historyRaw) {
+      if (item is Map) {
+        history.add(historyFromMap(item.cast<String, dynamic>()));
+      } else {
+        throw const FormatException('饮水历史记录损坏');
       }
     }
     return WaterOrderSnapshot(
@@ -77,6 +78,7 @@ class WaterOrderCodec {
   static Map<String, dynamic> orderToMap(WaterOrderUi o) {
     return <String, dynamic>{
       'orderId': o.orderId,
+      'ownerAccountKey': o.ownerAccountKey,
       'orderNo': o.orderNo,
       'serviceSubjectName': o.serviceSubjectName,
       'storeName': o.storeName,
@@ -92,8 +94,10 @@ class WaterOrderCodec {
   }
 
   static WaterOrderUi orderFromMap(Map<String, dynamic> m) {
+    _validateRecord(m);
     return WaterOrderUi(
       orderId: (m['orderId'] ?? '').toString(),
+      ownerAccountKey: (m['ownerAccountKey'] ?? '').toString(),
       orderNo: (m['orderNo'] ?? '').toString(),
       serviceSubjectName: (m['serviceSubjectName'] ?? '').toString(),
       storeName: (m['storeName'] ?? '').toString(),
@@ -111,6 +115,7 @@ class WaterOrderCodec {
   static Map<String, dynamic> historyToMap(WaterOrderHistoryUi h) {
     return <String, dynamic>{
       'orderId': h.orderId,
+      'ownerAccountKey': h.ownerAccountKey,
       'deviceNo': h.deviceNo,
       'status': h.status,
       'payment': h.payment,
@@ -121,7 +126,9 @@ class WaterOrderCodec {
   }
 
   static WaterOrderHistoryUi historyFromMap(Map<String, dynamic> m) {
+    _validateRecord(m);
     return WaterOrderHistoryUi(
+      ownerAccountKey: (m['ownerAccountKey'] ?? '').toString(),
       orderId: (m['orderId'] ?? '').toString(),
       deviceNo: (m['deviceNo'] ?? '').toString(),
       status: (m['status'] ?? '').toString(),
@@ -130,6 +137,14 @@ class WaterOrderCodec {
       waterSeconds: _int(m['waterSeconds']),
       completedAt: (m['completedAt'] ?? '').toString(),
     );
+  }
+
+  static void _validateRecord(Map<String, dynamic> m) {
+    if (m['orderId'] is! String ||
+        (m['orderId'] as String).trim().isEmpty ||
+        (m.containsKey('ownerAccountKey') && m['ownerAccountKey'] is! String)) {
+      throw const FormatException('饮水订单标识或归属损坏');
+    }
   }
 
   static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;

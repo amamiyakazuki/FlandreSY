@@ -50,19 +50,21 @@ void main() {
     expect(await settings.loadBathSystem(), BathSystemPreference.none);
   });
 
-  testWidgets('unselected home has no enabled water controls or empty warning',
+  testWidgets(
+      'unselected home accepts control taps and shows the system chooser',
       (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     var opened = false;
+    var controlTaps = 0;
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: HotWaterCard(
       state: const ShuiHomeState(),
-      onStartHotwater: () => fail('No selected system'),
-      onStopHotwater: () => fail('No selected system'),
+      onStartHotwater: () => controlTaps++,
+      onStopHotwater: () => controlTaps++,
       onSwitchBathSystem: () => opened = true,
       onOpenDetail: () {},
     ))));
@@ -71,8 +73,11 @@ void main() {
     expect(find.text('⚠'), findsNothing);
     for (final button in tester.widgetList<PrimaryGradientButton>(
         find.byType(PrimaryGradientButton))) {
-      expect(button.enabled, isFalse);
+      expect(button.enabled, isTrue);
     }
+    await tester.tap(find.text('启动热水'));
+    await tester.tap(find.text('停止热水'));
+    expect(controlTaps, 2);
     await tester.tap(find.text('选择系统'));
     expect(opened, isTrue);
     expect(tester.takeException(), isNull);

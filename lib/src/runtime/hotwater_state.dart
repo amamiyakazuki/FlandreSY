@@ -79,13 +79,14 @@ class HotwaterSession {
   final HotwaterSessionPhase phase;
   final String orderId;
 
-  bool get canPoll =>
+  bool get mayHaveStarted =>
       phase == HotwaterSessionPhase.active ||
       phase == HotwaterSessionPhase.uncertain;
 
   HotwaterSession copyWith({
     HotwaterSessionPhase? phase,
     String? orderId,
+    int? startedAtMillis,
   }) {
     return HotwaterSession(
       id: id,
@@ -93,25 +94,16 @@ class HotwaterSession {
       system: system,
       simulated: simulated,
       deviceId: deviceId,
-      startedAtMillis: startedAtMillis,
+      startedAtMillis: startedAtMillis ?? this.startedAtMillis,
       baselineOrderIds: baselineOrderIds,
       phase: phase ?? this.phase,
       orderId: orderId ?? this.orderId,
     );
   }
 
-  // 比较已知订单集合而不是列表位置，避免排序变化被当成结束。
-  bool hasNewConsumption(List<HotwaterHistoryUi> orders) => orders.any((order) {
-        if (orderId.isNotEmpty) {
-          return order.orderId == orderId;
-        }
-        final time = DateTime.tryParse(order.time);
-        return order.deviceId == deviceId &&
-            order.orderId.isNotEmpty &&
-            !baselineOrderIds.contains(order.orderId) &&
-            time != null &&
-            time.millisecondsSinceEpoch ~/ 1000 >= startedAtMillis ~/ 1000;
-      });
+  /// 仅用于 App 启动/回前台时恢复本地显示，不代表设备已关水。
+  bool hasExceededRestoreWindow(int nowMillis) =>
+      nowMillis - startedAtMillis > const Duration(minutes: 40).inMilliseconds;
 
   Map<String, Object> toJson() => {
         'version': 2,

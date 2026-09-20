@@ -97,6 +97,14 @@ abstract class ZhuliBleConnection {
   /// 写一条 hex 指令到 write characteristic。
   Future<void> writeHex(String hex);
 
+  /// 在写入前建立响应等待，避免设备快速响应时在订阅建立前丢帧。
+  /// 旧实现默认保持分步行为，供测试替身和非流式实现兼容；真实 GATT 实现应覆盖此方法。
+  Future<String> writeHexAndAwait(String hex,
+      {required List<int> expectedTypes}) async {
+    await writeHex(hex);
+    return await awaitNotify(expectedTypes: expectedTypes);
+  }
+
   /// 等待一条**类型匹配**的 notify 响应（返回原始 hex）。
   ///
   /// - 只接受第 3 字节（index 2）∈ [expectedTypes] 的帧（对齐 legacy writeAndWait 的 expectedType）。

@@ -170,7 +170,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       return WaterPrepareResult(ready: ready, order: null);
     }
 
-    // 创建接水订单（deviceId=cd）→ 拉一次详情得完整初始订单（status '0'）。
+    // 创建成功即返回 ID；详情查询由运行时在保存订单之后发起。
     final created = await _transport.send(UjingRequest(
       method: 'POST',
       path: 'water/createWaterOrder',
@@ -183,8 +183,23 @@ class UjingHttpAdapter implements IUjingAdapter {
     if (orderId.isEmpty || orderId == '0') {
       throw const UjingException('创建饮水订单成功但没有 orderId');
     }
-    final order = await _fetchWaterOrderDetail(orderId, token);
-    return WaterPrepareResult(ready: ready, order: order);
+    return WaterPrepareResult(
+      ready: ready,
+      needsDetailRefresh: true,
+      order: WaterOrderUi(
+        orderId: orderId,
+        orderNo: _str(created, 'orderNo'),
+        serviceSubjectName: ready.serviceSubjectName,
+        storeName: '',
+        deviceNo: '',
+        orderStatus: '0',
+        orderStatusName: '订单创建',
+        statusRemark: '订单已创建，待查询详情',
+        warmWaterMl: 0,
+        waterSeconds: 0,
+        payment: 0,
+      ),
+    );
   }
 
   @override
@@ -343,7 +358,13 @@ class UjingHttpAdapter implements IUjingAdapter {
     if (orderId.isEmpty) {
       throw const UjingException('创建订单成功但没有 orderId');
     }
-    return _fetchWasherOrderDetail(orderId, token);
+    // 创建成功即交还订单号，先持久化再独立查询；详情离线不能丢掉已创建的单。
+    return WasherOrderUi(
+        orderId: orderId,
+        deviceNo: program.deviceNo,
+        statusText: '订单已创建，待查询状态',
+        payPrice: '',
+        status: 'pending');
   }
 
   @override

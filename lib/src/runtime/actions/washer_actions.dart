@@ -1,463 +1,417 @@
-// Washer order actions (Module W1; refactored in P4 A1 to orchestrate IUjingAdapter).
-// The adapter supplies data + IO latency + status transitions; this mixin does validation,
-// emit, order-seq / history bookkeeping, refreshedAt stamping (clock), and autoStart timing.
-
 import 'dart:async';
-
 import '../../data/adapters/ujing_adapter.dart';
+import '../../data/washer_history_repository.dart';
 import '../models/washer_order.dart';
 import '../runtime_status.dart';
 import '../shui_runtime_base.dart';
-import '../washer_state.dart';
 
 mixin WasherActions on ShuiRuntimeBase {
   int _orderSeq = 0;
+  bool _washerMutationBusy = false;
+  bool _washerScanBusy = false;
+  Future<void>? _washerRefresh;
+  int _washerRefreshEpoch = -1;
 
-  /// 扫码识别洗衣机。program 由 adapter 提供。对齐 legacy scanWasher。
-  Future<void> scanWasher(String qrCode) async {
-    if (state.washer.washerScan.isBusy) {
-      return;
-    }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          washerScan: const RuntimeActionStatus(
-            state: RuntimeTaskState.loading,
-            message: '正在识别洗衣机',
-          ),
-        ),
-      ),
-    );
-    final WasherProgramUi program;
-    try {
-      program = await ujing.scanWasher(qrCode);
-    } on UjingException catch (e) {
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing);
-        return;
-      }
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            washerScan: RuntimeActionStatus(
-              state: RuntimeTaskState.failure,
-              message: e.message,
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          program: program,
-          washerScan: RuntimeActionStatus(
-            state: program.createOrderEnabled
-                ? RuntimeTaskState.success
-                : RuntimeTaskState.unavailable,
-            message: program.createOrderEnabled
-                ? '洗衣机识别完成'
-                : (program.reason.isEmpty ? '该设备暂不可下单' : program.reason),
-          ),
-        ),
-      ),
-    );
+  bool _washerStorageReady() {
+    if (!ujingOrderStorageBlocked) return true;
+    _washerMessage('本地订单恢复失败，请先处理存储问题，未创建新订单', failure: true);
+    return false;
   }
 
-  /// 创建洗衣订单（adapter 返回 status='10' 待支付）。对齐 legacy createWasherOrder。
-  Future<void> createWasherOrder({
-    required int washModelId,
-    required int temperatureId,
-    int? detergentGearId,
-    int? disinfectantGearId,
-  }) async {
-    if (state.washer.washerOrder.isBusy) {
+  void _washerMessage(String message,
+      {bool failure = false, bool payment = false}) {
+    final status = RuntimeActionStatus(
+        state: failure ? RuntimeTaskState.failure : RuntimeTaskState.success,
+        message: message);
+    emit(state.copyWith(
+        washer: state.washer.copyWith(
+            washerOrder: payment ? null : status,
+            washerPayment: payment ? status : null)));
+  }
+
+  bool _canUseWasherOrder(WasherOrderUi order) {
+    if (canAccessUjingOrder(order.ownerAccountKey)) return true;
+    _washerMessage(
+        order.ownerAccountKey.isEmpty
+            ? '旧订单尚未确认所属账号，请先确认后查询'
+            : '该订单属于其他账号，请切回原账号后查询',
+        failure: true);
+    return false;
+  }
+
+  bool _sameWasher(int epoch, WasherOrderUi order) =>
+      isUjingRequestCurrent(epoch) &&
+      state.washer.currentOrder?.orderId == order.orderId &&
+      state.washer.currentOrder?.ownerAccountKey == order.ownerAccountKey;
+  bool _retainWasherResult(int epoch, WasherOrderUi order) =>
+      canRetainUjingMutationResult(epoch, order.ownerAccountKey) &&
+      state.washer.currentOrder?.orderId == order.orderId &&
+      state.washer.currentOrder?.ownerAccountKey == order.ownerAccountKey;
+  Future<void> _washerError(Object error, int epoch,
+      {bool payment = false}) async {
+    if (!isUjingRequestCurrent(epoch)) return;
+    if (error is UjingException && error.authInvalid) {
+      await handleAuthInvalidation(AuthService.ujing, expectedEpoch: epoch);
+      return;
+    }
+    diagnosticLog.log('washer', '订单操作或保存失败 type=${error.runtimeType}');
+    _washerMessage(
+        error is UjingException
+            ? error.message
+            : '订单操作或保存失败，已有订单已保留，请刷新重试；暂勿关闭 App',
+        failure: true,
+        payment: payment);
+  }
+
+  Future<void> scanWasher(String qrCode) async {
+    await ready;
+    if (_washerScanBusy ||
+        _washerMutationBusy ||
+        !isUjingRequestCurrent(ujingAuthEpoch)) {
+      return;
+    }
+    final epoch = ujingAuthEpoch;
+    _washerScanBusy = true;
+    ujingMutationCount++;
+    emit(state.copyWith(
+        washer: state.washer.copyWith(
+            washerScan: const RuntimeActionStatus(
+                state: RuntimeTaskState.loading, message: '正在识别洗衣机'))));
+    try {
+      final program = await ujing.scanWasher(qrCode);
+      if (!isUjingRequestCurrent(epoch)) return;
+      emit(state.copyWith(
+          washer: state.washer.copyWith(
+              program: program,
+              washerScan: RuntimeActionStatus(
+                  state: program.createOrderEnabled
+                      ? RuntimeTaskState.success
+                      : RuntimeTaskState.unavailable,
+                  message: program.createOrderEnabled
+                      ? '洗衣机识别完成'
+                      : program.reason))));
+    } catch (error) {
+      await _washerError(error, epoch);
+      if (isUjingRequestCurrent(epoch)) {
+        emit(state.copyWith(
+            washer: state.washer.copyWith(
+                washerScan: const RuntimeActionStatus(
+                    state: RuntimeTaskState.failure, message: '洗衣机识别失败，请重试'))));
+      }
+    } finally {
+      _washerScanBusy = false;
+      ujingMutationCount--;
+    }
+  }
+
+  Future<void> createWasherOrder(
+      {required int washModelId,
+      required int temperatureId,
+      int? detergentGearId,
+      int? disinfectantGearId}) async {
+    await ready;
+    if (!_washerStorageReady()) return;
+    if (_washerMutationBusy ||
+        _washerRefresh != null ||
+        !isUjingRequestCurrent(ujingAuthEpoch)) {
+      return;
+    }
+    if (state.washer.currentOrder != null) {
+      if (!_canUseWasherOrder(state.washer.currentOrder!)) return;
+      _washerMessage('已有洗衣订单，请先处理当前订单', failure: true);
+      return;
+    }
+    final legacy = WasherHistoryCodec.legacyCandidate(state.washer.history);
+    if (legacy != null) {
+      emit(state.copyWith(washer: state.washer.copyWith(currentOrder: legacy)));
+      _canUseWasherOrder(legacy);
       return;
     }
     final program = state.washer.program;
-    if (program == null || washModelId == 0) {
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
+    if (program == null || washModelId == 0 || !program.createOrderEnabled) {
+      _washerMessage('请先扫描可用的洗衣机并选择套餐', failure: true);
+      return;
+    }
+    final epoch = ujingAuthEpoch;
+    final owner = ujingAccountKey;
+    var needsDetail = false;
+    if (owner.isEmpty) {
+      _washerMessage('请先登录 U净账号', failure: true);
+      return;
+    }
+    _washerMutationBusy = true;
+    ujingMutationCount++;
+    emit(state.copyWith(
+        washer: state.washer.copyWith(
             washerOrder: const RuntimeActionStatus(
-              state: RuntimeTaskState.failure,
-              message: '请先扫描洗衣机并选择套餐',
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.loading,
-            message: '正在创建洗衣订单',
-          ),
-        ),
-      ),
-    );
-    _orderSeq += 1;
-    final WasherOrderUi order;
+                state: RuntimeTaskState.loading, message: '正在创建洗衣订单'))));
     try {
-      order = await ujing.createWasherOrder(
-        program: program,
-        washModelId: washModelId,
-        temperatureId: temperatureId,
-        detergentGearId: detergentGearId,
-        disinfectantGearId: disinfectantGearId,
-        orderSeq: _orderSeq,
-      );
-    } on UjingException catch (e) {
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing);
-        return;
-      }
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            washerOrder: RuntimeActionStatus(
-              state: RuntimeTaskState.failure,
-              message: e.message,
-            ),
-          ),
-        ),
-      );
-      return;
+      final created = await ujing.createWasherOrder(
+          program: program,
+          washModelId: washModelId,
+          temperatureId: temperatureId,
+          detergentGearId: detergentGearId,
+          disinfectantGearId: disinfectantGearId,
+          orderSeq: ++_orderSeq);
+      if (!canRetainUjingMutationResult(epoch, owner)) return;
+      final order = created.copyWith(ownerAccountKey: owner);
+      // 已创建的订单号必须先留在内存；保存失败时不允许创建替代订单。
+      emit(state.copyWith(
+          washer:
+              state.washer.copyWith(currentOrder: order, clearPayment: true)));
+      await _commitWasher(order, epoch, '洗衣订单已创建', retainMutation: true);
+      needsDetail = order.status == 'pending' && isUjingRequestCurrent(epoch);
+    } catch (error) {
+      await _washerError(error, epoch);
+    } finally {
+      _washerMutationBusy = false;
+      ujingMutationCount--;
     }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          currentOrder: order,
-          history: _appendHistory(order),
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.success,
-            message: '洗衣订单已创建',
-          ),
-        ),
-      ),
-    );
+    if (needsDetail) await refreshCurrentWasherOrder();
   }
 
-  /// 支付宝支付（adapter 成功 → status=20；autoStart 则延时自动启动 → 40）。
-  /// 对齐 legacy payCurrentWasherOrderWithAlipay。
+  Future<void> _runWasherMutation(
+      String message, Future<WasherOrderUi> Function(WasherOrderUi) action,
+      {bool payment = false}) async {
+    await ready;
+    if (!_washerStorageReady()) return;
+    final order = state.washer.currentOrder;
+    if (order == null ||
+        _washerMutationBusy ||
+        _washerRefresh != null ||
+        !isUjingRequestCurrent(ujingAuthEpoch) ||
+        !_canUseWasherOrder(order)) {
+      return;
+    }
+    final epoch = ujingAuthEpoch;
+    _washerMutationBusy = true;
+    ujingMutationCount++;
+    final loading = RuntimeActionStatus(
+        state: payment
+            ? RuntimeTaskState.paymentInProgress
+            : RuntimeTaskState.loading,
+        message: message);
+    emit(state.copyWith(
+        washer: state.washer.copyWith(
+            washerOrder: payment ? null : loading,
+            washerPayment: payment ? loading : null)));
+    try {
+      final result = await action(order);
+      if (!_retainWasherResult(epoch, order)) return;
+      if (result.orderId != order.orderId) throw StateError('订单响应不匹配');
+      final owned = result.copyWith(
+          ownerAccountKey: order.ownerAccountKey,
+          refreshedAtMillis: clock.nowMillis());
+      await _commitWasher(owned, epoch, payment ? '支付宝支付结果已更新' : '洗衣订单已更新',
+          retainMutation: true);
+      if (payment && isUjingRequestCurrent(epoch)) {
+        final succeeded = ['20', '21', '40', '50'].contains(owned.status);
+        emit(state.copyWith(
+            washer: state.washer.copyWith(
+                payment: WasherPaymentUi(
+                    orderId: order.orderId, paymentSucceeded: succeeded),
+                washerPayment: RuntimeActionStatus(
+                    state: succeeded
+                        ? RuntimeTaskState.success
+                        : RuntimeTaskState.failure,
+                    message: succeeded ? '支付宝支付已成功' : '支付尚未确认，请刷新订单状态'))));
+      }
+    } catch (error) {
+      if (_sameWasher(epoch, order)) {
+        await _washerError(error, epoch, payment: payment);
+      }
+    } finally {
+      _washerMutationBusy = false;
+      ujingMutationCount--;
+    }
+  }
+
   Future<void> payCurrentWasherOrderWithAlipay(
       bool autoStartAfterPayment) async {
-    final order = state.washer.currentOrder;
-    if (order == null ||
-        order.status != '10' ||
-        state.washer.washerPayment.isBusy) {
+    final before = state.washer.currentOrder;
+    if (before == null || before.status != '10') return;
+    final epoch = ujingAuthEpoch;
+    await _runWasherMutation('正在启动支付宝支付', ujing.payWasherOrder, payment: true);
+    if (!autoStartAfterPayment ||
+        !_sameWasher(epoch, before) ||
+        state.washer.payment?.orderId != before.orderId ||
+        state.washer.payment?.paymentSucceeded != true ||
+        state.washer.currentOrder?.status != '20') {
       return;
     }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          washerPayment: const RuntimeActionStatus(
-            state: RuntimeTaskState.paymentInProgress,
-            message: '正在启动支付宝支付',
-          ),
-        ),
-      ),
-    );
-    final WasherOrderUi paid;
-    try {
-      paid = await ujing.payWasherOrder(order);
-    } on UjingException catch (e) {
-      if (state.washer.currentOrder?.orderId != order.orderId) return;
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing);
-        return;
-      }
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            washerPayment: RuntimeActionStatus(
-              state: RuntimeTaskState.failure,
-              message: e.message,
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    if (state.washer.currentOrder?.orderId != order.orderId) return;
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          currentOrder: paid,
-          payment:
-              WasherPaymentUi(orderId: order.orderId, paymentSucceeded: true),
-          history: _appendHistory(paid),
-          washerPayment: RuntimeActionStatus(
-            state: RuntimeTaskState.success,
-            message: autoStartAfterPayment
-                ? '支付宝支付已成功，3 秒后自动启动洗衣机'
-                : '支付宝支付已成功，已保留预约，请按需手动启动',
-          ),
-        ),
-      ),
-    );
-    if (autoStartAfterPayment && paid.status == '20') {
-      await Future<void>.delayed(const Duration(seconds: 3));
-      if (state.washer.currentOrder?.orderId == order.orderId &&
-          state.washer.currentOrder?.status == '20') {
-        await startCurrentWasherOrder();
-      }
+    await Future<void>.delayed(const Duration(seconds: 3));
+    if (_sameWasher(epoch, before) &&
+        state.washer.currentOrder?.status == '20') {
+      await startCurrentWasherOrder();
     }
   }
 
-  /// 启动洗衣机（adapter → status=40 运行）。对齐 legacy startCurrentWasherOrder。
   Future<void> startCurrentWasherOrder() async {
-    final order = state.washer.currentOrder;
-    if (order == null || state.washer.washerOrder.isBusy) {
-      return;
-    }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.loading,
-            message: '正在启动洗衣机',
-          ),
-        ),
-      ),
-    );
-    // 剩余时间取默认套餐时长（W1 无 live 倒计时，仅展示；每秒刷新在 W2）。
-    final minutes = state.washer.program?.models.isNotEmpty ?? false
-        ? state.washer.program!.models.first.timeMinutes
-        : 35;
-    final WasherOrderUi started;
-    try {
-      started = await ujing.startWasherOrder(order, minutes * 60);
-    } on UjingException catch (e) {
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing);
-        return;
-      }
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            washerOrder: RuntimeActionStatus(
-              state: RuntimeTaskState.failure,
-              message: e.message,
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    // refreshedAt 用注入时钟打戳（W2 live 倒计时基准）。
-    final running = started.copyWith(refreshedAtMillis: clock.nowMillis());
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          currentOrder: running,
-          history: _appendHistory(running),
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.success,
-            message: '洗衣机已启动',
-          ),
-        ),
-      ),
-    );
+    if (state.washer.currentOrder?.status != '20') return;
+    await _runWasherMutation('正在启动洗衣机', (order) {
+      final models = state.washer.program?.models;
+      final minutes =
+          models != null && models.isNotEmpty ? models.first.timeMinutes : 35;
+      return ujing.startWasherOrder(order, minutes * 60);
+    });
   }
 
-  /// 提前停止（adapter → status=50）。对齐 legacy stopCurrentWasherOrder。
   Future<void> stopCurrentWasherOrder() async {
-    final order = state.washer.currentOrder;
-    if (order == null || state.washer.washerOrder.isBusy) {
-      return;
-    }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.loading,
-            message: '正在提前停止',
-          ),
-        ),
-      ),
-    );
-    final WasherOrderUi done;
-    try {
-      done = await ujing.stopWasherOrder(order);
-    } on UjingException catch (e) {
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing);
-        return;
-      }
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            washerOrder: RuntimeActionStatus(
-              state: RuntimeTaskState.failure,
-              message: e.message,
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          history: _appendHistory(done),
-          clearCurrentOrder: true,
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.success,
-            message: '洗衣机已提前停止',
-          ),
-        ),
-      ),
-    );
+    if (state.washer.currentOrder?.status != '40') return;
+    await _runWasherMutation('正在提前停止', ujing.stopWasherOrder);
   }
 
-  /// 取消订单（真实：经 adapter 作废服务端订单）。对齐 legacy cancelCurrentWasherOrder。
-  /// 取代旧「纯本地清 state」假取消——旧实现服务端订单仍活（真机 bug）。
   Future<void> cancelCurrentWasherOrder() async {
-    final order = state.washer.currentOrder;
-    // 守卫对齐 legacy：下单动作 loading 或支付进行中不允许取消。
-    if (order == null ||
-        state.washer.washerOrder.isBusy ||
-        state.washer.washerPayment.isBusy) {
-      return;
-    }
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.loading,
-            message: '正在取消洗衣订单',
-          ),
-        ),
-      ),
-    );
-    try {
+    if (!['10', '20'].contains(state.washer.currentOrder?.status)) return;
+    await _runWasherMutation('正在取消洗衣订单', (order) async {
       await ujing.cancelWasherOrder(order);
-    } on UjingException catch (e) {
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing);
-        return;
-      }
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            washerOrder: RuntimeActionStatus(
-              state: RuntimeTaskState.failure,
-              message: e.message,
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    // 服务端已作废 → 历史标「已取消」（对齐 legacy）+ 清当前订单。
-    final canceled = order.copyWith(status: 'cancelled', statusText: '已取消');
-    emit(
-      state.copyWith(
-        washer: state.washer.copyWith(
-          history: _appendHistory(canceled),
-          clearCurrentOrder: true,
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.success,
-            message: '洗衣订单已取消',
-          ),
-        ),
-      ),
-    );
+      return order.copyWith(status: 'cancelled', statusText: '已取消');
+    });
   }
 
-  /// 刷新当前订单（adapter：运行中 → 完成）。对齐 legacy refreshCurrentWasherOrder。
-  Future<void> refreshCurrentWasherOrder() async {
+  @override
+  Future<void> refreshCurrentWasherOrder() {
+    if (!_washerStorageReady()) return Future.value();
+    final pending = _washerRefresh;
+    if (pending != null && _washerRefreshEpoch == ujingAuthEpoch) {
+      return pending;
+    }
     final order = state.washer.currentOrder;
-    if (order == null || state.washer.washerOrder.isBusy) {
-      return;
+    if (order == null ||
+        _washerMutationBusy ||
+        !isUjingRequestCurrent(ujingAuthEpoch) ||
+        !_canUseWasherOrder(order)) {
+      return Future.value();
     }
-    emit(
-      state.copyWith(
+    late final Future<void> request;
+    request = _refreshWasher(order, ujingAuthEpoch).whenComplete(() {
+      if (identical(_washerRefresh, request)) _washerRefresh = null;
+    });
+    _washerRefreshEpoch = ujingAuthEpoch;
+    _washerRefresh = request;
+    return request;
+  }
+
+  Future<void> _refreshWasher(WasherOrderUi order, int epoch) async {
+    emit(state.copyWith(
         washer: state.washer.copyWith(
-          washerOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.loading,
-            message: '正在刷新洗衣订单',
-          ),
-        ),
-      ),
-    );
-    final WasherOrderUi refreshed;
+            washerOrder: const RuntimeActionStatus(
+                state: RuntimeTaskState.loading, message: '正在刷新洗衣订单'))));
     try {
-      refreshed = await ujing.refreshWasherOrder(order);
-    } on UjingException catch (e) {
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing);
-        return;
+      final result = await ujing.refreshWasherOrder(order);
+      if (!_sameWasher(epoch, order)) return;
+      if (result.orderId != order.orderId) throw StateError('订单响应不匹配');
+      await _commitWasher(
+          result.copyWith(
+              ownerAccountKey: order.ownerAccountKey,
+              refreshedAtMillis: clock.nowMillis()),
+          epoch,
+          '洗衣订单已刷新');
+    } catch (error) {
+      if (_sameWasher(epoch, order)) await _washerError(error, epoch);
+    }
+  }
+
+  Future<void> _commitWasher(WasherOrderUi order, int epoch, String message,
+      {bool retainMutation = false}) async {
+    if (!_washerStorageReady()) throw StateError('本地订单恢复失败');
+    final history = [
+      WasherOrderHistoryUi(
+          orderId: order.orderId,
+          deviceNo: order.deviceNo,
+          status: order.status,
+          statusText: order.statusText,
+          payPrice: order.payPrice,
+          ownerAccountKey: order.ownerAccountKey),
+      ...state.washer.history.where((h) =>
+          h.orderId != order.orderId ||
+          (h.ownerAccountKey.isNotEmpty &&
+              h.ownerAccountKey != order.ownerAccountKey))
+    ];
+    final next =
+        order.isTerminal ? WasherHistoryCodec.legacyCandidate(history) : order;
+    if (!order.isTerminal) {
+      emit(state.copyWith(
+          washer:
+              state.washer.copyWith(currentOrder: order, history: history)));
+    }
+    try {
+      ujingMutationCount++;
+      try {
+        await washerHistoryRepository.saveSnapshot(
+            currentOrder: next, history: history);
+      } finally {
+        ujingMutationCount--;
       }
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            washerOrder: RuntimeActionStatus(
-              state: RuntimeTaskState.failure,
-              message: e.message,
-            ),
-          ),
-        ),
-      );
+    } catch (error) {
+      if (retainMutation &&
+          !isUjingRequestCurrent(epoch) &&
+          _retainWasherResult(epoch, order)) {
+        diagnosticLog.log('washer', '失效后订单保全保存失败 type=${error.runtimeType}');
+        emit(state.copyWith(
+            washer: state.washer.copyWith(
+                washerOrder: const RuntimeActionStatus(
+                    state: RuntimeTaskState.loginRequired,
+                    message: '登录已失效；订单仅保留在内存，保存失败，请勿关闭 App，重新登录后刷新重试'))));
+      }
+      rethrow;
+    }
+    if (!(retainMutation
+        ? _retainWasherResult(epoch, order)
+        : _sameWasher(epoch, order))) {
       return;
     }
-    if (refreshed.isTerminal) {
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            history: _appendHistory(refreshed),
-            clearCurrentOrder: true,
-            washerOrder: const RuntimeActionStatus(
-              state: RuntimeTaskState.success,
-              message: '洗衣已完成',
-            ),
-          ),
-        ),
-      );
-    } else {
-      // 仍运行：重新打时间戳，保证 live 倒计时以本次刷新为基准。
-      final stamped = refreshed.status == '40'
-          ? refreshed.copyWith(refreshedAtMillis: clock.nowMillis())
-          : null;
-      emit(
-        state.copyWith(
-          washer: state.washer.copyWith(
-            currentOrder: stamped,
-            washerOrder: const RuntimeActionStatus(
-              state: RuntimeTaskState.success,
-              message: '洗衣订单已刷新',
-            ),
-          ),
-        ),
-      );
+    emit(state.copyWith(
+        washer: state.washer.copyWith(
+            currentOrder: next,
+            clearCurrentOrder: next == null,
+            history: history,
+            washerOrder: isUjingRequestCurrent(epoch)
+                ? RuntimeActionStatus(
+                    state: RuntimeTaskState.success,
+                    message: next?.ownerAccountKey.isEmpty == true
+                        ? '另有旧订单待确认所属账号'
+                        : message)
+                : null)));
+  }
+
+  Future<void> confirmWasherOrderOwner(
+      {required String orderId,
+      required String accountKey,
+      required int epoch}) async {
+    if (!_washerStorageReady()) return;
+    final order = state.washer.currentOrder;
+    if (order == null ||
+        order.orderId != orderId ||
+        order.ownerAccountKey.isNotEmpty ||
+        accountKey.isEmpty ||
+        accountKey != ujingAccountKey ||
+        epoch != ujingAuthEpoch ||
+        _washerMutationBusy ||
+        !isUjingRequestCurrent(epoch)) {
+      return;
     }
+    _washerMutationBusy = true;
+    ujingMutationCount++;
+    var saved = false;
+    try {
+      final owned = order.copyWith(ownerAccountKey: accountKey);
+      await washerHistoryRepository.saveSnapshot(
+          currentOrder: owned, history: state.washer.history);
+      if (!_sameWasher(epoch, order)) return;
+      emit(state.copyWith(washer: state.washer.copyWith(currentOrder: owned)));
+      saved = true;
+    } catch (error) {
+      await _washerError(error, epoch);
+    } finally {
+      _washerMutationBusy = false;
+      ujingMutationCount--;
+    }
+    if (saved) await refreshCurrentWasherOrder();
   }
 
-  /// 离开下单页时清理瞬态（program/order/payment + 动作状态）。
   void resetWasherTransient() {
-    emit(
-      state.copyWith(
-        washer: WasherState(history: state.washer.history),
-      ),
-    );
-  }
-
-  List<WasherOrderHistoryUi> _appendHistory(WasherOrderUi order) {
-    final entry = WasherOrderHistoryUi(
-      orderId: order.orderId,
-      deviceNo: order.deviceNo,
-      status: order.status,
-      statusText: order.statusText,
-      payPrice: order.payPrice,
-    );
-    final existing =
-        state.washer.history.where((h) => h.orderId != order.orderId).toList();
-    final result = [entry, ...existing];
-    unawaited(washerHistoryRepository.saveHistory(result));
-    return result;
+    // 活动订单与进行中的支付属于业务状态，不随页面销毁。
+    emit(state.copyWith(washer: state.washer.copyWith(clearProgram: true)));
   }
 }

@@ -6,9 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flandresy/src/data/adapters/ble_transport.dart';
 import 'package:flandresy/src/data/adapters/hotwater_adapter.dart';
+import 'package:flandresy/src/data/adapters/fake_shower798_adapter.dart';
 import 'package:flandresy/src/data/adapters/real_zhuli_adapter.dart';
 import 'package:flandresy/src/data/adapters/zhuli_transport.dart';
 import 'package:flandresy/src/data/app_bootstrap.dart';
+import 'package:flandresy/src/data/account_session_repository.dart';
+import 'package:flandresy/src/home/cards/hot_water_card.dart';
 import 'package:flandresy/src/data/secure_session_repository.dart';
 import 'package:flandresy/src/data/settings_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_settings_repository.dart';
@@ -39,18 +42,24 @@ void main() {
       );
     });
 
-    test('corrupt shared session is removed without blocking boot', () async {
+    test('corrupt shared session is preserved and reported for boot recovery',
+        () async {
       SharedPreferences.setMockInitialValues({
         'hotwater_session': '{"version":99}',
       });
 
       final settings = SharedPrefsSettingsRepository();
 
-      expect(await settings.loadHotwaterSession(), isNull);
+      await expectLater(
+          settings.loadHotwaterSession(), throwsA(isA<FormatException>()));
       expect(
         (await SharedPreferences.getInstance()).getString('hotwater_session'),
-        isNull,
+        '{"version":99}',
       );
+      expect(
+          (await SharedPreferences.getInstance())
+              .getString('hotwater_session_recovery_backup'),
+          '{"version":99}');
     });
   });
 
@@ -122,7 +131,7 @@ void main() {
       await runtime.pollHotwaterStatusOnce();
       expect(adapter.loadHistoryCalls, callsBeforePoll + 1);
       expect(runtime.state.hotwater.session, isNotNull);
-      expect(runtime.state.hotwaterStart.message, '热水状态待确认');
+      expect(runtime.state.hotwaterStart.message, contains('启动指令已发送'));
       expect(adapter.stopCalls, 0);
     });
 
@@ -146,8 +155,8 @@ void main() {
       await runtime.ready;
       expect(runtime.state.hotwater.session?.phase,
           HotwaterSessionPhase.uncertain);
-      expect(runtime.state.hotwaterStart.state, RuntimeTaskState.unavailable);
-      expect(runtime.state.hotwaterStart.message, contains('解除本地状态'));
+      expect(runtime.state.hotwaterStart.state, RuntimeTaskState.success);
+      expect(runtime.state.hotwaterStart.message, '热水使用中');
 
       expect(await runtime.clearUnreconciledHotwater(), isTrue);
       expect(await settings.loadHotwaterSession(), isNull);
@@ -162,66 +171,23 @@ void main() {
   });
 
   group('hotwater reconciliation boundaries', () {
-    test('known order and same-device baseline rules are conservative', () {
-      final startedAt = DateTime(2026, 9, 10, 8).millisecondsSinceEpoch;
-      final known = HotwaterSession(
-        id: 'session-known',
-        account: '13800000000',
-        system: BathSystemPreference.zhuli,
-        simulated: false,
-        deviceId: 'device-1',
-        startedAtMillis: startedAt,
-        baselineOrderIds: const ['old-order'],
-        phase: HotwaterSessionPhase.uncertain,
-        orderId: 'new-order',
+    test('a matching completed order updates history without ending hotwater',
+        () async {
+      final adapter = _TestHotwaterAdapter()
+        ..historyLoader = () async => const [_completedOrder];
+      final runtime = _runtime(
+        adapter: adapter,
+        settings: InMemorySettingsRepository(),
+        secure: InMemorySecureSessionRepository(),
+        session: _activeSession(),
       );
-      expect(
-        known.hasNewConsumption(const [
-          HotwaterHistoryUi(
-            time: 'not-parseable',
-            deviceId: 'other-device',
-            amount: '金额未知',
-            status: '状态未知',
-            orderId: 'new-order',
-          ),
-        ]),
-        isTrue,
-      );
-
-      final fallback = known.copyWith(orderId: '');
-      HotwaterHistoryUi row(String device, String time, String order) =>
-          HotwaterHistoryUi(
-            time: time,
-            deviceId: device,
-            amount: '¥1.00',
-            status: '进行中',
-            orderId: order,
-          );
-
-      expect(
-        fallback.hasNewConsumption(
-          [row('device-1', '2026-09-10T08:00:01', 'fresh-order')],
-        ),
-        isTrue,
-      );
-      expect(
-        fallback.hasNewConsumption(
-          [row('other-device', '2026-09-10T08:00:01', 'other-order')],
-        ),
-        isFalse,
-      );
-      expect(
-        fallback.hasNewConsumption(
-          [row('device-1', '2026-09-10T07:59:59', 'before-order')],
-        ),
-        isFalse,
-      );
-      expect(
-        fallback.hasNewConsumption(
-          [row('device-1', '2026-09-10T08:00:01', 'old-order')],
-        ),
-        isFalse,
-      );
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      await runtime.pollHotwaterStatusOnce();
+      expect(runtime.state.hotwaterHistory.single.orderId, 'order-1');
+      expect(runtime.state.hotwaterRunning, isTrue);
+      expect(runtime.state.hotwater.session?.id, 'session-active');
+      expect(runtime.state.hotwaterStart.message, '热水使用中');
     });
 
     test('account and default-system changes do not retarget a session',
@@ -256,7 +222,7 @@ void main() {
       await runtime.pollHotwaterStatusOnce();
       expect(adapter.loadHistoryCalls, callsAfterAccountChange);
       expect(runtime.state.hotwater.session?.account, '13800000000');
-      expect(runtime.state.hotwaterStart.message, '请登录原账号确认热水状态');
+      expect(runtime.state.hotwaterStart.message, '热水使用中');
     });
 
     test('polls are mutually exclusive and obsolete responses are discarded',
@@ -305,6 +271,453 @@ void main() {
       expect(runtime.state.hotwaterHistory, isEmpty);
       expect(runtime.state.homeTasks, isEmpty);
     });
+  });
+
+  group('manual controls and 40 minute restore', () {
+    test('798 can stop without a local session and coalesces repeated start',
+        () async {
+      final adapter = _TestShowerAdapter();
+      final runtime = FakeShuiRuntime(
+        shower798: adapter,
+        initial: const PersistedSnapshot(
+          bathSystem: BathSystemPreference.shower798,
+          shower798: Shower798Persisted(
+            account: Shower798AccountUi(
+                mobile: '13800000000', uid: 'uid', eid: 'eid'),
+            currentDeviceId: 'device-798',
+          ),
+        ),
+      );
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      await runtime.stopShower798();
+      expect(adapter.stops, 1);
+      await runtime.startShower798();
+      await runtime.startShower798();
+      expect(adapter.starts, 1);
+      await runtime.pollHotwaterStatusOnce();
+      expect(adapter.idleQueries, 0);
+      expect(runtime.state.hotwaterRunning, isTrue);
+      await runtime.stopShower798();
+      expect(adapter.stops, 2);
+      expect(runtime.state.hotwaterRunning, isFalse);
+    });
+
+    test('session storage clear failure leaves the stop credential intact',
+        () async {
+      final session = _activeSession();
+      final settings = _FailingClearSettings();
+      await settings.saveHotwaterSession(session);
+      final secure = InMemorySecureSessionRepository();
+      await secure.saveHotwaterIsn(session.id, 'saved-isn');
+      final runtime = _runtime(
+          adapter: _TestHotwaterAdapter(),
+          settings: settings,
+          secure: secure,
+          session: session);
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      expect(await runtime.clearHotwaterSessionLocally(expected: session),
+          isFalse);
+      expect(await secure.loadHotwaterIsn(session.id), 'saved-isn');
+      expect(runtime.state.hotwater.session?.id, session.id);
+    });
+
+    test(
+        'auth failure on missing-credential refresh exits loading and permits login',
+        () async {
+      final adapter = _TestHotwaterAdapter()
+        ..historyLoader = () async =>
+            throw const HotwaterException('expired', authInvalid: true);
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: InMemorySecureSessionRepository());
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      await runtime.stopHotwater();
+      expect(runtime.state.hotwaterStop.isBusy, isFalse);
+      expect(runtime.state.hotwaterStop.state, RuntimeTaskState.loginRequired);
+      await runtime.loginZhuli('13800000000', 'password');
+      expect(runtime.state.zhuli.phone, '13800000000');
+    });
+
+    testWidgets(
+        'remaining in foreground does not run the removed 10 second or one hour checks',
+        (tester) async {
+      final adapter = _TestHotwaterAdapter();
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: InMemorySecureSessionRepository(),
+          session: _activeSession());
+      await tester.pump();
+      await runtime.ready;
+      await tester.pump(const Duration(hours: 2));
+      expect(adapter.loadHistoryCalls, 0);
+      expect(runtime.state.hotwaterRunning, isTrue);
+      runtime.dispose();
+    });
+
+    for (final preloaded in [true, false]) {
+      for (final elapsed in [
+        const Duration(minutes: 39, seconds: 59),
+        const Duration(minutes: 40),
+        const Duration(minutes: 40, milliseconds: 1),
+      ]) {
+        test('restore $elapsed with preloaded=$preloaded', () async {
+          final session = _activeSession();
+          final settings =
+              InMemorySettingsRepository(initial: BathSystemPreference.zhuli);
+          await settings.saveHotwaterSession(session);
+          final adapter = _TestHotwaterAdapter()
+            ..historyLoader = () async => const [_completedOrder];
+          final runtime = _runtime(
+            adapter: adapter,
+            settings: settings,
+            secure: InMemorySecureSessionRepository(),
+            session: session,
+            preloaded: preloaded,
+            clock: FixedLiveClock(
+                session.startedAtMillis + elapsed.inMilliseconds),
+          );
+          addTearDown(runtime.dispose);
+          await runtime.ready;
+          await Future<void>.delayed(Duration.zero);
+          final expired = elapsed > const Duration(minutes: 40);
+          expect(runtime.state.hotwaterRunning, !expired);
+          expect(runtime.state.hotwater.session == null, expired);
+          expect(await settings.loadHotwaterSession() == null, expired);
+          expect(
+              runtime.state.hotwaterStart.message, expired ? '热水待启动' : '热水使用中');
+          expect(adapter.loadHistoryCalls, expired ? 1 : 0);
+          if (expired) {
+            expect(runtime.state.hotwaterHistory, const [_completedOrder]);
+          }
+          expect(adapter.startCalls, 0);
+          expect(adapter.stopCalls, 0);
+        });
+      }
+    }
+
+    test('expired recovery stays idle when refreshing orders fails', () async {
+      final session = _activeSession();
+      final adapter = _TestHotwaterAdapter()
+        ..historyLoader = () async => throw TimeoutException('offline');
+      final runtime = _runtime(
+        adapter: adapter,
+        settings: InMemorySettingsRepository(),
+        secure: InMemorySecureSessionRepository(),
+        session: session,
+        clock: FixedLiveClock(session.startedAtMillis +
+            const Duration(minutes: 41).inMilliseconds),
+      );
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      await Future<void>.delayed(Duration.zero);
+      expect(runtime.state.hotwaterRunning, isFalse);
+      expect(runtime.state.hotwaterStart.message, '热水待启动');
+      expect(
+          runtime.state.hotwater.historyStatus.state, RuntimeTaskState.failure);
+      adapter.historyLoader = () async => const [_completedOrder];
+      await runtime.stopHotwater();
+      expect(runtime.state.hotwaterHistory, const [_completedOrder]);
+      expect(runtime.state.hotwaterStop.message, '订单已更新');
+      expect(adapter.stopCalls, 0);
+    });
+
+    test(
+        'foreground resume applies the window and does not restart periodic polling',
+        () async {
+      final session = _activeSession();
+      final clock = _MutableClock(session.startedAtMillis);
+      final adapter = _TestHotwaterAdapter();
+      final runtime = _runtime(
+        adapter: adapter,
+        settings: InMemorySettingsRepository(),
+        secure: InMemorySecureSessionRepository(),
+        session: session,
+        clock: clock,
+      );
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      runtime.setPollingPaused(true);
+      clock.millis += const Duration(minutes: 41).inMilliseconds;
+      runtime.setPollingPaused(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(runtime.state.hotwaterRunning, isFalse);
+      expect(runtime.state.hotwater.session, isNull);
+      expect(adapter.loadHistoryCalls, 1);
+      expect(adapter.stopCalls, 0);
+    });
+
+    for (final withSession in [false, true]) {
+      test('stop without isn refreshes orders, session=$withSession', () async {
+        final adapter = _TestHotwaterAdapter()
+          ..historyLoader = () async => const [_completedOrder];
+        final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: InMemorySecureSessionRepository(),
+          session: withSession ? _activeSession() : null,
+        );
+        addTearDown(runtime.dispose);
+        await runtime.ready;
+        await runtime.stopHotwater();
+        expect(adapter.loadHistoryCalls, 1);
+        expect(adapter.stopCalls, 0);
+        expect(runtime.state.hotwaterHistory, const [_completedOrder]);
+        expect(runtime.state.hotwaterStop.message, '订单已更新');
+        expect(runtime.state.hotwaterRunning, withSession);
+        adapter.historyLoader = () async => throw TimeoutException('offline');
+        await runtime.stopHotwater();
+        expect(runtime.state.hotwaterHistory, const [_completedOrder]);
+        expect(runtime.state.hotwaterStop.state, RuntimeTaskState.failure);
+        await runtime.startHotwater();
+        expect(adapter.startCalls, withSession ? 0 : 1);
+        expect(runtime.state.hotwaterRunning, isTrue);
+      });
+    }
+
+    test('start again retains the original active session and credential',
+        () async {
+      final adapter = _TestHotwaterAdapter()
+        ..historyLoader =
+            () async => throw StateError('must not query before starting');
+      final secure = InMemorySecureSessionRepository();
+      final clock = _MutableClock(_activeSession().startedAtMillis);
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: secure,
+          clock: clock);
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      await runtime.startHotwater();
+      final first = runtime.state.hotwater.session!;
+      clock.millis += const Duration(minutes: 10).inMilliseconds;
+      await runtime.startHotwater();
+      expect(adapter.startCalls, 1);
+      expect(adapter.loadHistoryCalls, 0);
+      expect(runtime.state.hotwater.session!.id, first.id);
+      expect(runtime.state.hotwater.session!.startedAtMillis,
+          first.startedAtMillis);
+      expect(await secure.loadHotwaterIsn(first.id), 'isn-1');
+      expect(await secure.loadHotwaterIsn(runtime.state.hotwater.session!.id),
+          'isn-1');
+    });
+
+    test('an active session bypasses start protocol and keeps stop credential',
+        () async {
+      final adapter = _TestHotwaterAdapter(failBeforeDispatchOnce: true);
+      final session = _activeSession();
+      final secure = InMemorySecureSessionRepository();
+      await secure.saveHotwaterIsn(session.id, 'previous-isn');
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: secure,
+          session: session);
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      await runtime.startHotwater();
+      expect(runtime.state.hotwater.session?.id, session.id);
+      expect(adapter.startCalls, 0);
+      expect(runtime.state.hotwaterRunning, isTrue);
+      expect(await secure.loadHotwaterIsn(session.id), 'previous-isn');
+      await runtime.stopHotwater();
+      expect(adapter.lastStopIsn, 'previous-isn');
+      expect(runtime.state.hotwater.session, isNull);
+    });
+
+    test(
+        'stop clicked during start is queued and repeated clicks are coalesced',
+        () async {
+      final gate = Completer<void>();
+      final adapter = _TestHotwaterAdapter()..startGate = gate;
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: InMemorySecureSessionRepository());
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      final start = runtime.startHotwater();
+      final duplicateStart = runtime.startHotwater();
+      await Future<void>.delayed(Duration.zero);
+      final stop = runtime.stopHotwater();
+      final duplicateStop = runtime.stopHotwater();
+      await Future<void>.delayed(Duration.zero);
+      expect(adapter.startCalls, 1);
+      expect(adapter.stopCalls, 0);
+      gate.complete();
+      await Future.wait([start, duplicateStart, stop, duplicateStop]);
+      expect(adapter.startCalls, 1);
+      expect(adapter.stopCalls, 1);
+      expect(adapter.lastStopIsn, 'isn-1');
+      expect(runtime.state.hotwaterRunning, isFalse);
+      expect(runtime.state.hotwaterStop.message, '热水已关闭');
+      expect(adapter.loadHistoryCalls, 1);
+    });
+
+    test('double start with restore interleaved sends only one start',
+        () async {
+      final gate = Completer<void>();
+      final adapter = _TestHotwaterAdapter()..startGate = gate;
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: InMemorySecureSessionRepository());
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      final first = runtime.startHotwater();
+      await Future<void>.delayed(Duration.zero);
+      final resume = runtime.resumeHotwaterSession();
+      final second = runtime.startHotwater();
+      await Future<void>.delayed(Duration.zero);
+      gate.complete();
+      await Future.wait([first, resume, second]);
+      expect(adapter.startCalls, 1);
+      expect(runtime.state.hotwaterRunning, isTrue);
+    });
+
+    test('start stop start preserves all three control intents', () async {
+      final gate = Completer<void>();
+      final adapter = _TestHotwaterAdapter()..startGate = gate;
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: InMemorySecureSessionRepository());
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      final first = runtime.startHotwater();
+      await Future<void>.delayed(Duration.zero);
+      final stop = runtime.stopHotwater();
+      final second = runtime.startHotwater();
+      await Future<void>.delayed(Duration.zero);
+      gate.complete();
+      await Future.wait([first, stop, second]);
+      expect(adapter.startCalls, 2);
+      expect(adapter.stopCalls, 1);
+      expect(runtime.state.hotwaterRunning, isTrue);
+    });
+
+    for (final failure in ['response', 'stop', 'storage']) {
+      test('start after $failure failure does not repeat device command',
+          () async {
+        final adapter = _TestHotwaterAdapter(
+            loseResponseAfterDispatchOnce: failure == 'response')
+          ..failStop = failure == 'stop';
+        final secure = InMemorySecureSessionRepository();
+        final runtime = _runtime(
+            adapter: adapter,
+            settings: failure == 'storage'
+                ? _FailingDispatchedSettings()
+                : InMemorySettingsRepository(),
+            secure: secure);
+        addTearDown(runtime.dispose);
+        await runtime.ready;
+        await runtime.startHotwater();
+        final original = runtime.state.hotwater.session!;
+        if (failure == 'stop') await runtime.stopHotwater();
+        await runtime.startHotwater();
+        expect(adapter.startCalls, 1);
+        expect(runtime.state.hotwater.session!.id, original.id);
+        expect(runtime.state.hotwater.session!.startedAtMillis,
+            original.startedAtMillis);
+        expect(runtime.state.hotwater.session!.mayHaveStarted, isTrue);
+        expect(await secure.loadHotwaterIsn(original.id), 'isn-1');
+        if (failure != 'stop') {
+          expect(runtime.state.hotwater.session!.phase,
+              HotwaterSessionPhase.uncertain);
+          await runtime.stopHotwater();
+          expect(adapter.lastStopIsn, 'isn-1');
+        }
+      });
+    }
+
+    test('restore queued during a start does not clear an in-flight session',
+        () async {
+      final gate = Completer<void>();
+      final adapter = _TestHotwaterAdapter()..startGate = gate;
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: InMemorySecureSessionRepository());
+      addTearDown(runtime.dispose);
+      await runtime.ready;
+      final start = runtime.startHotwater();
+      await Future<void>.delayed(Duration.zero);
+      final resume = runtime.resumeHotwaterSession();
+      expect(runtime.state.hotwater.session, isNotNull);
+      gate.complete();
+      await Future.wait([start, resume]);
+      expect(
+          runtime.state.hotwater.session?.phase, HotwaterSessionPhase.active);
+      expect(runtime.state.hotwaterRunning, isTrue);
+    });
+
+    testWidgets('stop failure notice clears without changing the running title',
+        (tester) async {
+      final adapter = _TestHotwaterAdapter()..failStop = true;
+      final runtime = _runtime(
+          adapter: adapter,
+          settings: InMemorySettingsRepository(),
+          secure: InMemorySecureSessionRepository());
+      await tester.pump();
+      await runtime.ready;
+      final start = runtime.startHotwater();
+      await tester.pump();
+      await start;
+      final stop = runtime.stopHotwater();
+      await tester.pump();
+      await stop;
+      expect(runtime.state.hotwaterStop.state, RuntimeTaskState.failure);
+      await tester.pump(const Duration(seconds: 3));
+      expect(runtime.state.hotwaterRunning, isTrue);
+      expect(runtime.state.hotwaterStart.message, '热水使用中');
+      runtime.dispose();
+    });
+
+    for (final busy in [false, true]) {
+      for (final running in [false, true]) {
+        testWidgets(
+            'both home and detail buttons accept taps: busy=$busy running=$running',
+            (tester) async {
+          final state = ShuiHomeState(
+            bathSystemPreference: BathSystemPreference.zhuli,
+            hotwater: HotwaterState(
+              running: running,
+              session: running ? _activeSession() : null,
+              start: RuntimeActionStatus(
+                  state:
+                      busy ? RuntimeTaskState.loading : RuntimeTaskState.idle),
+            ),
+          );
+          var starts = 0;
+          var stops = 0;
+          for (final detail in [false, true]) {
+            await tester.pumpWidget(MaterialApp(
+                home: detail
+                    ? HotwaterDetailScreen(
+                        state: state,
+                        onBack: () {},
+                        onStart: () => starts++,
+                        onStop: () => stops++)
+                    : Scaffold(
+                        body: HotWaterCard(
+                            state: state,
+                            onStartHotwater: () => starts++,
+                            onStopHotwater: () => stops++,
+                            onSwitchBathSystem: () {},
+                            onOpenDetail: () {}))));
+            await tester.tap(find.text('启动热水'));
+            await tester.tap(find.text('停止热水'));
+          }
+          expect(starts, 2);
+          expect(stops, 2);
+        });
+      }
+    }
   });
 
   testWidgets(
@@ -490,6 +903,54 @@ const _zhuliSessionData = ZhuliSessionData(
   secretKey: 'secret',
 );
 
+const _completedOrder = HotwaterHistoryUi(
+  time: '2026-09-10T00:10:00',
+  deviceId: 'device-1',
+  amount: '¥1.00',
+  status: '已完成',
+  orderId: 'order-1',
+);
+
+class _MutableClock implements LiveClock {
+  _MutableClock(this.millis);
+  int millis;
+  @override
+  int nowMillis() => millis;
+}
+
+class _FailingClearSettings extends InMemorySettingsRepository {
+  @override
+  Future<void> saveHotwaterSession(HotwaterSession? session) async {
+    if (session == null) throw StateError('storage unavailable');
+    await super.saveHotwaterSession(session);
+  }
+}
+
+class _FailingDispatchedSettings extends InMemorySettingsRepository {
+  @override
+  Future<void> saveHotwaterSession(HotwaterSession? session) async {
+    if (session?.mayHaveStarted == true) {
+      throw StateError('storage unavailable');
+    }
+    await super.saveHotwaterSession(session);
+  }
+}
+
+class _TestShowerAdapter extends FakeShower798Adapter {
+  int starts = 0;
+  int stops = 0;
+  int idleQueries = 0;
+  @override
+  Future<void> startShower(String deviceId) async => starts++;
+  @override
+  Future<void> stopShower(String deviceId) async => stops++;
+  @override
+  Future<bool> isDeviceIdle(String deviceId) async {
+    idleQueries++;
+    return true;
+  }
+}
+
 Map<String, dynamic> _sessionJson({required int version}) => {
       'version': version,
       'id': 'session-1',
@@ -530,13 +991,16 @@ FakeShuiRuntime _runtime({
   required InMemorySettingsRepository settings,
   required InMemorySecureSessionRepository secure,
   HotwaterSession? session,
+  LiveClock? clock,
+  bool preloaded = true,
 }) {
   return FakeShuiRuntime(
     settings: settings,
     secure: secure,
     hotwater: adapter,
-    clock: const FixedLiveClock(1789027200000),
-    initial: _snapshot(session: session),
+    clock: clock ?? FixedLiveClock(session?.startedAtMillis ?? 1789027200000),
+    sessions: InMemoryAccountSessionRepository(zhuli: _snapshot().zhuli),
+    initial: preloaded ? _snapshot(session: session) : null,
   );
 }
 
@@ -552,6 +1016,9 @@ class _TestHotwaterAdapter implements IHotwaterAdapter {
   int stopCalls = 0;
   int loadHistoryCalls = 0;
   Future<List<HotwaterHistoryUi>> Function()? historyLoader;
+  Completer<void>? startGate;
+  bool failStop = false;
+  String? lastStopIsn;
 
   @override
   Future<ZhuliSessionData> loginZhuli(String phone, String password) async =>
@@ -563,6 +1030,7 @@ class _TestHotwaterAdapter implements IHotwaterAdapter {
     HotwaterStartProgressCallback? onProgress,
   }) async {
     startCalls++;
+    await startGate?.future;
     if (failBeforeDispatchOnce && startCalls == 1) {
       throw const HotwaterException('未扫描到设备');
     }
@@ -599,6 +1067,8 @@ class _TestHotwaterAdapter implements IHotwaterAdapter {
     String? isn,
   }) async {
     stopCalls++;
+    lastStopIsn = isn;
+    if (failStop) throw const HotwaterException('关水请求失败');
     return const HotwaterActionResult(
       deviceId: 'device-1',
       statusText: '热水已关闭',
@@ -669,6 +1139,13 @@ class _RecordingBleConnection implements ZhuliBleConnection {
 
   @override
   Future<void> writeHex(String hex) async => events.add('write:$hex');
+
+  @override
+  Future<String> writeHexAndAwait(String hex,
+      {required List<int> expectedTypes}) async {
+    await writeHex(hex);
+    return await awaitNotify(expectedTypes: expectedTypes);
+  }
 
   @override
   Future<String> awaitNotify({required List<int> expectedTypes}) async {

@@ -24,6 +24,8 @@ class WasherOrderScreen extends StatefulWidget {
     required this.onStart,
     required this.onStop,
     required this.onCancel,
+    this.onConfirmOwner,
+    this.onRefresh,
     super.key,
   });
 
@@ -39,6 +41,8 @@ class WasherOrderScreen extends StatefulWidget {
   final VoidCallback onStart;
   final VoidCallback onStop;
   final VoidCallback onCancel;
+  final VoidCallback? onConfirmOwner;
+  final VoidCallback? onRefresh;
 
   @override
   State<WasherOrderScreen> createState() => _WasherOrderScreenState();
@@ -154,6 +158,13 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
                     RuntimeStatusBanner(status: s.washerOrder),
                   ],
                   if (s.currentWasherOrder != null) ...[
+                    if (s.currentWasherOrder!.ownerAccountKey.isEmpty)
+                      TextButton(
+                          onPressed: widget.onConfirmOwner,
+                          child: const Text('确认旧订单所属账号')),
+                    TextButton(
+                        onPressed: widget.onRefresh,
+                        child: const Text('刷新洗衣订单')),
                     const SizedBox(height: AppCustomTokens.spaceSm),
                     CurrentWasherOrderPaymentCard(
                       order: s.currentWasherOrder!,
@@ -170,8 +181,11 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
                   const SizedBox(height: AppCustomTokens.spaceSm),
                   PriceBar(
                     amount: formatFenAmount(_totalFen),
-                    enabled:
-                        program != null && _selectedModelId != 0 && !orderBusy,
+                    enabled: program != null &&
+                        _selectedModelId != 0 &&
+                        !orderBusy &&
+                        !s.washerPayment.isBusy &&
+                        s.currentWasherOrder == null,
                     buttonText: orderBusy ? '创建中' : '创建订单',
                     onCreate: () => widget.onCreateOrder(
                       _selectedModelId,

@@ -168,6 +168,9 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   void _setRoute(ShuiRoute next, {bool returning = false}) {
     if (_routeKey(next) == _routeKey(route)) return;
     FocusManager.instance.primaryFocus?.unfocus();
+    if (next is DrinkingWaterRoute) {
+      ShuiRuntimeScope.of(context).resumeWaterPolling();
+    }
     setState(() {
       _dismissOverlays();
       _routeDirection = returning ? -1 : 1;
@@ -320,6 +323,17 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
                             child: Stack(children: _overlays(runtime)),
                           ),
                   ),
+                  if (runtime.recoveryWarnings.isNotEmpty)
+                    Align(
+                        alignment: Alignment.topCenter,
+                        child: SafeArea(
+                          child: Material(
+                            color: Theme.of(context).colorScheme.errorContainer,
+                            child: const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Text('部分本地记录未能恢复，原数据已保留，请查看诊断日志')),
+                          ),
+                        )),
                   AnimatedSwitcher(
                     duration: ShuiMotion.duration(context, ShuiMotion.normal),
                     child: openingVisible
@@ -370,6 +384,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onBack: () => _leaveDrinkingWater(runtime),
           onReturnHome: () => _selectTab(MainTab.home),
           onRefresh: runtime.refreshCurrentDrinkingWaterOrder,
+          onConfirmOwner: () => _confirmUjingOrderOwner(runtime, washer: false),
         ),
       AccountHubRoute() => AccountHubScreen(
           state: runtime.state,
@@ -411,6 +426,8 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onStart: runtime.startCurrentWasherOrder,
           onStop: runtime.stopCurrentWasherOrder,
           onCancel: runtime.cancelCurrentWasherOrder,
+          onConfirmOwner: () => _confirmUjingOrderOwner(runtime, washer: true),
+          onRefresh: runtime.refreshCurrentWasherOrder,
         ),
       HotwaterDetailRoute() => HotwaterDetailScreen(
           state: runtime.state,
@@ -535,6 +552,45 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     _handlePop();
   }
 
+  Future<void> _confirmUjingOrderOwner(FakeShuiRuntime runtime,
+      {required bool washer}) async {
+    final water = runtime.state.currentWaterOrder;
+    final wash = runtime.state.washer.currentOrder;
+    final orderId = washer ? wash?.orderId : water?.orderId;
+    final device = washer ? wash?.deviceNo : water?.deviceNo;
+    final accountKey = runtime.ujingAccountKey;
+    final epoch = runtime.ujingAuthEpoch;
+    if (orderId == null) return;
+    if (accountKey.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请先登录需要绑定的 U净账号')));
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: const Text('确认旧订单所属账号'),
+              content: Text(
+                  '订单号：$orderId\n设备：${device ?? ''}\n当前账号：$accountKey\n\n仅在确认此订单属于该账号时继续。绑定并查询，不会支付/启动设备。'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('暂不确认')),
+                TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('绑定并查询')),
+              ],
+            ));
+    if (confirmed != true || !mounted) return;
+    if (washer) {
+      await runtime.confirmWasherOrderOwner(
+          orderId: orderId, accountKey: accountKey, epoch: epoch);
+    } else {
+      await runtime.confirmWaterOrderOwner(
+          orderId: orderId, accountKey: accountKey, epoch: epoch);
+    }
+  }
+
   /// 首页扫码卡 → 打开真实相机（RSCAN）→ 得 qr → classifyScanRouting 分类 →
   /// 洗衣机：自动加到设备页（去重+持久化）后进下单页 + scanWasher；
   /// 饮水机回首页 + 一步式接水（一次性，不落设备）；无法识别 → SnackBar 提示。
@@ -600,6 +656,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
 
   void _startHotwater(FakeShuiRuntime runtime) {
     if (runtime.state.hotwaterControlSystem == BathSystemPreference.none) {
+      _showScanMessage('请先选择洗浴系统');
       return;
     }
     if (_use798(runtime)) {

@@ -35,7 +35,8 @@ class HotwaterDetailScreen extends StatelessWidget {
     final textTheme = AppTypography.textTheme;
     final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
     final session = state.hotwater.session;
-    final canClearLocal = session != null &&
+    final canClearLocal = !busy &&
+        session != null &&
         session.phase != HotwaterSessionPhase.active &&
         onClearLocal != null;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
@@ -82,24 +83,14 @@ class HotwaterDetailScreen extends StatelessWidget {
                           children: [
                             Expanded(
                               child: PrimaryGradientButton(
-                                label: busy
-                                    ? '正在处理中'
-                                    : (_use798 ? '启动洗浴' : '启动热水'),
-                                enabled: !busy &&
-                                    state.hotwaterControlSystem !=
-                                        BathSystemPreference.none &&
-                                    !state.hotwaterRunning,
+                                label: _use798 ? '启动洗浴' : '启动热水',
                                 onTap: onStart,
                               ),
                             ),
                             const SizedBox(width: AppCustomTokens.spaceSm),
                             Expanded(
                               child: PrimaryGradientButton(
-                                label: busy
-                                    ? '正在处理中'
-                                    : (_use798 ? '停止洗浴' : '停止热水'),
-                                enabled:
-                                    !busy && state.hotwater.session != null,
+                                label: _use798 ? '停止洗浴' : '停止热水',
                                 onTap: onStop,
                               ),
                             ),
@@ -118,6 +109,10 @@ class HotwaterDetailScreen extends StatelessWidget {
                           title: _use798 ? '洗浴记录' : '住理热水历史',
                         ),
                         const SizedBox(height: AppCustomTokens.spaceSm),
+                        if (!_use798 &&
+                            state.hotwater.historyStatus.message != null)
+                          RuntimeStatusBanner(
+                              status: state.hotwater.historyStatus),
                         if (_use798)
                           Text(
                             '慧生活798暂不提供账号历史，本页不会混入住理订单。',

@@ -125,7 +125,6 @@ class RealShower798Adapter implements IShower798Adapter {
     final data = _obj(resp, 'data');
     if (!data.containsKey('account')) {
       // account 缺失 = 登录失效（对齐 legacy logout + 抛错）。authInvalid 触发 RELOG 同步清 secure。
-      _token = null;
       throw const Shower798Exception('798 洗浴登录已失效，请重新登录', authInvalid: true);
     }
     final favos = data['favos'];

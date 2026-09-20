@@ -30,7 +30,6 @@ class HotWaterCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isShower798 =
         state.hotwaterControlSystem == BathSystemPreference.shower798;
-    final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
     final unselected = state.hotwaterControlSystem == BathSystemPreference.none;
     final statusText =
         unselected ? '未选择系统' : state.hotwaterStart.message ?? '热水待启动';
@@ -107,11 +106,7 @@ class HotWaterCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: PrimaryGradientButton(
-                            label: busy
-                                ? '正在处理中'
-                                : (isShower798 ? '启动洗浴' : '启动热水'),
-                            enabled:
-                                !busy && !unselected && !state.hotwaterRunning,
+                            label: isShower798 ? '启动洗浴' : '启动热水',
                             compact: true,
                             onTap: onStartHotwater,
                           ),
@@ -119,10 +114,7 @@ class HotWaterCard extends StatelessWidget {
                         const SizedBox(width: AppCustomTokens.spaceSm),
                         Expanded(
                           child: PrimaryGradientButton(
-                            label: busy
-                                ? '正在处理中'
-                                : (isShower798 ? '停止洗浴' : '停止热水'),
-                            enabled: !busy && state.hotwater.session != null,
+                            label: isShower798 ? '停止洗浴' : '停止热水',
                             compact: true,
                             onTap: onStopHotwater,
                           ),
@@ -139,6 +131,10 @@ class HotWaterCard extends StatelessWidget {
               ),
             ],
           ),
+          if (state.hotwaterStop.message != null) ...[
+            const SizedBox(height: AppCustomTokens.spaceXs),
+            RuntimeStatusBanner(status: state.hotwaterStop),
+          ],
           if (warningText != null &&
               warningText.trim().isNotEmpty &&
               state.hotwaterStart.state == RuntimeTaskState.failure) ...[

@@ -31,6 +31,9 @@ class PersistedSnapshot {
     this.currentWaterOrder,
     this.waterHistory,
     this.washerHistory,
+    this.currentWasherOrder,
+    this.recoveryWarnings = const [],
+    this.ujingOrderStorageBlocked = false,
   });
 
   final BathSystemPreference bathSystem;
@@ -53,6 +56,9 @@ class PersistedSnapshot {
   final WaterOrderUi? currentWaterOrder;
   final List<WaterOrderHistoryUi>? waterHistory;
   final List<WasherOrderHistoryUi>? washerHistory;
+  final WasherOrderUi? currentWasherOrder;
+  final List<String> recoveryWarnings;
+  final bool ujingOrderStorageBlocked;
 }
 
 /// 合并 SettingsRepository + AccountSessionRepository + LocalDeviceRepository +
@@ -68,17 +74,36 @@ class AppBootstrap {
     WaterOrderRepository water,
     WasherHistoryRepository washerHistory,
   ) async {
-    final bathSystem = await settings.loadBathSystem();
-    final useSimulatedBackend = await settings.loadUseSimulatedBackend();
-    final permissionIntroSeen = await settings.loadPermissionIntroSeen();
-    final zhuli = await sessions.loadZhuli();
-    final ujing = await sessions.loadUjing();
-    final shower798 = await sessions.loadShower798();
-    final localDevices = await devices.loadDevices();
-    final hotwaterHistory = await history.loadHistory();
-    final hotwaterSession = await settings.loadHotwaterSession();
-    final waterSnapshot = await water.load();
-    final washerHistorySnapshot = await washerHistory.loadHistory();
+    final warnings = <String>[];
+    bool orderBlocked = false;
+    Future<T?> recover<T>(String domain, Future<T> Function() load,
+        {bool orders = false}) async {
+      try {
+        return await load();
+      } catch (error) {
+        warnings.add('$domain 恢复失败（${error.runtimeType}），原数据已保留');
+        if (orders) orderBlocked = true;
+        return null;
+      }
+    }
+
+    final bathSystem = await recover('洗浴偏好', settings.loadBathSystem) ??
+        BathSystemPreference.none;
+    final useSimulatedBackend =
+        await recover('后端偏好', settings.loadUseSimulatedBackend) ?? false;
+    final permissionIntroSeen =
+        await recover('权限引导', settings.loadPermissionIntroSeen) ?? false;
+    final zhuli = await recover('住理账号', sessions.loadZhuli);
+    final ujing = await recover('U净账号', sessions.loadUjing);
+    final shower798 = await recover('798账号', sessions.loadShower798);
+    final localDevices = await recover('本地设备', devices.loadDevices);
+    final hotwaterHistory = await recover('热水历史', history.loadHistory);
+    final hotwaterSession = await recover('热水会话', settings.loadHotwaterSession);
+    final waterSnapshot = await recover('饮水订单', water.load, orders: true);
+    final washerHistorySnapshot =
+        await recover('洗衣历史', washerHistory.loadHistory, orders: true);
+    final currentWasherOrder =
+        await recover('洗衣活动订单', washerHistory.loadCurrentOrder, orders: true);
     return PersistedSnapshot(
       bathSystem: bathSystem,
       useSimulatedBackend: useSimulatedBackend,
@@ -92,6 +117,9 @@ class AppBootstrap {
       currentWaterOrder: waterSnapshot?.currentOrder,
       waterHistory: waterSnapshot?.history,
       washerHistory: washerHistorySnapshot,
+      currentWasherOrder: currentWasherOrder,
+      recoveryWarnings: warnings,
+      ujingOrderStorageBlocked: orderBlocked,
     );
   }
 }

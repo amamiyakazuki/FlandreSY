@@ -32,13 +32,12 @@ class LocalDeviceCodec {
     }
     final decoded = jsonDecode(json);
     if (decoded is! List) {
-      return const <LocalDeviceShortcut>[];
+      throw const FormatException('Invalid device list');
     }
     final out = <LocalDeviceShortcut>[];
     for (final item in decoded) {
-      if (item is Map) {
-        out.add(fromMap(item.cast<String, dynamic>()));
-      }
+      if (item is! Map) throw const FormatException('Invalid device entry');
+      out.add(fromMap(item.cast<String, dynamic>()));
     }
     return out;
   }

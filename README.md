@@ -66,6 +66,23 @@ flutter run
 flutter run --dart-define=SIMULATE_BACKEND=true
 ```
 
+## 持续集成（CI）
+
+`.github/workflows/flutter-android-ci.yml` 在分支 push、PR 和手动触发时顺序执行：
+
+1. 使用 Flutter 3.44.4、JDK 17 和已提交的 `pubspec.lock` 安装依赖。
+2. `flutter analyze --no-pub` 与全量 `flutter test --no-pub --reporter expanded`。
+3. 构建 Android ARM64 Debug APK；前面的检查失败则不构建、不上传。
+4. 将 APK 保存为 `flandresy-debug-arm64-<run_id>-<run_attempt>`，保留 7 天。
+
+推送后在 GitHub 仓库 **Actions → Flutter Android CI → 对应运行 → Artifacts** 下载并解压 APK。手动运行入口需工作流先存在于默认分支。本配置不发布 GitHub Release、不读取正式签名密钥、不执行真实支付或 BLE 操作；现有 iOS 工作流保持独立、不在本轮修改。
+
+APK 包名为 `com.flandresy.debug`，可与正式版共存，但托管 runner 的临时 Debug 签名不保证与本机或其它次构建相同；不能保证覆盖现有 Debug 安装。不要为安装测试包贸然卸载仍有活动订单的旧版本，卸载会丢失其本地数据。默认真实后端，安装后控制设备或付款仍会产生真实效果。
+
+本工作流提供检查结果，但尚未配置分支保护的强制合并门禁。失败先看对应步骤日志；无需为重试 CI 再次操作真实设备。Action 版本锁定到 commit SHA；升级时同时核对 Flutter、Android SDK/NDK 与 AGP 的兼容要求。
+
+参考：[Flutter Action](https://github.com/subosito/flutter-action)、[AGP 9.0 兼容表](https://developer.android.com/build/releases/agp-9-0-0-release-notes)、[GitHub Artifacts](https://github.com/actions/upload-artifact)。
+
 ## 版本与更新链路
 
 - 内置版本清单：`assets/public/version.json`

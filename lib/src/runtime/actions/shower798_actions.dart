@@ -123,6 +123,23 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 对齐 legacy loginShower798。
   Future<void> loginShower798(String phone, String smsCode) async {
     await ready;
+    if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
+      return;
+    }
+    hotwaterAuthChanging = true;
+    try {
+      await _loginShower798(phone, smsCode);
+    } catch (error) {
+      diagnosticLog.log('auth', '798登录保存失败 type=${error.runtimeType}');
+      hotwaterAuthChanging = false;
+      await handleAuthInvalidation(AuthService.shower798);
+    } finally {
+      hotwaterAuthChanging = false;
+    }
+  }
+
+  Future<void> _loginShower798(String phone, String smsCode) async {
+    await ready;
     if (isDisposed ||
         state.hotwaterStart.isBusy ||
         state.hotwaterStop.isBusy ||
@@ -155,39 +172,42 @@ mixin Shower798Actions on ShuiRuntimeBase {
     try {
       session = await shower798.login(mobile, smsCode.trim());
       devices = await shower798.loadDevices();
-    } on Shower798Exception catch (e) {
-      emit(
-        state.copyWith(
-          shower798Login: RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: e.message,
-          ),
-        ),
-      );
-      return;
+    } on Shower798Exception {
+      // 包括登录后设备列表失败，由外层统一清理混合身份。
+      rethrow;
     }
     final account = Shower798AccountUi(
       mobile: session.phone,
       uid: session.uid,
       eid: session.eid,
     );
+    if (session.token.isNotEmpty) {
+      await sessions.clearShower798();
+      await secure.saveShower798Token(session.token);
+    }
+    await sessions.saveShower798(Shower798Persisted(
+      account: account,
+      devices: devices,
+      currentDeviceId:
+          devices.any((d) => d.id == state.currentShower798DeviceId)
+              ? state.currentShower798DeviceId
+              : '',
+    ));
     emit(
       state.copyWith(
         shower798Account: account,
         shower798Devices: devices,
+        currentShower798DeviceId:
+            devices.any((d) => d.id == state.currentShower798DeviceId)
+                ? state.currentShower798DeviceId
+                : '',
         shower798Login: const RuntimeActionStatus(
           state: RuntimeTaskState.success,
           message: '慧生活798登录成功，设备列表已刷新',
         ),
       ),
     );
-    await _persist();
     await setBathSystem(BathSystemPreference.shower798);
-    // PTOK：real 模式下 adapter 返回带真 token 的 session → 加密持久化（重启免重登）。
-    // Fake 返回占位 token（'fake-798-token'）也会存——无害（重启仍走 Fake adapter）。
-    if (session.token.isNotEmpty) {
-      await secure.saveShower798Token(session.token);
-    }
     unawaited(resumeHotwaterSession());
   }
 
@@ -212,6 +232,9 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 添加 798 设备（经 IShower798Adapter：add → reload；已存在则仅设为当前）。
   /// 对齐 legacy addShower798Device。
   Future<void> addShower798Device(String deviceId) async {
+    await ready;
+    if (isDisposed || hotwaterAuthChanging) return;
+    final epoch = hotwaterAuthEpoch;
     final id = deviceId.trim();
     if (id.isEmpty) {
       emit(
@@ -236,8 +259,10 @@ mixin Shower798Actions on ShuiRuntimeBase {
       await shower798.addDevice(id);
       devices = await shower798.loadDevices();
     } on Shower798Exception catch (e) {
+      if (isDisposed || epoch != hotwaterAuthEpoch) return;
       if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.shower798);
+        await handleAuthInvalidation(AuthService.shower798,
+            expectedEpoch: epoch);
         return;
       }
       emit(
@@ -250,6 +275,7 @@ mixin Shower798Actions on ShuiRuntimeBase {
       );
       return;
     }
+    if (isDisposed || epoch != hotwaterAuthEpoch) return;
     emit(
       state.copyWith(
         shower798Devices: devices,
@@ -265,15 +291,18 @@ mixin Shower798Actions on ShuiRuntimeBase {
 
   /// 刷新 798 设备列表（经 IShower798Adapter.loadDevices）。对齐 legacy refreshShower798Devices。
   Future<void> refreshShower798Devices() async {
-    if (state.shower798Login.isBusy) {
+    if (isDisposed || hotwaterAuthChanging || state.shower798Login.isBusy) {
       return;
     }
+    final epoch = hotwaterAuthEpoch;
     final List<Shower798DeviceUi> refreshed;
     try {
       refreshed = await shower798.loadDevices();
     } on Shower798Exception catch (e) {
+      if (isDisposed || epoch != hotwaterAuthEpoch) return;
       if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.shower798);
+        await handleAuthInvalidation(AuthService.shower798,
+            expectedEpoch: epoch);
         return;
       }
       emit(
@@ -286,6 +315,7 @@ mixin Shower798Actions on ShuiRuntimeBase {
       );
       return;
     }
+    if (isDisposed || epoch != hotwaterAuthEpoch) return;
     emit(
       state.copyWith(
         shower798Devices: refreshed,
@@ -300,6 +330,8 @@ mixin Shower798Actions on ShuiRuntimeBase {
 
   /// 选择当前 798 设备（对齐 legacy selectShower798Device）。
   Future<void> selectShower798Device(String deviceId) async {
+    await ready;
+    if (isDisposed || hotwaterAuthChanging) return;
     if (state.currentShower798DeviceId == deviceId) {
       return;
     }
@@ -312,12 +344,17 @@ mixin Shower798Actions on ShuiRuntimeBase {
     if (account == null) {
       return;
     }
-    await sessions.saveShower798(
-      Shower798Persisted(
-        account: account,
-        devices: state.shower798Devices,
-        currentDeviceId: state.currentShower798DeviceId,
-      ),
-    );
+    hotwaterAccountWriteCount++;
+    try {
+      await sessions.saveShower798(
+        Shower798Persisted(
+          account: account,
+          devices: state.shower798Devices,
+          currentDeviceId: state.currentShower798DeviceId,
+        ),
+      );
+    } finally {
+      hotwaterAccountWriteCount--;
+    }
   }
 }
