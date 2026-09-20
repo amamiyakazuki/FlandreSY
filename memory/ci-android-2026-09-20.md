@@ -1,5 +1,7 @@
 # CI A 决策与验证
 
+- 最终远端验收：修复提交c2de043已推送main，运行35479433772在7分钟内全部success，SDK准备、分析/测试、Debug ARM64构建与artifact上传均通过。下方“远端尚未执行”是历史状态。Node20/setup-java v4告警仍待后续维护，本轮不影响成功；未改iOS或发布。
+
 - 首次push 1bd382d远端分析/测试通过，但SDK步骤找不到PATH中的sdkmanager（运行35479232027）。用户授权修复再推送：显式用ANDROID_HOME/ANDROID_SDK_ROOT下cmdline-tools/latest/bin/sdkmanager，不再假设预装等于在PATH；远端结果以随后运行记录为准。
 
 - 用户选择A：静态分析、全量Flutter测试、Android Debug ARM64构建、保留APK；不增加Release检查或发布，不测试真实支付/BLE。热水用户现场通过已收口，支付按用户要求跳过。

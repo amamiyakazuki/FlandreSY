@@ -342,8 +342,22 @@
 - 当前尚缺手机系统、现场洗浴服务/设备、日志和支付业务/金额范围。先等待第一阶段条件确认，不自动执行支付或设备控制。
 # CI-02 / 2026-09-20：远端首跑 SDK 工具路径失败
 
+- 已修复并远端验收：c2de043的Flutter Android CI运行35479433772全部通过，耗时7分钟，Debug APK上传成功。最终结果在本地记录，不为记录再次触发push。
+
 - 提交1bd382da2b67b522ace34417f067eb6db912f887已推送main；Flutter Android CI运行35479232027，分析与全量测试通过。
 - Prepare Android SDK明确报sdkmanager: command not found，退出127；Debug构建与artifact上传未执行。预装SDK工具不等于可直接从PATH调用，本地构建成功不能覆盖此Linux路径问题。
 - 待处理：显式解析runner Android SDK中的sdkmanager路径并检查可执行性，或配置专用Android setup步骤；当前仅记录，没有追加修改/推送。checkout/setup-java另有Node20及setup-java v4弃用告警，不是本次失败原因。
 - 用户已授权修复并再推送：按官方runner安装脚本确认的cmdline-tools/latest/bin布局，优先ANDROID_HOME、回退ANDROID_SDK_ROOT；检查空路径/不可执行，显式传sdk_root。无需改变构建/业务逻辑；远端结果待本次运行核实。
 - actionlint、bash语法与4种隔离路径场景通过。临时Ruby验证命令首次因谓词比较缺空格出现语法错误，修正后通过；不是workflow脚本错误。
+# UI-01 / 2026-09-20：界面优化只读梳理（待用户确认实施）
+
+- 首页热水卡片statusColor优先取hotwaterRunning绿色；uncertain会话也保留running=true，因此结果待确认时仍会走绿色样式。这是已确认的表现逻辑，不是实体状态错误；建议单独区分“已启动”和“结果待确认”的视觉反馈。
+- 首页状态文本maxLines:2+ellipsis，并与系统标签及固定尺寸插画争用横向空间；失败之外的长unavailable消息无独立完整横幅，有重要提示被截断的风险。具体机型截图/窄屏与大字号渲染待验证，不宣称已见实际溢出。
+- 当前仅记录，不修改业务规则或UI。原注释引用P_PLAN设计参考文档当前不存在，需以现有tokens/组件及用户视觉偏好为依据，不假称读取旧设计稿。
+# RELEASE-2.1.3 / 发布检查
+
+- 已确认线上最新2.1.2，本次2.1.3+5；public/version.json为无运行时代码引用的旧清单且更新内容落后，本轮与实际assets/public/version.json同步保留兼容。
+- 审查发现发布脚本相对storeFile基于android/、Gradle基于android/app/解析不一致。本机使用绝对路径，不影响此次签名；本次不扩大修改构建逻辑，记录后续修复。
+- 新旧APK签名需实际比较；UI优化暂停、支付未新增现场验证，不写入发布成功声明。
+- 已完成正式产物验证：三个APK均为com.flandresy/2.1.3且无debuggable，与2.1.2证书SHA256相同；AAB jarsigner校验通过，自签名/无时间戳警告已记录，不是校验失败。分析无诊断、129测试通过。
+- 架构专用APK沿用Flutter版本码偏移（ARM64=2005、x64=4005），主APK=5；从旧专用包换主APK会被判降级。发布说明/README明确沿用同类型包，本次不改变历史版本码策略或让用户卸载数据。
