@@ -15,6 +15,73 @@ mixin WaterActions on ShuiRuntimeBase {
   bool _showWaterResult = true;
   bool _waterScanInFlight = false;
   bool _waterCreationPending = false;
+  Future<void>? _legacyMigration;
+
+  @override
+  Future<void> migrateLegacyUjingOrders() {
+    if (_legacyMigration != null) return _legacyMigration!;
+    late final Future<void> request;
+    request = _migrateLegacyUjingOrders().whenComplete(() {
+      if (identical(_legacyMigration, request)) _legacyMigration = null;
+    });
+    _legacyMigration = request;
+    return request;
+  }
+
+  Future<void> _migrateLegacyUjingOrders() async {
+    if (isDisposed || ujingAuthChanging || !_waterStorageReady()) return;
+    if (_waterScanInFlight || _waterCreationPending) return;
+    if (_waterRefreshInFlight != null && _waterRefreshEpoch == ujingAuthEpoch) {
+      return;
+    }
+    final loggedOwner = state.ujingAccount?.mobile.trim() ?? '';
+    if (loggedOwner.isNotEmpty) ujingLegacyOwnerKey = loggedOwner;
+    final owner = ujingLegacyOwnerKey;
+    if (owner.isEmpty) return;
+    final epoch = ujingAuthEpoch;
+    ujingMutationCount++;
+    try {
+      final current = state.currentWaterOrder;
+      final unknownHistory =
+          state.waterHistory.any((h) => h.ownerAccountKey.isEmpty);
+      if (current?.ownerAccountKey.isEmpty == true || unknownHistory) {
+        final owned = current?.ownerAccountKey.isEmpty == true
+            ? current!.copyWith(ownerAccountKey: owner)
+            : current;
+        final history = state.waterHistory
+            .map((h) => h.ownerAccountKey.isNotEmpty
+                ? h
+                : WaterOrderHistoryUi(
+                    orderId: h.orderId,
+                    deviceNo: h.deviceNo,
+                    status: h.status,
+                    payment: h.payment,
+                    warmWaterMl: h.warmWaterMl,
+                    waterSeconds: h.waterSeconds,
+                    completedAt: h.completedAt,
+                    ownerAccountKey: owner))
+            .toList();
+        await water
+            .save(WaterOrderSnapshot(currentOrder: owned, history: history));
+        if (!canRetainUjingMutationResult(epoch, owner) ||
+            !identical(state.currentWaterOrder, current)) {
+          return;
+        }
+        emit(state.copyWith(currentWaterOrder: owned, waterHistory: history));
+      }
+      await migrateLegacyWasherOrders(owner, epoch);
+    } catch (error) {
+      diagnosticLog.log('water', '旧订单自动归属保存失败 type=${error.runtimeType}');
+      if (isUjingRequestCurrent(epoch)) {
+        emit(state.copyWith(
+            waterOrder: const RuntimeActionStatus(
+                state: RuntimeTaskState.failure,
+                message: '旧订单归属保存失败，原记录已保留，请刷新重试')));
+      }
+    } finally {
+      ujingMutationCount--;
+    }
+  }
 
   bool _waterStorageReady() {
     if (!ujingOrderStorageBlocked) return true;
@@ -29,6 +96,8 @@ mixin WaterActions on ShuiRuntimeBase {
   Future<void> resumeUjingOrders() async {
     if (isDisposed || ujingAuthChanging) return;
     if (!_waterStorageReady()) return;
+    await migrateLegacyUjingOrders();
+    if (isDisposed || ujingAuthChanging) return;
     final order = state.currentWaterOrder;
     if (order != null && canAccessUjingOrder(order.ownerAccountKey)) {
       startWaterPolling();
@@ -36,7 +105,7 @@ mixin WaterActions on ShuiRuntimeBase {
     } else {
       stopWaterPolling();
     }
-    await refreshCurrentWasherOrder();
+    await resumeWasherOrders();
   }
 
   bool _canUseWaterOrder(WaterOrderUi order) {
@@ -46,7 +115,7 @@ mixin WaterActions on ShuiRuntimeBase {
         waterOrder: RuntimeActionStatus(
       state: RuntimeTaskState.unavailable,
       message: order.ownerAccountKey.isEmpty
-          ? '旧订单尚未确认所属账号，请先确认后查询'
+          ? '旧订单等待最近登录账号恢复，请登录后刷新重试'
           : '该订单属于其他账号，请切回原账号后查询',
     )));
     return false;

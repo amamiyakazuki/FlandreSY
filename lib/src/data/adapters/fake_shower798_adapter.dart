@@ -12,6 +12,10 @@ import 'shower798_adapter.dart';
 /// Fake 实现：保留原有 fake 时序/数值/文案。有状态（captcha 刷新计数 + 设备列表切换），
 /// 复现原内联行为：login/首次 loadDevices=seed，后续 loadDevices=空闲/使用中翻转。
 class FakeShower798Adapter implements IShower798Adapter {
+  /// 模拟模式成功，不请求真实服务。
+  @override
+  Future<void> checkAccountValidity() async {}
+
   FakeShower798Adapter();
 
   static const Duration _captchaDelay = Duration(milliseconds: 400);

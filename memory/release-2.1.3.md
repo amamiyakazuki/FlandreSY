@@ -1,5 +1,7 @@
 # 2.1.3发布记录
 
+- 发布后核验：提交af7fb67的Android CI 35480240574与iOS Build 35480240590均为completed/success；构建成功不等于iOS真机验收。
+
 - 用户要求暂停UI阶段，发布2.1.3并同步Release/README；元数据2.1.3+5，两份version.json完全相同，iOS Runner继承Flutter版本，无需修改RunnerTests版本。
 - 正式脚本成功产出主APK、ARM64/x64分包与AAB；分析无诊断，129测试通过。实际签名证书与线上2.1.2相同，包名com.flandresy，APK未启用debuggable。
 - 主APK SHA256：c3481a405d16c406b371ee15123b8a9d7e989e1e236cec58f12e8f13e6f16719。

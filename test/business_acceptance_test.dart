@@ -58,11 +58,14 @@ void main() {
     expect(adapter.lastToken, 'new-token');
   });
   testWidgets(
-      'cancel ownership dialog preserves unknown owner without requests',
+      'legacy order binds restored A without consent UI and only queries',
       (tester) async {
-    final transport = _UjingTransport();
+    final transport = _UjingTransport()..detail.complete({'orderStatus': '0'});
     final repo = InMemoryWaterOrderRepository(
         snapshot: WaterOrderSnapshot(currentOrder: _order()));
+    transport.beforeDetail = () async {
+      expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
+    };
     await tester.pumpWidget(FlandreApp(
         sessions: _sessions(),
         water: repo,
@@ -79,15 +82,12 @@ void main() {
     await tester.pumpAndSettle();
     tester.widget<OrdersScreen>(find.byType(OrdersScreen)).onOpenDrinking();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('确认旧订单所属账号'));
-    await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    expect(find.textContaining('当前账号：$_a'), findsOneWidget);
-    await tester.tap(find.text('暂不确认'));
-    await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, '');
-    expect(transport.paths, isEmpty);
+    expect(find.text('确认旧订单所属账号'), findsNothing);
+    expect(find.text('绑定并查询'), findsNothing);
+    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
+    expect(transport.paths, isNotEmpty);
+    expect(transport.paths.every((p) => p == 'water/waterOrderDetail'), isTrue);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -118,54 +118,37 @@ void main() {
     expect(runtime.state.waterOrder.isBusy, isFalse);
   });
 
-  testWidgets(
-      'account changes while ownership dialog is open cannot bind the order',
-      (tester) async {
-    final transport = _UjingTransport();
-    final repo = InMemoryWaterOrderRepository(
-        snapshot: WaterOrderSnapshot(currentOrder: _order()));
-    await tester.pumpWidget(FlandreApp(
-        sessions: _sessions(),
-        water: repo,
-        ujing: UjingHttpAdapter(transport: transport, token: 'token-a')));
-    await tester.pumpAndSettle();
-    final permission = find.text('好，开启权限');
-    if (permission.evaluate().isNotEmpty) {
-      await tester.tap(permission);
-      await tester.pumpAndSettle();
-    }
-    final runtime = ShuiRuntimeScope.of(tester.element(find.byType(ShuiShell)));
-    tester
-        .widget<WavyBottomBar>(find.byType(WavyBottomBar))
-        .onTabSelected(MainTab.orders);
-    await tester.pumpAndSettle();
-    tester.widget<OrdersScreen>(find.byType(OrdersScreen)).onOpenDrinking();
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('确认旧订单所属账号'));
-    await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    await runtime.loginUjing(_b, '1234');
-    await tester.pump();
-    await tester.tap(find.text('绑定并查询'));
-    await tester.pumpAndSettle();
-    expect(runtime.state.ujingAccount?.mobile, _b);
-    expect(runtime.state.currentWaterOrder?.ownerAccountKey, '');
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, '');
-    expect(transport.paths, ['login']);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-  });
-
-  test('unknown-owner restored order cannot poll or be replaced before consent',
-      () async {
-    final transport = _UjingTransport();
+  test('switching to B after migration never reassigns A order', () async {
+    final transport = _UjingTransport()..detail.complete({'orderStatus': '0'});
     final repo = InMemoryWaterOrderRepository(
         snapshot: WaterOrderSnapshot(currentOrder: _order()));
     final runtime = FakeShuiRuntime(
         sessions: _sessions(),
         water: repo,
         ujing: UjingHttpAdapter(transport: transport, token: 'token-a'));
+    addTearDown(runtime.dispose);
+    await runtime.ready;
+    await runtime.resumeUjingOrders();
+    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
+    final detailsBeforeSwitch = transport.paths.length;
+    await runtime.loginUjing(_b, '1234');
+    await runtime.resumeUjingOrders();
+    await runtime.refreshCurrentDrinkingWaterOrder();
+    expect(runtime.state.ujingAccount?.mobile, _b);
+    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
+    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
+    expect(transport.paths.skip(detailsBeforeSwitch), ['login']);
+  });
+
+  test('without a recent account legacy owner remains empty until login',
+      () async {
+    final transport = _UjingTransport()..detail.complete({'orderStatus': '0'});
+    final repo = InMemoryWaterOrderRepository(
+        snapshot: WaterOrderSnapshot(currentOrder: _order()));
+    final runtime = FakeShuiRuntime(
+        sessions: InMemoryAccountSessionRepository(),
+        water: repo,
+        ujing: UjingHttpAdapter(transport: transport));
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.pollWaterOrderOnce();
@@ -174,9 +157,40 @@ void main() {
     expect(transport.paths, isEmpty);
     expect(runtime.state.currentWaterOrder?.orderId, 'legacy');
     expect((await repo.load())?.currentOrder?.ownerAccountKey, '');
+    transport.beforeDetail = () async {
+      expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
+    };
+    await runtime.loginUjing(_a, '1234');
+    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
+    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
+    expect(transport.paths.first, 'login');
+    expect(transport.paths.skip(1), isNotEmpty);
+    expect(transport.paths.skip(1).every((p) => p == 'water/waterOrderDetail'),
+        isTrue);
   });
 
-  test('consent from previous account or epoch cannot claim legacy order',
+  test('legacy owner must finish persistence before first query', () async {
+    final transport = _UjingTransport();
+    final repo = _DelayedOrderSave(_order());
+    final runtime = FakeShuiRuntime(
+        sessions: _sessions(),
+        water: repo,
+        ujing: UjingHttpAdapter(transport: transport, token: 'token-a'));
+    addTearDown(runtime.dispose);
+    await repo.started.future;
+    expect(runtime.state.currentWaterOrder?.ownerAccountKey, '');
+    expect((await repo.load())?.currentOrder?.ownerAccountKey, '');
+    expect(transport.paths, isEmpty);
+    repo.release.complete();
+    await runtime.ready;
+    await transport.detailStarted.future;
+    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
+    expect(transport.paths, ['water/waterOrderDetail']);
+    transport.detail.complete({'orderStatus': '0'});
+    await runtime.refreshCurrentDrinkingWaterOrder();
+  });
+
+  test('recent A metadata without token binds locally but never queries as B',
       () async {
     final transport = _UjingTransport();
     final repo = InMemoryWaterOrderRepository(
@@ -184,18 +198,35 @@ void main() {
     final runtime = FakeShuiRuntime(
         sessions: _sessions(),
         water: repo,
+        ujing: UjingHttpAdapter(transport: transport));
+    addTearDown(runtime.dispose);
+    await runtime.ready;
+    expect(runtime.state.ujingAccount, isNull);
+    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
+    expect(transport.paths, isEmpty);
+    await runtime.loginUjing(_b, '1234');
+    expect(runtime.state.ujingAccount?.mobile, _b);
+    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
+    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
+    expect(transport.paths, ['login']);
+  });
+
+  test('failed auto-owner persistence leaves original order and sends no query',
+      () async {
+    final transport = _UjingTransport();
+    final repo = _FailOrderSave(_order());
+    final runtime = FakeShuiRuntime(
+        sessions: _sessions(),
+        water: repo,
         ujing: UjingHttpAdapter(transport: transport, token: 'token-a'));
     addTearDown(runtime.dispose);
     await runtime.ready;
-    final epoch = runtime.ujingAuthEpoch;
-    await runtime.loginUjing(_b, '1234');
-    await runtime.confirmWaterOrderOwner(
-        orderId: 'legacy', accountKey: _a, epoch: epoch);
-    await runtime.confirmWaterOrderOwner(
-        orderId: 'legacy', accountKey: _b, epoch: epoch);
+    await runtime.resumeUjingOrders();
     expect(runtime.state.currentWaterOrder?.ownerAccountKey, '');
     expect((await repo.load())?.currentOrder?.ownerAccountKey, '');
-    expect(transport.paths, ['login']);
+    expect(runtime.state.currentWaterOrder?.orderId, 'legacy');
+    expect(transport.paths, isEmpty);
+    expect(runtime.state.waterOrder.isBusy, isFalse);
   });
 
   test('798 login succeeds but device load fails: no mixed identity remains',
@@ -207,8 +238,10 @@ void main() {
     final sessions = InMemoryAccountSessionRepository(
         shower798: const Shower798Persisted(
       account: Shower798AccountUi(mobile: _a, uid: 'a', eid: 'e'),
-      devices: [],
-      currentDeviceId: '',
+      devices: [
+        Shower798DeviceUi(id: 'saved-device', name: '原设备', lastStatus: '待机')
+      ],
+      currentDeviceId: 'saved-device',
     ));
     final runtime =
         FakeShuiRuntime(sessions: sessions, secure: secure, shower798: adapter);
@@ -218,7 +251,16 @@ void main() {
     expect(runtime.state.shower798Account, isNull);
     expect(adapter.lastToken, isNull);
     expect(await secure.loadShower798Token(), isNull);
-    expect(await sessions.loadShower798(), isNull);
+    final retained = await sessions.loadShower798();
+    expect(retained, isNotNull);
+    expect(retained!.account.mobile, isEmpty);
+    expect(retained.account.uid, isEmpty);
+    expect(retained.account.eid, isEmpty);
+    expect(retained.devices.single.id, 'saved-device');
+    expect(retained.devices.single.name, '原设备');
+    expect(retained.currentDeviceId, 'saved-device');
+    expect(runtime.state.shower798Devices.single.id, 'saved-device');
+    expect(runtime.state.currentShower798DeviceId, 'saved-device');
     expect(runtime.state.shower798Login.isBusy, isFalse);
     expect(runtime.hotwaterAuthChanging, isFalse);
   });
@@ -266,6 +308,7 @@ class _UjingTransport implements UjingTransport {
   final paths = <String>[];
   final detailStarted = Completer<void>();
   final detail = Completer<Map<String, dynamic>>();
+  Future<void> Function()? beforeDetail;
   @override
   Future<Map<String, dynamic>> send(UjingRequest request) async {
     paths.add(request.path);
@@ -279,6 +322,7 @@ class _UjingTransport implements UjingTransport {
       };
     }
     if (request.path == 'water/waterOrderDetail') {
+      await beforeDetail?.call();
       if (!detailStarted.isCompleted) detailStarted.complete();
       return detail.future;
     }
@@ -297,6 +341,14 @@ class _DelayedOrderSave extends InMemoryWaterOrderRepository {
     await release.future;
     await super.save(snapshot);
   }
+}
+
+class _FailOrderSave extends InMemoryWaterOrderRepository {
+  _FailOrderSave(WaterOrderUi order)
+      : super(snapshot: WaterOrderSnapshot(currentOrder: order));
+  @override
+  Future<void> save(WaterOrderSnapshot snapshot) async =>
+      throw StateError('storage failed');
 }
 
 class _ShowerTransport implements Shower798Transport {

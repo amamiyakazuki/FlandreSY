@@ -18,6 +18,7 @@ class ZhuliAccountDetail extends StatefulWidget {
     required this.onLogin,
     required this.onBindDeviceCode,
     required this.onCheckStatus,
+    this.showCheckStatus = true,
     required this.isDefault,
     required this.onDefaultChanged,
     super.key,
@@ -27,6 +28,7 @@ class ZhuliAccountDetail extends StatefulWidget {
   final void Function(String phone, String password) onLogin;
   final ValueChanged<String> onBindDeviceCode;
   final VoidCallback onCheckStatus;
+  final bool showCheckStatus;
   final bool isDefault;
   final ValueChanged<bool> onDefaultChanged;
 
@@ -91,12 +93,14 @@ class _ZhuliAccountDetailState extends State<ZhuliAccountDetail> {
                             style: AppTypography.textTheme.bodyMedium
                                 ?.copyWith(color: AppColors.serviceGreen),
                           ),
-                          const SizedBox(height: AppCustomTokens.spaceSm),
-                          PrimaryGradientButton(
-                            label: busy ? '正在处理中' : '检查账号状态',
-                            enabled: !busy,
-                            onTap: widget.onCheckStatus,
-                          ),
+                          if (widget.showCheckStatus) ...[
+                            const SizedBox(height: AppCustomTokens.spaceSm),
+                            PrimaryGradientButton(
+                              label: busy ? '正在处理中' : '检查账号状态',
+                              enabled: !busy,
+                              onTap: widget.onCheckStatus,
+                            ),
+                          ],
                         ],
                       )
                     : Column(
@@ -144,14 +148,16 @@ class _ZhuliAccountDetailState extends State<ZhuliAccountDetail> {
                       onTap: () => widget.onBindDeviceCode(_deviceCode.text),
                     ),
                   ),
-                  const SizedBox(width: AppCustomTokens.formFieldGap),
-                  Expanded(
-                    child: PrimaryGradientButton(
-                      label: '查看状态',
-                      compact: true,
-                      onTap: widget.onCheckStatus,
+                  if (widget.showCheckStatus)
+                    const SizedBox(width: AppCustomTokens.formFieldGap),
+                  if (widget.showCheckStatus)
+                    Expanded(
+                      child: PrimaryGradientButton(
+                        label: '查看状态',
+                        compact: true,
+                        onTap: widget.onCheckStatus,
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: AppCustomTokens.spaceSm),

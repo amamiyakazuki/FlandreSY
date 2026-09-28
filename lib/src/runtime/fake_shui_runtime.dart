@@ -22,6 +22,7 @@ import '../data/water_order_repository.dart';
 import '../data/washer_history_repository.dart';
 import '../data/shared_prefs_washer_history_repository.dart';
 import 'actions/account_actions.dart';
+import 'actions/account_availability_actions.dart';
 import 'actions/devices_actions.dart';
 import 'actions/home_actions.dart';
 import 'actions/hotwater_actions.dart';
@@ -45,7 +46,8 @@ class FakeShuiRuntime extends ShuiRuntimeBase
         AccountActions,
         Shower798Actions,
         WasherActions,
-        HotwaterActions {
+        HotwaterActions,
+        AccountAvailabilityActions {
   FakeShuiRuntime({
     super.settings,
     super.sessions,

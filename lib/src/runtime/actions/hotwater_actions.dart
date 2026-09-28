@@ -11,6 +11,8 @@ import '../hotwater_state.dart';
 import '../shui_runtime_base.dart';
 
 mixin HotwaterActions on ShuiRuntimeBase {
+  @override
+  bool get hotwaterOperationInFlight => _sessionOperation;
   bool _sessionOperation = false;
   Future<void> _operationTail = Future<void>.value();
   String? _lastQueuedKey;

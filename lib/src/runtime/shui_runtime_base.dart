@@ -27,6 +27,7 @@ import '../more/version_check.dart' show kCurrentAppVersion;
 import 'diagnostic_log.dart';
 import 'live_clock.dart';
 import 'models/hotwater_history.dart';
+import 'models/account_session.dart';
 import 'models/local_device.dart';
 import 'models/water_order.dart';
 import 'runtime_status.dart';
@@ -80,13 +81,15 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       ready = _restorePersisted().then((_) async {
         reconcileRestoredAuth();
         await resumeHotwaterSession();
-        resumeWaterPolling();
+        await migrateLegacyUjingOrders();
+        unawaited(resumeUjingOrders());
       });
     } else {
       reconcileRestoredAuth();
       ready = Future<void>.microtask(() async {
         await resumeHotwaterSession();
-        resumeWaterPolling();
+        await migrateLegacyUjingOrders();
+        unawaited(resumeUjingOrders());
       });
     }
   }
@@ -114,6 +117,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   bool ujingAuthChanging = false;
   bool hotwaterAuthChanging = false;
   bool ujingOrderStorageBlocked = false;
+  String ujingLegacyOwnerKey = '';
   List<String> recoveryWarnings = [];
 
   void applyRecoveryWarnings(PersistedSnapshot snapshot) {
@@ -135,10 +139,19 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       ujingAccountKey.isNotEmpty &&
       owner == ujingAccountKey;
   Future<void> resumeUjingOrders();
+  Future<void> migrateLegacyUjingOrders();
+  Future<void> migrateLegacyWasherOrders(String owner, int epoch);
+  Future<void> resumeWasherOrders();
   Future<void> refreshCurrentWasherOrder();
+  Future<void> checkAccountStatus(AccountKind kind);
+  Future<void> logoutAccount(AccountKind kind);
+  void resetAccountAvailability(AccountKind kind);
+  bool get hotwaterOperationInFlight => false;
 
   /// 普通账号资料不能代替真实凭据；两种启动路径共同使用。
   void reconcileRestoredAuth() {
+    final previous = state.ujingAccount?.mobile.trim() ?? '';
+    if (previous.isNotEmpty) ujingLegacyOwnerKey = previous;
     const required = RuntimeActionStatus(
       state: RuntimeTaskState.loginRequired,
       message: '请重新登录',
@@ -274,7 +287,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   /// 先校验代次并关闭内存认证，再清 secure 与普通账号资料；整个清理期间禁止新登录。
   /// 不主动导航；UI 靠既有 loginRequired 橙色 banner + 静态「重新登录」入口引导（用户已定）。
   Future<void> handleAuthInvalidation(AuthService service,
-      {int? expectedEpoch}) async {
+      {int? expectedEpoch, bool localLogout = false}) async {
     if (isDisposed) return;
     if (service == AuthService.ujing) {
       if (ujingAuthChanging ||
@@ -293,7 +306,18 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       hotwaterAuthChanging = true;
     }
     if (service != AuthService.ujing) hotwaterAuthEpoch++;
-    const message = '登录已失效，请重新登录';
+    final message = localLogout ? '已退出本机登录' : '登录已失效，请重新登录';
+    final kind = switch (service) {
+      AuthService.zhuli => AccountKind.zhuli,
+      AuthService.ujing => AccountKind.ujing,
+      AuthService.shower798 => AccountKind.shower798,
+    };
+    emit(state.copyWith(
+        account: state.account.copyWith(availability: {
+      ...state.account.availability,
+      kind: RuntimeActionStatus(
+          state: RuntimeTaskState.loginRequired, message: message),
+    })));
     try {
       switch (service) {
         case AuthService.ujing:
@@ -304,23 +328,23 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
           }
           emit(state.copyWith(
             clearUjingAccount: true,
-            devicesRefresh: const RuntimeActionStatus(
+            devicesRefresh: RuntimeActionStatus(
                 state: RuntimeTaskState.loginRequired, message: message),
-            washerLogin: const RuntimeActionStatus(
+            washerLogin: RuntimeActionStatus(
               state: RuntimeTaskState.loginRequired,
               message: message,
             ),
-            waterScan: const RuntimeActionStatus(
+            waterScan: RuntimeActionStatus(
                 state: RuntimeTaskState.loginRequired, message: message),
-            waterOrder: const RuntimeActionStatus(
+            waterOrder: RuntimeActionStatus(
                 state: RuntimeTaskState.loginRequired, message: message),
             washer: state.washer.copyWith(
               clearProgram: true,
-              washerScan: const RuntimeActionStatus(
+              washerScan: RuntimeActionStatus(
                   state: RuntimeTaskState.loginRequired, message: message),
-              washerOrder: const RuntimeActionStatus(
+              washerOrder: RuntimeActionStatus(
                   state: RuntimeTaskState.loginRequired, message: message),
-              washerPayment: const RuntimeActionStatus(
+              washerPayment: RuntimeActionStatus(
                   state: RuntimeTaskState.loginRequired, message: message),
             ),
           ));
@@ -332,7 +356,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
           }
           emit(state.copyWith(
             zhuli: state.zhuli.copyWith(phone: ''),
-            hotwaterLogin: const RuntimeActionStatus(
+            hotwaterLogin: RuntimeActionStatus(
               state: RuntimeTaskState.loginRequired,
               message: message,
             ),
@@ -346,7 +370,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
           }
           emit(state.copyWith(
             clearShower798Account: true,
-            shower798Login: const RuntimeActionStatus(
+            shower798Login: RuntimeActionStatus(
               state: RuntimeTaskState.loginRequired,
               message: message,
             ),
@@ -356,6 +380,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       }
     } catch (error) {
       diagnosticLog.log('auth', '失效凭据清理失败 type=${error.runtimeType}');
+      if (localLogout) rethrow;
     } finally {
       if (service == AuthService.ujing) {
         ujingAuthChanging = false;
@@ -386,10 +411,12 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
               message: 'U净已登录',
             )
           : base.washerLogin,
-      shower798Account: snap.shower798?.account,
+      shower798Account: snap.shower798?.account.mobile.isNotEmpty == true
+          ? snap.shower798?.account
+          : null,
       shower798Devices: snap.shower798?.devices,
       currentShower798DeviceId: snap.shower798?.currentDeviceId,
-      shower798Login: snap.shower798 != null
+      shower798Login: snap.shower798?.account.mobile.isNotEmpty == true
           ? RuntimeActionStatus(
               state: RuntimeTaskState.success,
               message: '慧生活798账号：${snap.shower798!.account.mobile}',

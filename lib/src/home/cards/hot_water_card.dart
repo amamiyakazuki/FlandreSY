@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../design_tokens.dart';
 import '../../runtime/fake_shui_runtime.dart';
+import '../../runtime/hotwater_state.dart';
 import '../../theme/shui_assets.dart';
 import '../../theme/shui_motion.dart';
 import '../../widgets/shui_components.dart';
@@ -34,11 +35,26 @@ class HotWaterCard extends StatelessWidget {
     final statusText =
         unselected ? '未选择系统' : state.hotwaterStart.message ?? '热水待启动';
     final warningText = state.hotwaterStart.message;
-    final statusColor = state.hotwaterRunning
-        ? AppColors.serviceGreen
-        : state.hotwaterStart.state == RuntimeTaskState.loginRequired
-            ? AppColors.serviceOrange
-            : AppColors.primary;
+    final hasWarning = [state.hotwaterStart.state, state.hotwaterStop.state]
+        .any((status) => const {
+              RuntimeTaskState.failure,
+              RuntimeTaskState.loginRequired,
+              RuntimeTaskState.permissionRequired,
+              RuntimeTaskState.unavailable,
+            }.contains(status));
+    final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
+    final phase = state.hotwater.session?.phase;
+    final statusColor = hasWarning
+        ? AppColors.serviceOrange
+        : busy
+            ? AppColors.primary
+            : phase == HotwaterSessionPhase.uncertain
+                ? AppColors.serviceOrange
+                : !unselected &&
+                        state.hotwaterRunning &&
+                        phase == HotwaterSessionPhase.active
+                    ? AppColors.serviceGreen
+                    : AppColors.primary;
 
     return SectionCard(
       child: Column(

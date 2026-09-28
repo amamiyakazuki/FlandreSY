@@ -42,6 +42,11 @@ class WaterPrepareResult {
 /// 约定：实现方**只**负责「拿数据」（含真实的网络/时序延迟），返回现有 UI 模型；
 /// 不碰 runtime state、不 emit。校验/编排/持久化/历史累积由 runtime action 负责。
 abstract class IUjingAdapter {
+  /// 只读验证当前凭据；成功仅表示本次请求被接受，不控制设备或刷新本地订单。
+  /// 未支持、网络及普通业务错误均不等于凭据失效；仅 authInvalid 可判定失效。
+  Future<void> checkAccountValidity() async =>
+      throw UnsupportedError('Account validity probe is not supported');
+
   // ===== U净账号 =====
   /// 请求验证码（fake：延时后视为已发送）。
   Future<void> requestCaptcha(String mobile);

@@ -56,6 +56,11 @@ class Shower798CaptchaData {
 /// 校验/emit/持久化由 shower798_actions / hotwater_actions 负责。有状态：真实实现登录后
 /// 内部持 token（同 UjingHttpAdapter），因此 devices/start/stop 不必透传 session。
 abstract class IShower798Adapter {
+  /// 只读验证当前凭据；成功仅表示本次请求被接受，不控制设备或刷新本地订单。
+  /// 未支持、网络及普通业务错误均不等于凭据失效；仅 authInvalid 可判定失效。
+  Future<void> checkAccountValidity() async =>
+      throw UnsupportedError('Account validity probe is not supported');
+
   /// 请求图形验证码（真实：GET /captcha 图片字节 → base64；fake：fakeCaptchaBase64）。
   Future<Shower798CaptchaData> requestCaptcha();
 

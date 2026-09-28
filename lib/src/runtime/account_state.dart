@@ -12,6 +12,7 @@ import 'runtime_status.dart';
 @immutable
 class AccountState {
   const AccountState({
+    this.availability = const {},
     this.zhuli = const ZhuliSession(phone: ''),
     this.hotwaterLogin = const RuntimeActionStatus(
       state: RuntimeTaskState.loginRequired,
@@ -39,6 +40,9 @@ class AccountState {
 
   /// 住理生活 session（phone + deviceCode）。phone 空 = 未登录。
   final ZhuliSession zhuli;
+
+  /// 独立于登录动作，检测不能把登录按钮锁成 loading。
+  final Map<AccountKind, RuntimeActionStatus> availability;
 
   /// 住理登录动作状态（loginRequired/loading/success/failure）。
   final RuntimeActionStatus hotwaterLogin;
@@ -82,6 +86,7 @@ class AccountState {
   bool get shower798LoggedIn => shower798Account != null;
 
   AccountState copyWith({
+    Map<AccountKind, RuntimeActionStatus>? availability,
     ZhuliSession? zhuli,
     RuntimeActionStatus? hotwaterLogin,
     RuntimeActionStatus? washerLogin,
@@ -101,6 +106,7 @@ class AccountState {
     bool clearShower798Captcha = false,
   }) {
     return AccountState(
+      availability: availability ?? this.availability,
       zhuli: zhuli ?? this.zhuli,
       hotwaterLogin: hotwaterLogin ?? this.hotwaterLogin,
       ujingAccount:

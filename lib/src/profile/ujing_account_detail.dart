@@ -21,6 +21,7 @@ class UjingAccountDetail extends StatefulWidget {
     required this.onRequestCaptcha,
     required this.onLogin,
     required this.onCheckStatus,
+    this.showCheckStatus = true,
     super.key,
   });
 
@@ -32,6 +33,7 @@ class UjingAccountDetail extends StatefulWidget {
   final ValueChanged<String> onRequestCaptcha;
   final void Function(String phone, String captcha) onLogin;
   final VoidCallback onCheckStatus;
+  final bool showCheckStatus;
 
   @override
   State<UjingAccountDetail> createState() => _UjingAccountDetailState();
@@ -129,10 +131,11 @@ class _UjingAccountDetailState extends State<UjingAccountDetail> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text('已登录：${account!.mobile}'),
-                            PrimaryGradientButton(
-                                label: '查看状态',
-                                enabled: !busy,
-                                onTap: widget.onCheckStatus),
+                            if (widget.showCheckStatus)
+                              PrimaryGradientButton(
+                                  label: '查看状态',
+                                  enabled: !busy,
+                                  onTap: widget.onCheckStatus),
                           ],
                         )
                       : Column(key: const ValueKey('ujing-form'), children: [
@@ -183,16 +186,18 @@ class _UjingAccountDetailState extends State<UjingAccountDetail> {
                                       _mobile.text, _captcha.text),
                                 ),
                               ),
-                              const SizedBox(
-                                  width: AppCustomTokens.formFieldGap),
-                              Expanded(
-                                child: PrimaryGradientButton(
-                                  label: '查看状态',
-                                  enabled: !busy,
-                                  compact: true,
-                                  onTap: widget.onCheckStatus,
+                              if (widget.showCheckStatus)
+                                const SizedBox(
+                                    width: AppCustomTokens.formFieldGap),
+                              if (widget.showCheckStatus)
+                                Expanded(
+                                  child: PrimaryGradientButton(
+                                    label: '查看状态',
+                                    enabled: !busy,
+                                    compact: true,
+                                    onTap: widget.onCheckStatus,
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
                         ]),

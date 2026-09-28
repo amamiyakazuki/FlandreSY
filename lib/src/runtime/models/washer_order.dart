@@ -139,6 +139,7 @@ class WasherOrderHistoryUi {
     required this.statusText,
     required this.payPrice,
     this.ownerAccountKey = '',
+    this.needsRecovery = false,
   });
 
   final String orderId;
@@ -147,6 +148,7 @@ class WasherOrderHistoryUi {
   final String statusText;
   final String payPrice;
   final String ownerAccountKey;
+  final bool needsRecovery;
 }
 
 /// 支付结果（对齐 legacy WasherPaymentUi）。

@@ -19,6 +19,18 @@ import 'ujing_transport.dart';
 /// （对齐 legacy `UjingRuntimeAdapter` 的 currentProgram）。默认用 [IoUjingTransport]，
 /// 测试注入伪 transport 回放抓包 JSON。token 仅内存，重启需重登录（持久化后续）。
 class UjingHttpAdapter implements IUjingAdapter {
+  @override
+  Future<void> checkAccountValidity() async {
+    // 不扫码、不切换校区。缺少校区等业务错误保留原异常，不能当作失效。
+    await _transport.send(UjingRequest(
+      method: 'GET',
+      path: 'app/water/serviceSubject/currentInfo',
+      appCode: 'CA',
+      weex: '1.0.102',
+      authToken: _requireToken(),
+    ));
+  }
+
   UjingHttpAdapter({
     UjingTransport? transport,
     PaymentLauncher? launcher,

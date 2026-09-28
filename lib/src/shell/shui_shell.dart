@@ -1,6 +1,7 @@
 // Routing orchestration only; visual chrome lives in shui_shell_chrome.dart (token-compliant).
 
 import 'package:flutter/material.dart';
+import '../runtime/models/account_session.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
@@ -383,8 +384,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           state: runtime.state,
           onBack: () => _leaveDrinkingWater(runtime),
           onReturnHome: () => _selectTab(MainTab.home),
-          onRefresh: runtime.refreshCurrentDrinkingWaterOrder,
-          onConfirmOwner: () => _confirmUjingOrderOwner(runtime, washer: false),
+          onRefresh: runtime.resumeUjingOrders,
         ),
       AccountHubRoute() => AccountHubScreen(
           state: runtime.state,
@@ -401,6 +401,11 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onLoginZhuli: runtime.loginZhuli,
           onBindDeviceCode: runtime.bindHotwaterDeviceCode,
           onCheckZhuli: runtime.checkZhuliStatus,
+          onCheckAccount: runtime.checkAccountStatus,
+          onLogout: runtime.logoutAccount,
+          accountGeneration: kind == AccountKind.ujing
+              ? runtime.ujingAuthEpoch
+              : runtime.hotwaterAuthEpoch,
           onRequestUjingCaptcha: runtime.requestUjingCaptcha,
           onLoginUjing: runtime.loginUjing,
           onCheckUjing: runtime.checkUjingStatus,
@@ -426,8 +431,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onStart: runtime.startCurrentWasherOrder,
           onStop: runtime.stopCurrentWasherOrder,
           onCancel: runtime.cancelCurrentWasherOrder,
-          onConfirmOwner: () => _confirmUjingOrderOwner(runtime, washer: true),
-          onRefresh: runtime.refreshCurrentWasherOrder,
+          onRefresh: runtime.resumeUjingOrders,
         ),
       HotwaterDetailRoute() => HotwaterDetailScreen(
           state: runtime.state,
@@ -550,45 +554,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   /// 离开洗衣下单页：清理 washer 瞬态，回到 Devices tab。
   void _leaveWasherOrder(FakeShuiRuntime runtime) {
     _handlePop();
-  }
-
-  Future<void> _confirmUjingOrderOwner(FakeShuiRuntime runtime,
-      {required bool washer}) async {
-    final water = runtime.state.currentWaterOrder;
-    final wash = runtime.state.washer.currentOrder;
-    final orderId = washer ? wash?.orderId : water?.orderId;
-    final device = washer ? wash?.deviceNo : water?.deviceNo;
-    final accountKey = runtime.ujingAccountKey;
-    final epoch = runtime.ujingAuthEpoch;
-    if (orderId == null) return;
-    if (accountKey.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('请先登录需要绑定的 U净账号')));
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-              title: const Text('确认旧订单所属账号'),
-              content: Text(
-                  '订单号：$orderId\n设备：${device ?? ''}\n当前账号：$accountKey\n\n仅在确认此订单属于该账号时继续。绑定并查询，不会支付/启动设备。'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('暂不确认')),
-                TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('绑定并查询')),
-              ],
-            ));
-    if (confirmed != true || !mounted) return;
-    if (washer) {
-      await runtime.confirmWasherOrderOwner(
-          orderId: orderId, accountKey: accountKey, epoch: epoch);
-    } else {
-      await runtime.confirmWaterOrderOwner(
-          orderId: orderId, accountKey: accountKey, epoch: epoch);
-    }
   }
 
   /// 首页扫码卡 → 打开真实相机（RSCAN）→ 得 qr → classifyScanRouting 分类 →

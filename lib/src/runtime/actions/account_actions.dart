@@ -10,6 +10,7 @@ import '../../data/adapters/hotwater_adapter.dart';
 import '../../data/adapters/ujing_adapter.dart';
 import '../../data/adapters/ujing_http_adapter.dart';
 import '../runtime_status.dart';
+import '../models/account_session.dart';
 import '../shui_runtime_base.dart';
 
 mixin AccountActions on ShuiRuntimeBase {
@@ -23,6 +24,7 @@ mixin AccountActions on ShuiRuntimeBase {
     if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
       return;
     }
+    resetAccountAvailability(AccountKind.zhuli);
     hotwaterAuthChanging = true;
     try {
       await _loginZhuli(phone, password);
@@ -139,23 +141,7 @@ mixin AccountActions on ShuiRuntimeBase {
   }
 
   /// 查看住理状态（对齐 legacy checkHotwaterStatus）。
-  void checkZhuliStatus() {
-    final s = state.zhuli;
-    emit(
-      state.copyWith(
-        hotwaterLogin: s.isLoggedIn
-            ? RuntimeActionStatus(
-                state: RuntimeTaskState.success,
-                message:
-                    '住理生活账号：${s.phone}；热水设备码：${s.deviceCode.isEmpty ? '未绑定' : s.deviceCode}',
-              )
-            : const RuntimeActionStatus(
-                state: RuntimeTaskState.loginRequired,
-                message: '住理生活未登录',
-              ),
-      ),
-    );
-  }
+  Future<void> checkZhuliStatus() => checkAccountStatus(AccountKind.zhuli);
 
   /// 请求 U净验证码（fake：手机号非空即「已发送」，触发 30s cooldown）。
   /// 对齐 legacy requestUjingCaptcha。
@@ -233,6 +219,7 @@ mixin AccountActions on ShuiRuntimeBase {
       );
       return;
     }
+    resetAccountAvailability(AccountKind.ujing);
     ujingAuthChanging = true;
     beginUjingLoginEpoch();
     stopWaterPolling();
@@ -303,20 +290,5 @@ mixin AccountActions on ShuiRuntimeBase {
   }
 
   /// 查看 U净状态（对齐 legacy checkUjingStatus）。
-  void checkUjingStatus() {
-    final account = state.ujingAccount;
-    emit(
-      state.copyWith(
-        washerLogin: account == null
-            ? const RuntimeActionStatus(
-                state: RuntimeTaskState.loginRequired,
-                message: 'U净未登录',
-              )
-            : RuntimeActionStatus(
-                state: RuntimeTaskState.success,
-                message: 'U净账号：${account.mobile}',
-              ),
-      ),
-    );
-  }
+  Future<void> checkUjingStatus() => checkAccountStatus(AccountKind.ujing);
 }

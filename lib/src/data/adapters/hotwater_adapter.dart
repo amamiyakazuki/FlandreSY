@@ -117,6 +117,11 @@ class HotwaterStatusResult {
 /// 有状态：真实实现登录后内部持 session + last_isn（同 UjingHttpAdapter 持 token），
 /// 因此 start/stop/history 不必透传 session。Fake 忽略 session、纯造数据。
 abstract class IHotwaterAdapter {
+  /// 只读验证当前凭据；成功仅表示本次请求被接受，不控制设备或刷新本地订单。
+  /// 未支持、网络及普通业务错误均不等于凭据失效；仅 authInvalid 可判定失效。
+  Future<void> checkAccountValidity() async =>
+      throw UnsupportedError('Account validity probe is not supported');
+
   /// 住理平台登录（phone + password）。真实实现内部保存返回的 session 供后续签名调用。
   Future<ZhuliSessionData> loginZhuli(String phone, String password);
 

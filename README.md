@@ -2,7 +2,7 @@
   <img src="ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png" alt="FlandreSY App Icon" width="120">
 </p>
 
-# 芙兰水衣 FlandreSY 2.1.3
+# 芙兰水衣 FlandreSY 2.1.4
 
 `芙兰水衣`（FlandreSY）是一款面向校园与公寓生活场景的 Flutter 应用，统一管理洗衣、饮水、热水与慧生活 798 服务。2.1 版本重点重构了页面动效、账号入口、订单状态恢复和在线更新链路。
 
@@ -21,11 +21,20 @@
 - 英文品牌名：`FlandreSY`
 - Android 包名：`com.flandresy`
 - iOS Bundle ID：`com.flandresy`
-- 正式版营销版本：`2.1.3`
+- 正式版营销版本：`2.1.4`
 - Flutter 构建版本：见 `pubspec.yaml`
 - 默认运行模式：真实后端
 
-## 2.1.3 更新
+## 2.1.4 更新
+
+- 修复旧洗衣、饮水订单归属恢复，已有账号归属不覆盖。
+- 首页进行中卡片固定三等分、紧凑间距，不足三项靠左。
+- 住理、U净、798 新增本地登出与账号可用性检测，保留订单和设备配置。
+- 区分热水待确认、历史加载失败与无记录；优化详情窄屏和大字号排版。
+
+正式安装包：[FlandreSY 2.1.4 Release](https://github.com/amamiyakazuki/FlandreSY/releases/tag/v2.1.4)。请沿用原安装包类型覆盖升级，不要卸载以免丢失本地记录。
+
+### 2.1.3 历史更新
 
 - 修复热水双击重复启动，保留原会话时间和关水凭据；开关按钮保持可点击。
 - 重启／回前台时，距开水超过 40 分钟恢复待开水并更新可用订单，未超过则保持已开水；该规则不代表设备自动关水。

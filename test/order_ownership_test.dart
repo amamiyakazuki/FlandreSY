@@ -505,9 +505,11 @@ Future<FakeShuiRuntime> _runtime(_Adapter adapter,
       ujing: adapter,
       water: water,
       washerHistory: washer,
-      sessions: InMemoryAccountSessionRepository(ujing: _account));
+      sessions: InMemoryAccountSessionRepository());
   addTearDown(runtime.dispose);
   await runtime.ready;
+  await Future<void>.delayed(Duration.zero);
+  runtime.emit(runtime.state.copyWith(ujingAccount: _account));
   runtime.stopWaterPolling();
   return runtime;
 }

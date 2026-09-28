@@ -6,6 +6,70 @@ import '../runtime_status.dart';
 import '../shui_runtime_base.dart';
 
 mixin WasherActions on ShuiRuntimeBase {
+  @override
+  Future<void> migrateLegacyWasherOrders(String owner, int epoch) async {
+    if (owner.isEmpty ||
+        !canRetainUjingMutationResult(epoch, owner) ||
+        !_washerStorageReady()) {
+      return;
+    }
+    if (_washerMutationBusy || _washerRefresh != null) return;
+    final current = state.washer.currentOrder;
+    final history = state.washer.history;
+    if (current?.ownerAccountKey.isEmpty != true &&
+        !history.any((h) => h.ownerAccountKey.isEmpty)) {
+      return;
+    }
+    try {
+      final migrated = history
+          .map((h) => h.ownerAccountKey.isNotEmpty
+              ? h
+              : WasherOrderHistoryUi(
+                  orderId: h.orderId,
+                  deviceNo: h.deviceNo,
+                  status: h.status,
+                  statusText: h.statusText,
+                  payPrice: h.payPrice,
+                  ownerAccountKey: owner,
+                  needsRecovery: h.status != '50' && h.status != 'cancelled'))
+          .toList();
+      final owned = current?.ownerAccountKey.isEmpty == true
+          ? current!.copyWith(ownerAccountKey: owner, statusText: '旧订单待更新')
+          : current;
+      final recovered = owned ?? WasherHistoryCodec.legacyCandidate(migrated);
+      await washerHistoryRepository.saveSnapshot(
+          currentOrder: recovered, history: migrated);
+      if (!canRetainUjingMutationResult(epoch, owner) ||
+          !identical(state.washer.currentOrder, current)) {
+        return;
+      }
+      emit(state.copyWith(
+          washer: state.washer
+              .copyWith(currentOrder: recovered, history: migrated)));
+    } catch (error) {
+      diagnosticLog.log('washer', '旧订单自动归属保存失败 type=${error.runtimeType}');
+      if (isUjingRequestCurrent(epoch)) {
+        _washerMessage('旧订单归属保存失败，原记录已保留，请刷新重试', failure: true);
+      }
+    }
+  }
+
+  @override
+  Future<void> resumeWasherOrders() async {
+    final epoch = ujingAuthEpoch;
+    final visited = <String>{};
+    while (isUjingRequestCurrent(epoch)) {
+      final current = state.washer.currentOrder;
+      if (current == null ||
+          !canAccessUjingOrder(current.ownerAccountKey) ||
+          !visited.add(current.orderId)) {
+        return;
+      }
+      await refreshCurrentWasherOrder();
+      if (state.washer.currentOrder?.orderId == current.orderId) return;
+    }
+  }
+
   int _orderSeq = 0;
   bool _washerMutationBusy = false;
   bool _washerScanBusy = false;
@@ -33,7 +97,7 @@ mixin WasherActions on ShuiRuntimeBase {
     if (canAccessUjingOrder(order.ownerAccountKey)) return true;
     _washerMessage(
         order.ownerAccountKey.isEmpty
-            ? '旧订单尚未确认所属账号，请先确认后查询'
+            ? '旧订单等待最近登录账号恢复，请登录后刷新重试'
             : '该订单属于其他账号，请切回原账号后查询',
         failure: true);
     return false;
@@ -124,7 +188,8 @@ mixin WasherActions on ShuiRuntimeBase {
     final legacy = WasherHistoryCodec.legacyCandidate(state.washer.history);
     if (legacy != null) {
       emit(state.copyWith(washer: state.washer.copyWith(currentOrder: legacy)));
-      _canUseWasherOrder(legacy);
+      await migrateLegacyUjingOrders();
+      await resumeWasherOrders();
       return;
     }
     final program = state.washer.program;
@@ -370,7 +435,7 @@ mixin WasherActions on ShuiRuntimeBase {
                 ? RuntimeActionStatus(
                     state: RuntimeTaskState.success,
                     message: next?.ownerAccountKey.isEmpty == true
-                        ? '另有旧订单待确认所属账号'
+                        ? '另有旧订单等待登录账号恢复'
                         : message)
                 : null)));
   }

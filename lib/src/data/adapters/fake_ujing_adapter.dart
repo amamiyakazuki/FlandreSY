@@ -11,6 +11,10 @@ import 'ujing_adapter.dart';
 
 /// Fake 实现：保留原有 fake 时序/数值/文案。网络延迟由本类承载（对齐真实 adapter 的 IO 延迟）。
 class FakeUjingAdapter implements IUjingAdapter {
+  /// 模拟模式成功，不请求真实服务。
+  @override
+  Future<void> checkAccountValidity() async {}
+
   const FakeUjingAdapter();
 
   static const Duration _netDelay = Duration(milliseconds: 620);

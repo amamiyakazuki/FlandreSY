@@ -26,48 +26,39 @@ class OngoingCard extends StatelessWidget {
             curve: ShuiMotion.easeOut,
             child: tasks.isEmpty
                 ? const _EmptyRunningCard()
-                : LayoutBuilder(
-                    builder: (context, constraints) => Row(
-                          key: const ValueKey('running-task-row'),
-                          children: [
-                            HomeTaskTarget.hotwater,
-                            HomeTaskTarget.washer,
-                            HomeTaskTarget.drinking
-                          ].map((target) {
-                            final matching =
-                                tasks.where((task) => task.target == target);
-                            final task =
-                                matching.isEmpty ? null : matching.first;
-                            return AnimatedContainer(
-                              key: ValueKey(target),
-                              duration: ShuiMotion.duration(
-                                  context, ShuiMotion.local),
-                              width: task == null
-                                  ? 0
-                                  : constraints.maxWidth / tasks.length,
-                              clipBehavior: Clip.hardEdge,
-                              decoration: const BoxDecoration(),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppCustomTokens.spaceXs,
-                                ),
-                                child: AnimatedSwitcher(
-                                  duration: ShuiMotion.duration(
-                                    context,
-                                    ShuiMotion.local,
-                                  ),
-                                  child: task == null
-                                      ? const SizedBox.shrink()
-                                      : RunningStatusCard(
-                                          key: ValueKey(
-                                              '${task.target.name}-${task.id}'),
-                                          task: task,
-                                        ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        )),
+                : LayoutBuilder(builder: (context, constraints) {
+                    final visible = [
+                      for (final target in [
+                        HomeTaskTarget.hotwater,
+                        HomeTaskTarget.washer,
+                        HomeTaskTarget.drinking,
+                      ])
+                        ...tasks.where((task) => task.target == target).take(1),
+                    ];
+                    final width =
+                        (constraints.maxWidth - 2 * AppCustomTokens.spaceXs) /
+                            3;
+                    return IntrinsicHeight(
+                        child: Row(
+                      key: const ValueKey('running-task-row'),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < visible.length; i++) ...[
+                          if (i > 0)
+                            const SizedBox(width: AppCustomTokens.spaceXs),
+                          SizedBox(
+                            key: ValueKey(visible[i].target),
+                            width: width,
+                            child: RunningStatusCard(
+                              key: ValueKey(
+                                  '${visible[i].target.name}-${visible[i].id}'),
+                              task: visible[i],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ));
+                  }),
           ),
         ],
       ),

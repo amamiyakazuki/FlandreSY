@@ -21,6 +21,11 @@ import 'zhuli_transport.dart';
 /// 真实 Zhuli 热水适配器（Z1）。有状态：登录后持 session；开水后持 last_isn（对齐 legacy）。
 /// nonceGen/timestampGen 可注入，测试固定 → 签名可确定性验证（默认真实随机/时钟）。
 class RealZhuliAdapter implements IHotwaterAdapter {
+  @override
+  Future<void> checkAccountValidity() async {
+    await loadHistory();
+  }
+
   RealZhuliAdapter({
     required ZhuliTransport transport,
     BleTransport? ble,

@@ -126,6 +126,7 @@ mixin Shower798Actions on ShuiRuntimeBase {
     if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
       return;
     }
+    resetAccountAvailability(AccountKind.shower798);
     hotwaterAuthChanging = true;
     try {
       await _loginShower798(phone, smsCode);
@@ -212,28 +213,23 @@ mixin Shower798Actions on ShuiRuntimeBase {
   }
 
   /// 查看 798 状态（对齐 legacy checkShower798Status）。
-  void checkShower798Status() {
-    final account = state.shower798Account;
-    emit(
-      state.copyWith(
-        shower798Login: account == null
-            ? const RuntimeActionStatus(
-                state: RuntimeTaskState.loginRequired,
-                message: '慧生活798未登录',
-              )
-            : RuntimeActionStatus(
-                state: RuntimeTaskState.success,
-                message: '慧生活798账号：${account.mobile}',
-              ),
-      ),
-    );
-  }
+  Future<void> checkShower798Status() =>
+      checkAccountStatus(AccountKind.shower798);
 
   /// 添加 798 设备（经 IShower798Adapter：add → reload；已存在则仅设为当前）。
   /// 对齐 legacy addShower798Device。
   Future<void> addShower798Device(String deviceId) async {
     await ready;
     if (isDisposed || hotwaterAuthChanging) return;
+    hotwaterAccountWriteCount++;
+    try {
+      await _addShower798Device(deviceId);
+    } finally {
+      hotwaterAccountWriteCount--;
+    }
+  }
+
+  Future<void> _addShower798Device(String deviceId) async {
     final epoch = hotwaterAuthEpoch;
     final id = deviceId.trim();
     if (id.isEmpty) {

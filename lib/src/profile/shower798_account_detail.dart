@@ -66,7 +66,9 @@ class _Shower798AccountDetailState extends State<Shower798AccountDetail> {
     super.initState();
     // 进入自动请求图形验证码 + 查看状态（对齐 legacy LaunchedEffect(Unit)）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_requestedInitialCaptcha &&
+      if (mounted &&
+          widget.state.shower798Account == null &&
+          !_requestedInitialCaptcha &&
           widget.state.shower798CaptchaImageBase64 == null) {
         _requestedInitialCaptcha = true;
         widget.onRequestCaptcha();

@@ -24,7 +24,6 @@ class WasherOrderScreen extends StatefulWidget {
     required this.onStart,
     required this.onStop,
     required this.onCancel,
-    this.onConfirmOwner,
     this.onRefresh,
     super.key,
   });
@@ -41,7 +40,6 @@ class WasherOrderScreen extends StatefulWidget {
   final VoidCallback onStart;
   final VoidCallback onStop;
   final VoidCallback onCancel;
-  final VoidCallback? onConfirmOwner;
   final VoidCallback? onRefresh;
 
   @override
@@ -159,9 +157,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
                   ],
                   if (s.currentWasherOrder != null) ...[
                     if (s.currentWasherOrder!.ownerAccountKey.isEmpty)
-                      TextButton(
-                          onPressed: widget.onConfirmOwner,
-                          child: const Text('确认旧订单所属账号')),
+                      const Text('旧订单等待登录账号恢复；登录后刷新即可'),
                     TextButton(
                         onPressed: widget.onRefresh,
                         child: const Text('刷新洗衣订单')),

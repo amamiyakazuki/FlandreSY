@@ -20,7 +20,6 @@ class DrinkingWaterScreen extends StatelessWidget {
     required this.onBack,
     required this.onRefresh,
     this.onReturnHome,
-    this.onConfirmOwner,
     super.key,
   });
 
@@ -29,7 +28,6 @@ class DrinkingWaterScreen extends StatelessWidget {
   final VoidCallback onBack;
   final VoidCallback onRefresh;
   final VoidCallback? onReturnHome;
-  final VoidCallback? onConfirmOwner;
 
   @override
   Widget build(BuildContext context) {
@@ -65,9 +63,7 @@ class DrinkingWaterScreen extends StatelessWidget {
                   ],
                   _InfoCard(cd: cd, ready: ready),
                   if (order != null && order.ownerAccountKey.isEmpty)
-                    TextButton(
-                        onPressed: onConfirmOwner,
-                        child: const Text('确认旧订单所属账号')),
+                    const Text('旧订单等待登录账号恢复；登录后刷新即可'),
                   const SizedBox(height: AppCustomTokens.drinkingCardGap),
                   AnimatedSwitcher(
                     duration: ShuiMotion.duration(context, ShuiMotion.local),

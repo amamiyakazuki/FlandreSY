@@ -44,7 +44,16 @@ class InMemoryAccountSessionRepository implements AccountSessionRepository {
   Future<void> clearUjing() async => _ujing = null;
 
   @override
-  Future<void> clearShower798() async => _shower798 = null;
+  Future<void> clearShower798() async {
+    final previous = _shower798;
+    _shower798 = previous == null
+        ? null
+        : Shower798Persisted(
+            account: const Shower798AccountUi(mobile: '', uid: '', eid: ''),
+            devices: previous.devices,
+            currentDeviceId: previous.currentDeviceId,
+          );
+  }
 
   InMemoryAccountSessionRepository({
     ZhuliSession? zhuli,

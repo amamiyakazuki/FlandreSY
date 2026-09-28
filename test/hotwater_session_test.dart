@@ -1005,6 +1005,10 @@ FakeShuiRuntime _runtime({
 }
 
 class _TestHotwaterAdapter implements IHotwaterAdapter {
+  @override
+  Future<void> checkAccountValidity() async =>
+      throw UnsupportedError('Session fixture does not probe authentication');
+
   _TestHotwaterAdapter({
     this.failBeforeDispatchOnce = false,
     this.loseResponseAfterDispatchOnce = false,

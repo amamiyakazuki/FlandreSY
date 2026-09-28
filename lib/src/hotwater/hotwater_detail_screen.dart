@@ -7,6 +7,7 @@ import '../../design_tokens.dart';
 import '../runtime/fake_shui_runtime.dart';
 import '../runtime/hotwater_state.dart';
 import '../theme/shui_assets.dart';
+import '../theme/shui_motion.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
 
@@ -33,6 +34,20 @@ class HotwaterDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = AppTypography.textTheme;
+    final historyStatus = state.hotwater.historyStatus;
+    final historyMessage = historyStatus.message?.trim().isNotEmpty == true
+        ? historyStatus.message
+        : switch (historyStatus.state) {
+            RuntimeTaskState.idle =>
+              state.hotwaterHistory.isEmpty ? '热水历史尚未加载' : '历史记录尚未刷新',
+            RuntimeTaskState.loading => '正在加载热水历史',
+            RuntimeTaskState.failure => '热水历史加载失败，请稍后重试',
+            RuntimeTaskState.loginRequired => '请先登录住理账号后查询历史',
+            RuntimeTaskState.permissionRequired => '查询热水历史所需权限尚未授予',
+            RuntimeTaskState.paymentInProgress => '正在处理热水历史请求',
+            RuntimeTaskState.unavailable => '热水历史暂不可用，请稍后重试',
+            RuntimeTaskState.success => null,
+          };
     final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
     final session = state.hotwater.session;
     final canClearLocal = !busy &&
@@ -61,7 +76,8 @@ class HotwaterDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SectionTitle(icon: ShuiAssets.shuiFire, title: '当前热水'),
+                        _DetailTitle(
+                            icon: ShuiAssets.shuiFire, title: '当前热水'),
                         const SizedBox(height: AppCustomTokens.spaceSm),
                         RuntimeStatusBanner(status: state.hotwaterStart),
                         if (state.hotwaterStop.message != null) ...[
@@ -79,22 +95,49 @@ class HotwaterDetailScreen extends StatelessWidget {
                           ),
                         ],
                         const SizedBox(height: AppCustomTokens.spaceSm),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: PrimaryGradientButton(
-                                label: _use798 ? '启动洗浴' : '启动热水',
-                                onTap: onStart,
-                              ),
-                            ),
-                            const SizedBox(width: AppCustomTokens.spaceSm),
-                            Expanded(
-                              child: PrimaryGradientButton(
-                                label: _use798 ? '停止洗浴' : '停止热水',
-                                onTap: onStop,
-                              ),
-                            ),
-                          ],
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final labels = [
+                              _use798 ? '启动洗浴' : '启动热水',
+                              _use798 ? '停止洗浴' : '停止热水',
+                            ];
+                            final available = (constraints.maxWidth -
+                                    AppCustomTokens.spaceSm) /
+                                2;
+                            final fits = labels.every((label) {
+                              final painter = TextPainter(
+                                text: TextSpan(
+                                    text: label, style: textTheme.labelLarge),
+                                textDirection: Directionality.of(context),
+                                textScaler: MediaQuery.textScalerOf(context),
+                              )..layout();
+                              final width = painter.width;
+                              painter.dispose();
+                              return width + 2 * AppCustomTokens.spaceMd + 2 <=
+                                  available;
+                            });
+                            final start = _ControlButton(
+                                label: labels[0], onTap: onStart);
+                            final stop =
+                                _ControlButton(label: labels[1], onTap: onStop);
+                            return fits
+                                ? Row(children: [
+                                    Expanded(child: start),
+                                    const SizedBox(
+                                        width: AppCustomTokens.spaceSm),
+                                    Expanded(child: stop),
+                                  ])
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      start,
+                                      const SizedBox(
+                                          height: AppCustomTokens.spaceSm),
+                                      stop,
+                                    ],
+                                  );
+                          },
                         ),
                       ],
                     ),
@@ -104,22 +147,24 @@ class HotwaterDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SectionTitle(
+                        _DetailTitle(
                           icon: ShuiAssets.shuiReshui,
                           title: _use798 ? '洗浴记录' : '住理热水历史',
                         ),
                         const SizedBox(height: AppCustomTokens.spaceSm),
-                        if (!_use798 &&
-                            state.hotwater.historyStatus.message != null)
+                        if (!_use798 && historyMessage != null)
                           RuntimeStatusBanner(
-                              status: state.hotwater.historyStatus),
+                              status: RuntimeActionStatus(
+                                  state: historyStatus.state,
+                                  message: historyMessage)),
                         if (_use798)
                           Text(
                             '慧生活798暂不提供账号历史，本页不会混入住理订单。',
                             style: textTheme.bodySmall
                                 ?.copyWith(color: AppColors.mutedText),
                           )
-                        else if (state.hotwaterHistory.isEmpty)
+                        else if (state.hotwaterHistory.isEmpty &&
+                            historyStatus.state == RuntimeTaskState.success)
                           Text(
                             '暂无热水历史',
                             style: textTheme.bodySmall
@@ -152,6 +197,65 @@ class HotwaterDetailScreen extends StatelessWidget {
   }
 }
 
+class _DetailTitle extends StatelessWidget {
+  const _DetailTitle({required this.icon, required this.title});
+
+  final String icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        DecorativeImage(icon, size: AppCustomTokens.navIconSize),
+        const SizedBox(width: AppCustomTokens.spaceSm),
+        Flexible(
+          child: Text(title,
+              style: AppTypography.textTheme.titleMedium
+                  ?.copyWith(color: AppColors.deepText)),
+        ),
+        const SizedBox(width: AppCustomTokens.spaceSm),
+        DecorativeImage(ShuiAssets.shuiThreeStar,
+            size: AppCustomTokens.statusIconSize - AppCustomTokens.spaceXs,
+            opacity: AppCustomTokens.alphaMuted),
+      ]);
+}
+
+// Page-local so other screens keep their existing button sizing.
+class _ControlButton extends StatelessWidget {
+  const _ControlButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ShuiPressable(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(
+              minHeight: AppCustomTokens.primaryActionHeight),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppCustomTokens.spaceMd,
+              vertical: AppCustomTokens.spaceSm),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [
+              AppColors.primaryLight,
+              AppColors.primary,
+              AppColors.primaryDark,
+            ]),
+            borderRadius: BorderRadius.circular(AppCustomTokens.radiusLarge),
+            border: Border.all(
+                color: AppColors.onPrimary
+                    .withValues(alpha: AppCustomTokens.alphaMuted),
+                width: AppCustomTokens.strokeThin),
+          ),
+          child: Text(label,
+              textAlign: TextAlign.center,
+              style: AppTypography.textTheme.labelLarge
+                  ?.copyWith(color: AppColors.onPrimary)),
+        ),
+      );
+}
+
 class _HistoryRow extends StatelessWidget {
   const _HistoryRow({
     required this.time,
@@ -181,29 +285,49 @@ class _HistoryRow extends StatelessWidget {
           width: AppCustomTokens.strokeThin,
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             time,
             style: textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
           ),
-          const SizedBox(width: AppCustomTokens.spaceMd),
-          Expanded(
-            child: Text(
-              device,
-              // P2：设备名允许两行不裁。
-              maxLines: 2,
-              softWrap: true,
-              overflow: TextOverflow.ellipsis,
-              style: textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
-            ),
-          ),
+          const SizedBox(height: AppCustomTokens.spaceXs),
           Text(
-            amount,
-            style: textTheme.titleSmall?.copyWith(color: AppColors.deepText),
+            device,
+            softWrap: true,
+            style: textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
           ),
-          const SizedBox(width: AppCustomTokens.spaceSm),
-          StatusPill(text: status, color: AppColors.serviceGreen, filled: true),
+          const SizedBox(height: AppCustomTokens.spaceSm),
+          Wrap(
+            spacing: AppCustomTokens.spaceSm,
+            runSpacing: AppCustomTokens.spaceXs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                amount,
+                style:
+                    textTheme.titleSmall?.copyWith(color: AppColors.deepText),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppCustomTokens.spaceSm,
+                    vertical: AppCustomTokens.spaceXs),
+                decoration: BoxDecoration(
+                  color: AppColors.serviceGreen
+                      .withValues(alpha: AppCustomTokens.alphaChip),
+                  borderRadius:
+                      BorderRadius.circular(AppCustomTokens.radiusSmall),
+                  border: Border.all(
+                      color: AppColors.serviceGreen
+                          .withValues(alpha: AppCustomTokens.alphaSoftBorder)),
+                ),
+                child: Text(status,
+                    style: textTheme.labelMedium
+                        ?.copyWith(color: AppColors.serviceGreen)),
+              ),
+            ],
+          ),
         ],
       ),
     );

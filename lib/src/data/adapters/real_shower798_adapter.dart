@@ -14,6 +14,12 @@ import 'shower798_transport.dart';
 /// 真实 798 适配器（S798）。有状态：登录后持 token（对齐 legacy CachedSession.token）。
 /// doubleRandom/timestamp 可注入 → captcha 请求确定性（默认时钟派生）。
 class RealShower798Adapter implements IShower798Adapter {
+  @override
+  Future<void> checkAccountValidity() async {
+    // loadDevices 仅返回结果，不写入 runtime 设备列表，也不清除 adapter token。
+    await loadDevices();
+  }
+
   RealShower798Adapter({
     required Shower798Transport transport,
     String Function()? doubleRandom,

@@ -16,15 +16,16 @@ class WasherHistoryCodec {
 
   static WasherOrderUi? legacyCandidate(List<WasherOrderHistoryUi> history) {
     for (final item in history) {
-      if (item.ownerAccountKey.isEmpty &&
+      if ((item.ownerAccountKey.isEmpty || item.needsRecovery) &&
           item.status != '50' &&
           item.status != 'cancelled') {
         return WasherOrderUi(
             orderId: item.orderId,
             deviceNo: item.deviceNo,
-            statusText: '旧版本订单，待确认所属账号',
+            statusText: item.ownerAccountKey.isEmpty ? '旧订单等待登录账号恢复' : '旧订单待更新',
             payPrice: item.payPrice,
-            status: 'pending');
+            status: 'pending',
+            ownerAccountKey: item.ownerAccountKey);
       }
     }
     return null;
@@ -35,6 +36,7 @@ class WasherHistoryCodec {
             .map((item) => <String, dynamic>{
                   'orderId': item.orderId,
                   'ownerAccountKey': item.ownerAccountKey,
+                  'needsRecovery': item.needsRecovery,
                   'deviceNo': item.deviceNo,
                   'status': item.status,
                   'statusText': item.statusText,
@@ -57,6 +59,7 @@ class WasherHistoryCodec {
           WasherOrderHistoryUi(
             orderId: '${item['orderId'] ?? ''}',
             ownerAccountKey: '${item['ownerAccountKey'] ?? ''}',
+            needsRecovery: item['needsRecovery'] == true,
             deviceNo: '${item['deviceNo'] ?? ''}',
             status: '${item['status'] ?? ''}',
             statusText: '${item['statusText'] ?? ''}',

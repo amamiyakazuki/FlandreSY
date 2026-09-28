@@ -101,7 +101,9 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   Future<Shower798Persisted?> loadShower798() async {
     final prefs = await SharedPreferences.getInstance();
     final mobile = prefs.getString(_s798MobileKey);
-    if (mobile == null || mobile.isEmpty) {
+    if ((mobile == null || mobile.isEmpty) &&
+        !prefs.containsKey(_s798DevicesKey) &&
+        !prefs.containsKey(_s798CurrentDeviceKey)) {
       return null;
     }
     final devices = <Shower798DeviceUi>[];
@@ -129,7 +131,7 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
     }
     return Shower798Persisted(
       account: Shower798AccountUi(
-        mobile: mobile,
+        mobile: mobile ?? '',
         uid: prefs.getString(_s798UidKey) ?? '',
         eid: prefs.getString(_s798EidKey) ?? '',
       ),

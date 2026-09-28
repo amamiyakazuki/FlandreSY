@@ -10,6 +10,10 @@ import 'hotwater_adapter.dart';
 
 /// Fake 实现：保留原有 fake 时序/数值/文案。网络+BLE 延迟由本类承载（对齐真实 IO）。
 class FakeHotwaterAdapter implements IHotwaterAdapter {
+  /// 模拟模式成功，不请求真实服务。
+  @override
+  Future<void> checkAccountValidity() async {}
+
   FakeHotwaterAdapter();
 
   bool _running = false;
