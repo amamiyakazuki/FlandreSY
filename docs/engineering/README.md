@@ -12,8 +12,9 @@
 | [C3a 接口结果校验](c3a-response-contract-plan.md) | U净 / 798 异常响应不伪报成功，保留未确认记录（RA-13） | 已合入 main 606a11c；本地 288 通过 / 1 跳过，两平台 CI 通过；[验收](c3a-response-contract-acceptance.md) |
 | [C2 本地设备一致性](c2-device-consistency-plan.md) | 刷新与编辑不互相覆盖、导入校验、真实刷新与保存反馈（RA-02/03/14） | 已合入 main 6a52d50；本地 338 通过 / 1 跳过，两平台 CI 通过；[验收](c2-device-consistency-acceptance.md) |
 | [C3b 洗衣状态与同步](c3b-washer-sync-plan.md) | 操作条件一致、跨页与前后台状态同步（RA-04/05） | 已实现；本地 373 通过 / 1 跳过，交付核验见[验收](c3b-washer-sync-acceptance.md) |
+| [C4 历史归属](c4-history-ownership-plan.md) | 住理热水按账号展示、旧档案保留、订单页加载及失败重试（RA-06） | 已实现；本地 404 通过 / 1 跳过，交付核验见[验收](c4-history-ownership-acceptance.md) |
 
-[当前验收记录](c3b-washer-sync-acceptance.md)。历史归属、平台适配等其他模块尚未启动。
+[当前验收记录](c4-history-ownership-acceptance.md)。权限 / 平台适配等其他模块尚未启动。
 
 C1 合入后的 main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38860214079)、[iOS](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38860213953) 均通过，对应 86697a9670520addaf84de2cb924789dde99c49f。旧 C1 验收文件的 PR 交付段落保留当时记录，当前状态以此处为准；归档 PR 不再作为唯一公开证据入口。
 
@@ -23,7 +24,7 @@ C3a main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/
 
 用户于 2026-10-16 调整交付方式：保留模块分支、Git 提交、测试、推送 GitHub 和 CI 检查，不再要求创建 PR。合并和正式版本发布仍按用户授权处理。一个模块完成后更新状态，再决定下一模块。
 
-C1 已按用户后续授权直接合入 main、推送 GitHub 并归档隐藏 PR #4，未发布版本。C3a 也已获单独授权：A 方案实现，测试后合入 main、推送并确认 CI，随后停止，不创建 PR、不发布。C2 随后也已获全部 A 实施、合入 main 和推送授权，沿用无 PR / 无发布 / CI 核验后停止；C3b 随后获“直接开始”授权，沿用该交付方式；其他模块未获实施授权。
+C1 已按用户后续授权直接合入 main、推送 GitHub 并归档隐藏 PR #4，未发布版本。C3a 也已获单独授权：A 方案实现，测试后合入 main、推送并确认 CI，随后停止，不创建 PR、不发布。C2 随后也已获全部 A 实施、合入 main 和推送授权，沿用无 PR / 无发布 / CI 核验后停止；C3b 随后获“直接开始”授权，沿用该交付方式；C4 随后获“直接开始，测试通过后合入 main 并推送”授权，沿用无 PR / 无发布 / CI 核验后停止；其他模块未获实施授权。
 
 ## 记录要求
 
@@ -33,3 +34,5 @@ C1 已按用户后续授权直接合入 main、推送 GitHub 并归档隐藏 PR 
 - 不把旧提交的测试结果当成本模块的新证据。
 
 C2 main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38868446319)、[iOS](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38868446386) 均成功，对应 `6a52d50dcc16a7a06668e635feed23b5b456bc3a`。
+
+C3b main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38870597834)、[iOS](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38870597827) 均成功，对应 `c93afdd7d048b2e4a02716df7e5cd1267ad995fe`。
