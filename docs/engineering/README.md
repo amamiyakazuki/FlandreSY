@@ -14,7 +14,9 @@
 | [C3b 洗衣状态与同步](c3b-washer-sync-plan.md) | 操作条件一致、跨页与前后台状态同步（RA-04/05） | 已实现；本地 373 通过 / 1 跳过，交付核验见[验收](c3b-washer-sync-acceptance.md) |
 | [C4 历史归属](c4-history-ownership-plan.md) | 住理热水按账号展示、旧档案保留、订单页加载及失败重试（RA-06） | 已实现；本地 404 通过 / 1 跳过，交付核验见[验收](c4-history-ownership-acceptance.md) |
 
-[当前验收记录](c4-history-ownership-acceptance.md)。权限 / 平台适配等其他模块尚未启动。
+| [C5a 权限与能力边界](c5-permissions-ios-ble-plan.md) | 按需权限、通知清理、iOS 住理控制明确不可用与会话保全（RA-07 / RA-08 限制） | 已实现；本地 453 通过 / 1 跳过，交付核验见[验收](c5a-permissions-acceptance.md) |
+
+[当前验收记录：C5a](c5a-permissions-acceptance.md)。[C5 计划](c5-permissions-ios-ble-plan.md)按用户选择 1A＋2A＋3A 实施；权限按需申请、移除通知承诺、明确 iOS 住理控制不可用并保留旧会话。完整 iOS 设备识别 C5b 未实施，RA-08 保持待完成。
 
 C1 合入后的 main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38860214079)、[iOS](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38860213953) 均通过，对应 86697a9670520addaf84de2cb924789dde99c49f。旧 C1 验收文件的 PR 交付段落保留当时记录，当前状态以此处为准；归档 PR 不再作为唯一公开证据入口。
 
@@ -24,7 +26,7 @@ C3a main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/
 
 用户于 2026-10-16 调整交付方式：保留模块分支、Git 提交、测试、推送 GitHub 和 CI 检查，不再要求创建 PR。合并和正式版本发布仍按用户授权处理。一个模块完成后更新状态，再决定下一模块。
 
-C1 已按用户后续授权直接合入 main、推送 GitHub 并归档隐藏 PR #4，未发布版本。C3a 也已获单独授权：A 方案实现，测试后合入 main、推送并确认 CI，随后停止，不创建 PR、不发布。C2 随后也已获全部 A 实施、合入 main 和推送授权，沿用无 PR / 无发布 / CI 核验后停止；C3b 随后获“直接开始”授权，沿用该交付方式；C4 随后获“直接开始，测试通过后合入 main 并推送”授权，沿用无 PR / 无发布 / CI 核验后停止；其他模块未获实施授权。
+C1 已按用户后续授权直接合入 main、推送 GitHub 并归档隐藏 PR #4，未发布版本。C3a 也已获单独授权：A 方案实现，测试后合入 main、推送并确认 CI，随后停止，不创建 PR、不发布。C2 随后也已获全部 A 实施、合入 main 和推送授权，沿用无 PR / 无发布 / CI 核验后停止；C3b 随后获“直接开始”授权，沿用该交付方式；C4 随后获“直接开始，测试通过后合入 main 并推送”授权，沿用无 PR / 无发布 / CI 核验后停止；C5a 随后获 1A＋2A＋3A 实施、测试后合入 main/推送/CI 后停止授权；C5b 与其他模块未获实施授权。
 
 ## 记录要求
 
