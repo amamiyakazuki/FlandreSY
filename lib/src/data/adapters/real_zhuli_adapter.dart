@@ -20,7 +20,18 @@ import 'zhuli_transport.dart';
 
 /// 真实 Zhuli 热水适配器（Z1）。有状态：登录后持 session；开水后持 last_isn（对齐 legacy）。
 /// nonceGen/timestampGen 可注入，测试固定 → 签名可确定性验证（默认真实随机/时钟）。
-class RealZhuliAdapter implements IHotwaterAdapter {
+class RealZhuliAdapter implements IHotwaterAdapter, HotwaterControlReadiness {
+  @override
+  String? get controlUnavailableReason => _ble is BleControlReadiness
+      ? (_ble as BleControlReadiness).controlUnavailableReason
+      : null;
+
+  Future<void> _prepareControl() async {
+    if (_ble is BleControlReadiness) {
+      await (_ble as BleControlReadiness).prepareControl();
+    }
+  }
+
   @override
   Future<void> checkAccountValidity() async {
     await loadHistory();
@@ -134,6 +145,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
     String deviceId, {
     HotwaterStartProgressCallback? onProgress,
   }) async {
+    await _prepareControl();
     final s = _requireSession();
     if (deviceId.isEmpty) {
       throw const HotwaterException('设备码为空');
@@ -268,6 +280,7 @@ class RealZhuliAdapter implements IHotwaterAdapter {
   @override
   Future<HotwaterActionResult> stopHotwater(String deviceId,
       {String? isn}) async {
+    await _prepareControl();
     final s = _requireSession();
     final sessionIsn = isn ?? _lastIsn;
     if (sessionIsn.isEmpty) {

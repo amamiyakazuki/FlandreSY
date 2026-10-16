@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import '../data/local_device_repository.dart';
 import '../devices/device_dialogs.dart';
 import '../devices/device_import_dialog.dart';
-import '../data/permission_service.dart';
 import '../devices/devices_screen.dart';
 import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
@@ -90,9 +89,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
 
   bool openingVisible = true;
   bool permissionVisible = true;
-  final ShuiPermissionService _permissionService =
-      const ShuiPermissionService();
-  ShuiPermissionState? _permissionState;
 
   // Devices 模块的对话框/弹层状态（叠加在路由之上，由 PopScope 优先消费返回）。
   bool showAddDevice = false;
@@ -120,7 +116,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _refreshPermissions();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       Future<void>.delayed(ShuiMotion.duration(context, ShuiMotion.opening),
@@ -139,23 +134,11 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     setState(() => _foreground = state == AppLifecycleState.resumed);
-    if (state == AppLifecycleState.resumed) {
-      _refreshPermissions();
-    }
   }
 
-  Future<void> _refreshPermissions() async {
-    final permissions = await _permissionService.check();
-    if (mounted) setState(() => _permissionState = permissions);
-  }
-
-  Future<void> _requestPermissions() async {
-    setState(() {
-      permissionVisible = false;
-    });
+  void _confirmPermissionIntro() {
+    setState(() => permissionVisible = false);
     ShuiRuntimeScope.of(context).markPermissionIntroSeen();
-    final permissions = await _permissionService.requestAll();
-    if (mounted) setState(() => _permissionState = permissions);
   }
 
   void _selectTab(MainTab tab) {
@@ -359,11 +342,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
                             !openingVisible &&
                             !runtime.state.permissionIntroSeen
                         ? FirstLaunchPermissionDialog(
-                            permissionState: _permissionState,
-                            onConfirm: _requestPermissions,
-                            onOpenSettings: () {
-                              _permissionService.openSettings();
-                            },
+                            onConfirm: _confirmPermissionIntro,
                           )
                         : const SizedBox.shrink(),
                   ),
@@ -446,6 +425,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onRefresh: runtime.resumeUjingOrders,
         ),
       HotwaterDetailRoute() => HotwaterDetailScreen(
+          controlUnavailableReason: runtime.zhuliControlUnavailableReason,
           onRefreshHistory: runtime.loadHotwaterHistory,
           state: runtime.state,
           onBack: _handlePop,

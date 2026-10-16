@@ -1,44 +1,123 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
-// Runtime permission check (no visual constants). M-REAL 权限检测: request the runtime permissions
-// the app actually uses (camera scan, BLE hot-water, location for BLE scan on Android), then — if any
-// is permanently denied — fall back to opening the OS app-settings page (aligned with legacy
-// openSettings ACTION_APPLICATION_DETAILS_SETTINGS). Returns a human-readable summary for the dialog.
+import 'package:flutter/material.dart';
 
-import 'package:permission_handler/permission_handler.dart';
+import '../../design_tokens.dart';
+import '../data/permission_service.dart';
+import '../widgets/shui_header.dart';
 
-/// 本次要检测/申请的权限集合（对齐 AndroidManifest 已声明的 CAMERA / BLUETOOTH* / ACCESS_FINE_LOCATION，
-/// 分别服务：扫码相机、热水 BLE、Android BLE 扫描所需定位）。
-const List<Permission> kCheckedPermissions = <Permission>[
-  Permission.camera,
-  Permission.bluetoothScan,
-  Permission.bluetoothConnect,
-  Permission.locationWhenInUse,
-];
-
-/// 运行权限检测（M-REAL）：申请上述权限；
-/// - 全部授予 → 返回「权限已授予」。
-/// - 有被永久拒绝 → 打开系统设置（对齐 legacy openSettings）并返回提示。
-/// - 其余（部分被拒但可再申请）→ 返回「部分权限未授予」。
-/// 返回值用于弹窗/snackbar 展示。可注入 [requester]/[openSettings] 供测试替身。
-Future<String> runPermissionCheck({
-  Future<Map<Permission, PermissionStatus>> Function()? requester,
-  Future<bool> Function()? openSettings,
-}) async {
-  final statuses = await (requester ?? _defaultRequester)();
-  final anyPermanentlyDenied =
-      statuses.values.any((s) => s.isPermanentlyDenied);
-  final allGranted = statuses.values.every((s) => s.isGranted);
-
-  if (allGranted) {
-    return '权限已授予';
-  }
-  if (anyPermanentlyDenied) {
-    await (openSettings ?? openAppSettings)();
-    return '部分权限被永久拒绝，已打开系统设置，请手动开启';
-  }
-  return '部分权限未授予，请在弹窗中允许';
+/// 进入和返回前台只读检查；申请与打开设置必须由用户点选。
+class PermissionCheckScreen extends StatefulWidget {
+  const PermissionCheckScreen({this.permissions, super.key});
+  final ShuiPermissionService? permissions;
+  @override
+  State<PermissionCheckScreen> createState() => _PermissionCheckScreenState();
 }
 
-Future<Map<Permission, PermissionStatus>> _defaultRequester() =>
-    kCheckedPermissions.request();
+class _PermissionCheckScreenState extends State<PermissionCheckScreen>
+    with WidgetsBindingObserver {
+  ShuiPermissionService get service =>
+      widget.permissions ?? ShuiPermissionService.instance;
+  ShuiPermissionState? _state;
+  bool _busy = false;
+  String? _message;
+  int _revision = 0;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _check();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _check();
+  }
+
+  Future<void> _check() async {
+    final revision = ++_revision;
+    final state = await service.check();
+    if (mounted && revision == _revision) setState(() => _state = state);
+  }
+
+  Future<void> _request(ShuiPermissionKind kind) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _message = null;
+    });
+    final result = await service.request(kind);
+    if (!mounted) return;
+    setState(() {
+      _message = result.message;
+      _busy = false;
+    });
+    await _check();
+  }
+
+  Future<void> _settings() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final message = await service.openSettings();
+    if (!mounted) return;
+    setState(() {
+      _message = message;
+      _busy = false;
+    });
+    await _check();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+          body: Column(children: [
+        TopHeader(
+            title: '权限与功能',
+            showBack: true,
+            onBack: () => Navigator.of(context).pop()),
+        Expanded(
+            child: ListView(
+                padding: const EdgeInsets.all(AppCustomTokens.spaceMd),
+                children: [
+              const Text('使用功能时才申请权限。授权状态与蓝牙开关、设备支持情况分别检查。'),
+              if (_message != null)
+                Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: AppCustomTokens.spaceSm),
+                    child: Text(_message!)),
+              for (final kind in ShuiPermissionKind.values)
+                Card(
+                    child: Padding(
+                  padding: const EdgeInsets.all(AppCustomTokens.spaceMd),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                            kind == ShuiPermissionKind.camera ? '扫码相机' : '住理蓝牙',
+                            style: AppTypography.textTheme.titleMedium),
+                        Text(_state?.status[kind]?.message ?? '正在检查权限'),
+                        if (_state?.status[kind]?.canRequest == true)
+                          TextButton(
+                            onPressed: _busy ? null : () => _request(kind),
+                            child: Text(kind == ShuiPermissionKind.camera
+                                ? '申请相机权限'
+                                : '申请蓝牙权限'),
+                          ),
+                        if (_state?.status[kind]?.status ==
+                                ShuiPermissionStatus.permanentlyDenied ||
+                            _state?.status[kind]?.status ==
+                                ShuiPermissionStatus.restricted)
+                          TextButton(
+                              onPressed: _busy ? null : _settings,
+                              child: const Text('打开系统设置')),
+                      ]),
+                )),
+              TextButton(
+                  onPressed: _busy ? null : _check,
+                  child: const Text('重新检查权限')),
+            ])),
+      ]));
+}

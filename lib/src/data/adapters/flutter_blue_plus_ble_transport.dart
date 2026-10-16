@@ -15,19 +15,31 @@ import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'ble_transport.dart';
+import '../permission_service.dart';
 import 'hotwater_adapter.dart';
 import 'ble_target.dart';
 import 'ble_response.dart';
 
 /// 真实 Zhuli BLE 传输：基于 flutter_blue_plus 的 [BleTransport] 实现。
-class FlutterBluePlusBleTransport implements BleTransport {
-  const FlutterBluePlusBleTransport();
+class FlutterBluePlusBleTransport implements BleTransport, BleControlReadiness {
+  const FlutterBluePlusBleTransport({this.permissions});
+  final ShuiPermissionService? permissions;
+  ShuiPermissionService get _permissions =>
+      permissions ?? ShuiPermissionService.instance;
+  @override
+  String? get controlUnavailableReason => _permissions.zhuliUnavailableReason;
+  @override
+  Future<void> prepareControl() async {
+    final message = await _permissions.prepareBluetooth();
+    if (message != null) throw HotwaterException(message);
+  }
 
   @override
   Future<ZhuliBleConnection> scanAndConnect({
     required String bleName,
     required String bleMac,
   }) async {
+    await prepareControl();
     if (bleName.trim().isEmpty && bleMac.trim().isEmpty) {
       throw const HotwaterException('缺少目标蓝牙名称和地址，请重新识别设备');
     }

@@ -21,6 +21,7 @@ class HotwaterDetailScreen extends StatelessWidget {
     required this.onStop,
     this.onClearLocal,
     this.onRefreshHistory,
+    this.controlUnavailableReason,
     super.key,
   });
 
@@ -30,6 +31,7 @@ class HotwaterDetailScreen extends StatelessWidget {
   final VoidCallback onStop;
   final VoidCallback? onClearLocal;
   final VoidCallback? onRefreshHistory;
+  final String? controlUnavailableReason;
 
   bool get _use798 =>
       state.hotwaterControlSystem == BathSystemPreference.shower798;
@@ -67,6 +69,8 @@ class HotwaterDetailScreen extends StatelessWidget {
                       children: [
                         _DetailTitle(icon: ShuiAssets.shuiFire, title: '当前热水'),
                         const SizedBox(height: AppCustomTokens.spaceSm),
+                        if (!_use798 && controlUnavailableReason != null)
+                          Text(controlUnavailableReason!),
                         RuntimeStatusBanner(status: state.hotwaterStart),
                         if (state.hotwaterStop.message != null) ...[
                           const SizedBox(height: AppCustomTokens.spaceXs),

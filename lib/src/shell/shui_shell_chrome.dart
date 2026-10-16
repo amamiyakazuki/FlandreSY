@@ -4,12 +4,10 @@
 // 从 shui_shell.dart 抽出，让 Shell 专注路由编排，避免 God 文件（对齐 Module A 拆分纪律）。
 
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../../design_tokens.dart';
 import '../theme/shui_assets.dart';
 import '../theme/shui_motion.dart';
-import '../data/permission_service.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
 import '../widgets/shui_painters.dart';
@@ -238,14 +236,10 @@ class OpeningMotionOverlay extends StatelessWidget {
 class FirstLaunchPermissionDialog extends StatelessWidget {
   const FirstLaunchPermissionDialog({
     required this.onConfirm,
-    required this.onOpenSettings,
-    this.permissionState,
     super.key,
   });
 
   final VoidCallback onConfirm;
-  final VoidCallback onOpenSettings;
-  final ShuiPermissionState? permissionState;
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +264,7 @@ class FirstLaunchPermissionDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: AppCustomTokens.spaceSm),
                   Text(
-                    '先给小助手一点权限吧',
+                    '使用前的小提示',
                     textAlign: TextAlign.center,
                     style: AppTypography.textTheme.titleLarge?.copyWith(
                       color: AppColors.deepText,
@@ -278,25 +272,14 @@ class FirstLaunchPermissionDialog extends StatelessWidget {
                   ),
                   const SizedBox(height: AppCustomTokens.spaceSm),
                   Text(
-                    '扫码、热水蓝牙和状态通知需要系统权限。点击后将按需请求授权。',
+                    '使用扫码或受支持的热水蓝牙功能时，再申请所需权限。你也可以在更多选项中查看权限状态。',
                     textAlign: TextAlign.center,
                     style: AppTypography.textTheme.bodyMedium?.copyWith(
                       color: AppColors.mutedText,
                     ),
                   ),
                   const SizedBox(height: AppCustomTokens.spaceMd),
-                  PrimaryGradientButton(label: '好，开启权限', onTap: onConfirm),
-                  if (permissionState?.status.values.any(
-                        (status) =>
-                            status == PermissionStatus.permanentlyDenied,
-                      ) ??
-                      false) ...[
-                    const SizedBox(height: AppCustomTokens.spaceSm),
-                    TextButton(
-                      onPressed: onOpenSettings,
-                      child: const Text('打开系统设置'),
-                    ),
-                  ],
+                  PrimaryGradientButton(label: '知道了，继续', onTap: onConfirm),
                 ],
               ),
             ),

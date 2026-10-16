@@ -1,5 +1,6 @@
 package com.flandresy
 
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.alipay.sdk.app.PayTask
@@ -12,6 +13,11 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "flandresy/platform").setMethodCallHandler { call, result ->
+            if (call.method == "androidSdk") result.success(Build.VERSION.SDK_INT)
+            else result.notImplemented()
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "payV2") {

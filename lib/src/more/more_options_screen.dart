@@ -38,22 +38,12 @@ class MoreOptionsScreen extends StatefulWidget {
   State<MoreOptionsScreen> createState() => _MoreOptionsScreenState();
 }
 
-enum _Overlay { none, about, version, info }
+enum _Overlay { none, about, version }
 
 class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
   _Overlay _overlay = _Overlay.none;
   VersionCheckResult? _versionResult;
   bool _checkingVersion = false;
-  String _infoTitle = '';
-  String _infoBody = '';
-
-  void _showInfo(String title, String body) {
-    setState(() {
-      _infoTitle = title;
-      _infoBody = body;
-      _overlay = _Overlay.info;
-    });
-  }
 
   void _dismiss() => setState(() => _overlay = _Overlay.none);
 
@@ -73,8 +63,9 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
   }
 
   Future<void> _checkPermissions() async {
-    final message = await runPermissionCheck();
-    if (mounted) _showInfo('权限检测', message);
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+      builder: (_) => const PermissionCheckScreen(),
+    ));
   }
 
   @override
@@ -136,11 +127,6 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
                                 _dismiss();
                                 _checkVersion();
                               }),
-                          _Overlay.info => InfoDialogCard(
-                              title: _infoTitle,
-                              body: _infoBody,
-                              onDismiss: _dismiss,
-                            ),
                           _Overlay.none => const SizedBox.shrink(),
                         })),
           ],
@@ -160,7 +146,7 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
       _OptionRowData(
         icon: ShuiAssets.shuiRed1,
         title: '权限检测',
-        subtitle: '申请相机/蓝牙/定位权限',
+        subtitle: '查看权限状态，按需申请或前往设置',
         onTap: _checkPermissions,
       ),
       _OptionRowData(

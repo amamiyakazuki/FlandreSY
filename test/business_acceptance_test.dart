@@ -77,7 +77,7 @@ void main() {
             transport: transport,
             token: 'token-a')));
     await tester.pumpAndSettle();
-    final permission = find.text('好，开启权限');
+    final permission = find.text('知道了，继续');
     if (permission.evaluate().isNotEmpty) {
       await tester.tap(permission);
       await tester.pumpAndSettle();

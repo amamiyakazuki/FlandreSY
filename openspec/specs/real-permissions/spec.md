@@ -1,29 +1,55 @@
 # real-permissions Specification
 
 ## Purpose
-定义相机、蓝牙和通知权限的真实查询、授权请求、永久拒绝处理及前台刷新。将操作系统授权状态与本地引导确认分离，使用户拒绝授权、进入系统设置修改权限以及返回应用后的界面状态保持一致。
+定义按需权限、平台差异、拒绝后的恢复及返回前台检查。首次引导已读与操作系统授权分离。C5a 不申请通知，不开放 iOS 住理 BLE 控制；已有会话保留。
+
 ## Requirements
-### Requirement: Application checks real permission state
-The application SHALL expose real authorization state for camera, Bluetooth, and notifications instead of treating dismissal of an in-app prompt as authorization.
+### Requirement: Permission checks are read-only and platform-specific
+The application SHALL use one shared permission policy for settings, scanning and Zhuli BLE control. Opening the permission screen SHALL only check status.
 
-#### Scenario: Permission state is granted
-- **WHEN** the application checks a capability already granted by the operating system
-- **THEN** it reports that capability as granted and does not request it again
+#### Scenario: Android BLE permission selection
+- **WHEN** Android SDK is at most 30
+- **THEN** foreground BLE scanning requires locationWhenInUse and separately checks location service availability
+- **WHEN** Android SDK is 31 or above
+- **THEN** BLE requires bluetoothScan and bluetoothConnect without requesting location
+- **WHEN** SDK lookup fails
+- **THEN** the application reports a recoverable check error without guessing permissions
 
-#### Scenario: Permission state is denied
-- **WHEN** a capability is denied and the user starts the relevant permission flow
-- **THEN** the application requests authorization and reflects the resulting state
+#### Scenario: iOS C5a capabilities
+- **WHEN** running on iOS
+- **THEN** camera uses camera permission; Zhuli control is explicitly unavailable and does not check or request Bluetooth, scan/connect or location
+- **AND** login, history and other network services remain available under their existing rules
 
-### Requirement: Application handles permanent denial
-The application SHALL provide a route to system settings when the operating system reports that a required capability cannot be requested again.
+### Requirement: Authorization is requested only for a relevant user action
+The application SHALL request camera when entering scanning and Android BLE when using control, or after an explicit request on the permission screen. First-launch confirmation SHALL only record that the explanation was read.
 
-#### Scenario: User permanently denies permission
-- **WHEN** the permission API reports a permanently denied capability
-- **THEN** the UI offers an action that opens this app's system settings
+#### Scenario: Already granted or overlapping requests
+- **WHEN** a required permission is already granted
+- **THEN** it is not requested again
+- **WHEN** permission requests overlap
+- **THEN** same-capability requests coalesce and different-capability requests serialize
 
-### Requirement: Permission state refreshes on lifecycle return
-The application SHALL re-check relevant permissions when returning to the foreground.
+#### Scenario: Incomplete, unknown or failed result
+- **WHEN** a response is empty, missing required permissions, unknown, restricted or failed
+- **THEN** the application reports that distinct state and never treats it as granted
+- **AND** permission failure prevents device control and consumption requests
 
-#### Scenario: User changes permission in system settings
-- **WHEN** the app resumes after system settings changed a capability
-- **THEN** the in-app permission state reflects the new authorization without requiring a restart
+### Requirement: Denial and settings results are truthful
+The application SHALL offer explicit settings navigation for permanent denial or system restriction and SHALL NOT automatically open settings.
+
+#### Scenario: Settings cannot open
+- **WHEN** the platform returns false or throws while opening settings
+- **THEN** the application reports failure with retry or manual guidance rather than claiming it opened
+
+### Requirement: Foreground return refreshes relevant permissions
+Permission and scanner screens SHALL re-check relevant state when returning to the foreground without automatically requesting again. Scanner startup SHALL wait for permission and foreground availability.
+
+#### Scenario: User changes permission in settings
+- **WHEN** the user returns after changing permission
+- **THEN** current state is reflected without restarting the app
+
+### Requirement: C5a preserves records and limits unsupported control
+The runtime, production adapter and BLE transport SHALL block iOS Zhuli start/stop before control-side HTTP or BLE operations. Existing sessions, including expired or uncertain sessions, SHALL remain until existing explicit local recovery actions apply. Unavailability SHALL NOT be reported as successful stop.
+
+### Requirement: Unimplemented notifications are not requested or promised
+The application SHALL remove unused notification permission declarations and prompts, disable the permission-handler notification macro, and make no status notification promise. Existing OS grants SHALL NOT be actively revoked. This requirement does not add notification delivery.

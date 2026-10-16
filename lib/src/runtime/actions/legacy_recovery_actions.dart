@@ -254,6 +254,14 @@ mixin LegacyRecoveryActions on ShuiRuntimeBase {
   Future<bool> _verifyLegacyHotwater() async {
     final session = state.hotwater.session;
     if (session == null) return true;
+    if (session.system == BathSystemPreference.zhuli &&
+        zhuliControlUnavailableReason != null) {
+      emit(state.copyWith(
+          hotwaterStart: RuntimeActionStatus(
+              state: RuntimeTaskState.unavailable,
+              message: '$zhuliControlUnavailableReason 旧会话已保留。')));
+      return false;
+    }
     if (!pendingLegacy('hotwater', session.id)) return true;
     final service =
         session.system == BathSystemPreference.zhuli ? 'zhuli' : 'shower798';

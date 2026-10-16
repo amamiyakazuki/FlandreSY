@@ -22,10 +22,10 @@ void main() {
     await tester.pumpWidget(TestApp());
     await tester.pumpAndSettle(const Duration(milliseconds: 700));
 
-    expect(find.text('先给小助手一点权限吧'), findsOneWidget);
-    await tester.tap(find.text('好，开启权限'));
+    expect(find.text('使用前的小提示'), findsOneWidget);
+    await tester.tap(find.text('知道了，继续'));
     await tester.pumpAndSettle();
-    expect(find.text('先给小助手一点权限吧'), findsNothing);
+    expect(find.text('使用前的小提示'), findsNothing);
   });
 
   testWidgets('account hub opens and routes to selected account',
@@ -33,7 +33,7 @@ void main() {
     await tester.pumpWidget(TestApp());
     await tester.pumpAndSettle(const Duration(milliseconds: 700));
 
-    await tester.tap(find.text('好，开启权限'));
+    await tester.tap(find.text('知道了，继续'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();

@@ -142,3 +142,8 @@ abstract class IHotwaterAdapter {
   /// 近 30 天热水消费历史（consume/list_record_by_staffid）。
   Future<List<HotwaterHistoryUi>> loadHistory();
 }
+
+/// 供运行时提前拒绝平台不支持的控制，登录和历史查询保持独立。
+abstract interface class HotwaterControlReadiness {
+  String? get controlUnavailableReason;
+}

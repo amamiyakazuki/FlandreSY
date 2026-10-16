@@ -2,9 +2,9 @@
 // AppCustomTokens spacing/radius.
 //
 // Thin camera layer over mobile_scanner (RSCAN). This is the ONLY widget that touches the real camera
-// platform channel, and it is NOT verified by Codex (Linux, no camera/emulator) — real scanning is
-// verified ON-DEVICE by the user. Tests/goldens NEVER pump this screen; the pure classifyScanRouting +
-// runtime dispatch are fixture-tested instead. On first successful decode it pops the raw QR string;
+// platform channel. Real scanning requires ON-DEVICE verification. Permission-denial UI is tested
+// with an injected permission backend; tests never start a real camera. The pure classifyScanRouting +
+// runtime dispatch are fixture-tested. On first successful decode it pops the raw QR string;
 // the caller (shui_shell) classifies + routes. Cancel pops null.
 //
 // 相机启动稳健性（真机「相机启动失败，请重试」修复）：
@@ -23,11 +23,13 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../design_tokens.dart';
+import '../data/permission_service.dart';
 
 /// 全屏扫码页：识别到首个二维码即 `Navigator.pop(context, rawValue)`；取消返回 null。
 /// 调用方（shui_shell）拿到字符串后交给 classifyScanRouting + runtime 分发。
 class QrScannerScreen extends StatefulWidget {
-  const QrScannerScreen({super.key});
+  const QrScannerScreen({this.permissions, super.key});
+  final ShuiPermissionService? permissions;
 
   @override
   State<QrScannerScreen> createState() => _QrScannerScreenState();
@@ -44,6 +46,15 @@ class _QrScannerScreenState extends State<QrScannerScreen>
 
   /// 防抖：识别成功只 pop 一次（onDetect 会连续回调）。
   bool _handled = false;
+  bool _foreground = true;
+  bool _permissionFailure = false;
+  ShuiPermissionService get _permissions =>
+      widget.permissions ?? ShuiPermissionService.instance;
+
+  Future<void> _openSettings() async {
+    final message = await _permissions.openSettings();
+    if (mounted) setState(() => _startFailure = message);
+  }
 
   /// 启动进行中（显示「正在启动相机…」，避免黑屏被当成失败）。
   bool _starting = false;
@@ -62,7 +73,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
   /// 显式启动相机。MobileScannerException 由 widget 的 errorBuilder 呈现；
   /// 其它类型异常（平台异常 / controllerNotAttached 超时等）controller 不会写入 value.error，
   /// 故此处自己捕获并存 [_startFailure]，保证任何失败都有诊断可见。「重试」也调用它。
-  Future<void> _startScanner() async {
+  Future<void> _startScanner({bool requestPermission = true}) async {
     if (!mounted || _handled || _starting) {
       return;
     }
@@ -71,7 +82,18 @@ class _QrScannerScreenState extends State<QrScannerScreen>
       _startFailure = null;
     });
     try {
+      final permission = requestPermission
+          ? await _permissions.request(ShuiPermissionKind.camera)
+          : await _permissions.checkKind(ShuiPermissionKind.camera);
+      if (!mounted || _handled) return;
+      _permissionFailure = !permission.granted;
+      if (!permission.granted) {
+        setState(() => _startFailure = permission.message);
+        return;
+      }
+      if (!_foreground) return;
       await _controller.start();
+      if (!mounted || !_foreground || _handled) await _controller.stop();
     } on MobileScannerException {
       // 交给 errorBuilder（controller.value.error 已被 SDK 设置）。
     } catch (e) {
@@ -89,11 +111,13 @@ class _QrScannerScreenState extends State<QrScannerScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
-        unawaited(_startScanner());
+        _foreground = true;
+        unawaited(_startScanner(requestPermission: false));
       case AppLifecycleState.inactive:
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
+        _foreground = false;
         unawaited(_controller.stop());
     }
   }
@@ -151,6 +175,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
             errorBuilder: (context, error) => _ScannerError(
               error: error,
               onRetry: _startScanner,
+              onSettings: _openSettings,
             ),
           ),
           // 非 MobileScannerException 的启动失败兜底提示（否则不会有任何错误 UI）。
@@ -158,6 +183,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
             _StartFailureOverlay(
               message: _startFailure!,
               onRetry: _startScanner,
+              onSettings: _permissionFailure ? _openSettings : null,
             ),
           // 启动中提示（避免黑屏被误判为失败）。
           if (_starting && _startFailure == null)
@@ -171,7 +197,8 @@ class _QrScannerScreenState extends State<QrScannerScreen>
             ),
           // 取景提示框（纯装饰）。
           Center(
-            child: Container(
+            child: IgnorePointer(
+                child: Container(
               width: AppCustomTokens.scanPanelHeight * 2,
               height: AppCustomTokens.scanPanelHeight * 2,
               decoration: BoxDecoration(
@@ -182,7 +209,7 @@ class _QrScannerScreenState extends State<QrScannerScreen>
                 borderRadius:
                     BorderRadius.circular(AppCustomTokens.radiusLarge),
               ),
-            ),
+            )),
           ),
           Positioned(
             left: AppCustomTokens.spaceLg,
@@ -205,7 +232,9 @@ class _QrScannerScreenState extends State<QrScannerScreen>
 /// 相机权限/初始化失败提示（真机由用户授权后重试）。
 /// 显示真实错误码 + 详情，并提供「重试」按钮（对齐文案，可从失败恢复）。
 class _ScannerError extends StatelessWidget {
-  const _ScannerError({required this.error, required this.onRetry});
+  const _ScannerError(
+      {required this.error, required this.onRetry, required this.onSettings});
+  final Future<void> Function() onSettings;
 
   final MobileScannerException error;
   final Future<void> Function() onRetry;
@@ -228,14 +257,17 @@ class _ScannerError extends StatelessWidget {
       message: message,
       diagnostic: diagnostic,
       // 权限被拒时「重试」无用（需去系统设置）。
-      onRetry: permissionDenied ? null : onRetry,
+      onRetry: onRetry,
+      onSettings: permissionDenied ? onSettings : null,
     );
   }
 }
 
 /// 非 MobileScannerException 的启动失败覆盖层（平台异常 / 超时等）。
 class _StartFailureOverlay extends StatelessWidget {
-  const _StartFailureOverlay({required this.message, required this.onRetry});
+  const _StartFailureOverlay(
+      {required this.message, required this.onRetry, this.onSettings});
+  final Future<void> Function()? onSettings;
 
   final String message;
   final Future<void> Function() onRetry;
@@ -245,7 +277,8 @@ class _StartFailureOverlay extends StatelessWidget {
     return ColoredBox(
       color: AppColors.deepText,
       child: _FailureContent(
-        message: '相机启动失败，请重试',
+        message: onSettings != null ? '相机权限尚未就绪' : '相机启动失败，请重试',
+        onSettings: onSettings,
         diagnostic: message,
         onRetry: onRetry,
       ),
@@ -259,8 +292,10 @@ class _FailureContent extends StatelessWidget {
     required this.message,
     required this.diagnostic,
     required this.onRetry,
+    this.onSettings,
   });
 
+  final Future<void> Function()? onSettings;
   final String message;
   final String diagnostic;
   final Future<void> Function()? onRetry;
@@ -288,6 +323,11 @@ class _FailureContent extends StatelessWidget {
                 color: AppColors.onPrimary.withValues(alpha: 0.6),
               ),
             ),
+            if (onSettings != null)
+              TextButton(
+                onPressed: onSettings,
+                child: const Text('打开系统设置'),
+              ),
             if (onRetry != null) ...[
               const SizedBox(height: AppCustomTokens.spaceLg),
               OutlinedButton(

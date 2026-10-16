@@ -278,6 +278,10 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   ShuiHomeState _state;
 
   ShuiHomeState get state => _state;
+  String? get zhuliControlUnavailableReason =>
+      hotwater is HotwaterControlReadiness
+          ? (hotwater as HotwaterControlReadiness).controlUnavailableReason
+          : null;
 
   /// 账号和首页共用偏好写入入口，不依赖路由或动效。
   Future<void> setBathSystem(BathSystemPreference system) async {

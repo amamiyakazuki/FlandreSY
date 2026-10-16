@@ -141,3 +141,9 @@ class SkeletonBleTransport implements BleTransport {
     );
   }
 }
+
+/// 真实传输在任何业务控制前执行的能力/权限检查，测试传输无需平台依赖。
+abstract interface class BleControlReadiness {
+  String? get controlUnavailableReason;
+  Future<void> prepareControl();
+}

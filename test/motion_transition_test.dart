@@ -170,7 +170,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(TestApp());
     await tester.pumpAndSettle(const Duration(milliseconds: 700));
-    final permission = find.text('好，开启权限');
+    final permission = find.text('知道了，继续');
     if (permission.evaluate().isNotEmpty) {
       await tester.tap(permission);
       await tester.pumpAndSettle();

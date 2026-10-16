@@ -1,6 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Zhuli 热水真实 BLE(GATT)所需权限(Z2)。默认全 Fake 不触发;
-         仅 dart-define UJING_HTTP=true 注入 FlutterBluePlusBleTransport 时用到。 -->
+    <!-- 住理热水前台 BLE 所需权限，按系统版本在使用时申请。 -->
     <!-- Android 12+ (API 31+):运行时请求 BLUETOOTH_SCAN / BLUETOOTH_CONNECT。 -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
@@ -16,8 +15,6 @@
     <!-- 真实相机扫码(RSCAN)所需权限。默认全 Fake 不触发相机;点击扫码卡/添加设备才打开 mobile_scanner。
          相机与 dart-define UJING_HTTP 解耦(相机永远真开,后端按已注入适配器)。 -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Android 13+ notification permission. -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <application

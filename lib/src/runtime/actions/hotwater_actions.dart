@@ -95,6 +95,12 @@ mixin HotwaterActions on ShuiRuntimeBase {
     await ready;
     if (isDisposed) return;
     final system = requestedSystem ?? state.hotwaterControlSystem;
+    if (system == BathSystemPreference.zhuli &&
+        zhuliControlUnavailableReason != null) {
+      (start ? _emitStart : _emitStop)(
+          RuntimeTaskState.unavailable, zhuliControlUnavailableReason!);
+      return;
+    }
     if (!legacyServiceReady(
         system == BathSystemPreference.zhuli ? 'zhuli' : 'shower798')) {
       (start ? _emitStart : _emitStop)(
@@ -143,6 +149,12 @@ mixin HotwaterActions on ShuiRuntimeBase {
   Future<void> resumeHotwaterSession() => _enqueue(() async {
         final session = state.hotwater.session;
         if (session == null) return;
+        if (session.system == BathSystemPreference.zhuli &&
+            zhuliControlUnavailableReason != null) {
+          _emitStart(RuntimeTaskState.unavailable,
+              '$zhuliControlUnavailableReason 旧会话已保留，实际水流请现场确认。');
+          return;
+        }
         if (pendingLegacy('hotwater', session.id)) {
           _pending('旧热水记录待核对，请重新登录原账号后重试；未自动清理或控制设备');
           return;

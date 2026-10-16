@@ -50,8 +50,6 @@
 	<string>需要蓝牙以连接热水设备完成开水/关水</string>
 	<key>NSCameraUsageDescription</key>
 	<string>需要相机以扫描饮水机或洗衣机二维码</string>
-	<key>NSUserNotificationsUsageDescription</key>
-	<string>需要通知权限以提醒热水和设备状态变化</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

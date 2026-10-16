@@ -57,12 +57,14 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
 
       # M-REAL 权限检测：permission_handler 用编译宏门控编译进哪些权限。
-      # 仅开启本 App 实际用到的相机/蓝牙/定位（对齐 Info.plist 用途串 + AndroidManifest）。
-      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
-        '$(inherited)',
+      # C5a 仅相机授权启用；iOS 住理控制尚不可用，不申请蓝牙、定位或通知。
+      definitions = Array(config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)'])
+      definitions.reject! { |value| value.match?(/\APERMISSION_(CAMERA|BLUETOOTH|LOCATION|NOTIFICATIONS)=/) }
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions + [
         'PERMISSION_CAMERA=1',
-        'PERMISSION_BLUETOOTH=1',
-        'PERMISSION_LOCATION=1',
+        'PERMISSION_BLUETOOTH=0',
+        'PERMISSION_LOCATION=0',
+        'PERMISSION_NOTIFICATIONS=0',
       ]
     end
   end
