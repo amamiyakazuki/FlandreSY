@@ -2,7 +2,7 @@
 // Shower798RuntimeAdapter.kt's HttpURLConnection: BASE https://i.ilife798.com/api/v1, token in
 // Authorization header, code==0 success). THIS IS THE ONLY LAYER THAT TOUCHES A REAL SOCKET here,
 // and it is NOT verified by Codex — real network behavior must be verified ON-DEVICE by the user.
-// Not enabled by default. captcha image endpoint returns raw bytes -> base64.
+// captcha image endpoint returns raw bytes -> base64 and has no JSON envelope.
 
 import 'dart:async';
 import 'dart:convert';
@@ -76,22 +76,25 @@ class IoShower798Transport implements Shower798Transport {
           authInvalid: resp.statusCode == 401 || resp.statusCode == 403);
     }
     if (text.isEmpty) {
-      throw const Shower798Exception('服务器返回为空');
+      throw const Shower798Exception('服务器返回为空，结果未确认');
     }
 
     final Object? decoded;
     try {
       decoded = jsonDecode(text);
     } on FormatException catch (e) {
-      throw Shower798Exception('响应不是合法 JSON：$e');
+      throw Shower798Exception('响应不是合法 JSON，结果未确认：$e');
     }
     if (decoded is! Map<String, dynamic>) {
-      throw const Shower798Exception('响应格式异常（顶层非对象）');
+      throw const Shower798Exception('响应格式异常（顶层非对象），结果未确认');
     }
 
-    // 对齐 legacy ensureSuccess：code==0 视为成功。
+    // 仅 JSON 数值 0 是明确成功；缺失或字符串不能推断成功或鉴权失效。
     final code = decoded['code'];
-    if (code is num && code != 0) {
+    if (code is! num) {
+      throw const Shower798Exception('响应缺少有效成功码，结果未确认，请核对设备后再操作');
+    }
+    if (code != 0) {
       final msg = decoded['msg'] ?? decoded['message'] ?? '请求失败';
       throw Shower798Exception('$msg', code: '$code');
     }

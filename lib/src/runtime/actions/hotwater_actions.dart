@@ -163,8 +163,16 @@ mixin HotwaterActions on ShuiRuntimeBase {
         emit(state.copyWith(
           hotwater: state.hotwater.copyWith(
             running: true,
-            start: const RuntimeActionStatus(
-                state: RuntimeTaskState.success, message: '热水使用中'),
+            start: RuntimeActionStatus(
+                state: session.system == BathSystemPreference.shower798 &&
+                        session.phase == HotwaterSessionPhase.uncertain
+                    ? RuntimeTaskState.unavailable
+                    : RuntimeTaskState.success,
+                message: session.system == BathSystemPreference.shower798
+                    ? (session.phase == HotwaterSessionPhase.uncertain
+                        ? '热水操作结果待确认，请核对设备'
+                        : '启动请求已确认，请核对设备')
+                    : '热水使用中'),
             stop: const RuntimeActionStatus(),
           ),
         ));
@@ -222,7 +230,9 @@ mixin HotwaterActions on ShuiRuntimeBase {
             ? RuntimeTaskState.success
             : RuntimeTaskState.unavailable,
         existing.phase == HotwaterSessionPhase.active
-            ? '热水使用中'
+            ? (system == BathSystemPreference.shower798
+                ? '启动请求已确认，请核对设备'
+                : '热水使用中')
             : '上次启动结果待确认，未重复发送；请核对水流，可点击结束热水',
       );
       return;
@@ -342,8 +352,11 @@ mixin HotwaterActions on ShuiRuntimeBase {
           hotwater: state.hotwater.copyWith(
         running: true,
         session: active,
-        start: const RuntimeActionStatus(
-            state: RuntimeTaskState.success, message: '热水使用中'),
+        start: RuntimeActionStatus(
+            state: RuntimeTaskState.success,
+            message: system == BathSystemPreference.shower798
+                ? '启动请求已确认，请核对设备'
+                : '热水使用中'),
       )));
     } catch (error) {
       if (isDisposed || epoch != hotwaterAuthEpoch) return;
@@ -489,15 +502,17 @@ mixin HotwaterActions on ShuiRuntimeBase {
         await shower798.stopShower(device);
       }
       if (!current()) return;
+      final message =
+          system == BathSystemPreference.shower798 ? '停止请求已确认，请核对设备' : '热水已关闭';
       if (session != null) {
-        await _finishSession(session, '热水已关闭');
+        await _finishSession(session, message);
       } else {
         emit(state.copyWith(
             hotwater: state.hotwater.copyWith(
           running: false,
           start: const RuntimeActionStatus(message: '热水待启动'),
-          stop: const RuntimeActionStatus(
-              state: RuntimeTaskState.success, message: '热水已关闭'),
+          stop: RuntimeActionStatus(
+              state: RuntimeTaskState.success, message: message),
         )));
       }
       if (system == BathSystemPreference.zhuli &&
@@ -547,8 +562,8 @@ mixin HotwaterActions on ShuiRuntimeBase {
     if (!cleared || isDisposed) return;
     if (session.system == BathSystemPreference.shower798) {
       emit(state.copyWith(
-        shower798Devices: _mapDeviceStatus(session.deviceId, '空闲'),
-        localDevices: _mapLocalStatus(session.deviceId, '空闲'),
+        shower798Devices: _mapDeviceStatus(session.deviceId, '停止请求已确认'),
+        localDevices: _mapLocalStatus(session.deviceId, '停止请求已确认'),
       ));
       await devices.saveDevices(state.localDevices);
     }

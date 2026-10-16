@@ -152,7 +152,7 @@ void main() {
     final probe = expectLater(
         adapter.checkAccountValidity(),
         throwsA(isA<Shower798Exception>()
-            .having((e) => e.authInvalid, 'authInvalid', true)));
+            .having((e) => e.authInvalid, 'authInvalid', false)));
     await adapter.login('new', '1234');
     transport.gate!.complete({'data': {}});
     await probe;

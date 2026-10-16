@@ -6,7 +6,7 @@
 import '../../runtime/models/account_session.dart';
 
 /// 798 后端错误（HTTP / code!=0 / 未登录）。actions 捕获后 emit failure。
-/// [authInvalid] = 服务端明确拒绝了当前 token（401/403 / loadDevices 结构性登录失效），非「从未登录」
+/// [authInvalid] = 服务端明确拒绝了当前 token（401/403），非「从未登录」或响应缺字段，
 /// 也非网络抖动 → action 层据此清 secure + adapter 内存 token + 账号 state 并置 loginRequired（RELOG）。
 class Shower798Exception implements Exception {
   const Shower798Exception(this.message, {this.code, this.authInvalid = false});

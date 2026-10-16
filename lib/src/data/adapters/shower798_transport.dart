@@ -29,9 +29,10 @@ class Shower798Request {
   final String? token;
 }
 
-/// 798 传输接口：发请求，返回已校验（code==0）的响应 JSON（完整 map，含 data）。
+/// 798 传输接口：返回已校验（JSON 数值 code==0）的完整响应 JSON。
 ///
-/// 约定：实现方负责 拼 query/body + Authorization → 真实/伪造 IO → `code!=0` 抛 Shower798Exception。
+/// 缺失/非数值/非零 code 都抛 Shower798Exception；格式异常不推断鉴权失效。
+/// 确认端点允许没有 data；查询端点由 adapter 校验必要业务字段。
 /// 返回完整解析后的 JSON map（调用方从中取 data.al / data.favos / data.device 等）。
 abstract class Shower798Transport {
   Future<Map<String, dynamic>> send(Shower798Request request);

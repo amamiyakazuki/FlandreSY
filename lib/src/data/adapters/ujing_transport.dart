@@ -43,11 +43,12 @@ class UjingRequest {
   final bool requireVerifiedEnvelope;
 }
 
-/// Ujing 传输层接口：发出请求，返回已解析、已校验（code==0）的 `data` JSON map。
+/// Ujing 传输层接口：发出请求，返回已校验（JSON 数值 code==0）的 `data` map。
 ///
 /// 约定：
-/// - 实现方负责真实（或伪造）的 IO + cookie + 头 + `code!=0`/非 2xx → 抛 [UjingException]。
-/// - 返回值是响应里的 `data` 对象（已去掉外层 code/message 包装）；`data` 为数组或缺失时返回空 map。
+/// - 缺失/非数值/非零 code 或非 2xx 均抛 [UjingException]，格式异常不推断鉴权失效。
+/// - 返回 `data` 对象；无对象 data 时返回空 map，允许无需数据的确认端点。
+/// - 需要业务数据的 adapter 必须检查必要字段，不能将空 map 当有效详情。
 abstract class UjingTransport {
   Future<Map<String, dynamic>> send(UjingRequest request);
 }

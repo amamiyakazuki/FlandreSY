@@ -22,13 +22,14 @@ class UjingHttpAdapter implements IUjingAdapter {
   @override
   Future<void> checkAccountValidity() async {
     // 不扫码、不切换校区。缺少校区等业务错误保留原异常，不能当作失效。
-    await _transport.send(UjingRequest(
+    final data = await _transport.send(UjingRequest(
       method: 'GET',
       path: 'app/water/serviceSubject/currentInfo',
       appCode: 'CA',
       weex: '1.0.102',
       authToken: _requireToken(),
     ));
+    _requireBalance(data['balance']);
   }
 
   UjingHttpAdapter({
@@ -103,9 +104,9 @@ class UjingHttpAdapter implements IUjingAdapter {
       appCode: 'ZA',
       body: <String, Object?>{'mobile': mobile, 'captcha': captcha},
     ));
-    final token = _str(data, 'token');
-    if (token.isEmpty) {
-      throw const UjingException('U净登录成功但没有返回 token');
+    final token = data['token'];
+    if (token is! String || token.trim().isEmpty) {
+      throw const UjingException('登录响应缺少有效 token，结果未确认');
     }
     _token = token;
     _log('U净登录成功 mobile=$mobile');
@@ -166,8 +167,8 @@ class UjingHttpAdapter implements IUjingAdapter {
         authToken: token,
         body: <String, Object?>{'qrCode': cd.trim()},
       ));
-      final service = _str(scan, 'service');
-      if (service.isNotEmpty && service.toLowerCase() != 'water') {
+      final service = _requiredScalar(scan, 'service');
+      if (service.toLowerCase() != 'water') {
         throw UjingException('该二维码不是饮水码：$service');
       }
     }
@@ -190,7 +191,7 @@ class UjingHttpAdapter implements IUjingAdapter {
     ));
 
     final balanceFen =
-        _int(current, 'balance', fallback: _int(subject, 'balance'));
+        _requireBalance(current['balance'] ?? subject['balance']);
     final ready = WaterReadyUi(
       cd: code,
       serviceSubjectId: _strAny(
@@ -222,9 +223,9 @@ class UjingHttpAdapter implements IUjingAdapter {
       authToken: token,
       body: <String, Object?>{'deviceId': code},
     ));
-    final orderId = _str(created, 'orderId');
+    final orderId = _requiredScalar(created, 'orderId');
     if (orderId.isEmpty || orderId == '0') {
-      throw const UjingException('创建饮水订单成功但没有 orderId');
+      throw const UjingException('创建饮水订单结果未确认，缺少有效 orderId');
     }
     return WaterPrepareResult(
       ready: ready,
@@ -263,6 +264,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       requireVerifiedEnvelope: legacyAccount != null,
       body: <String, Object?>{'orderId': int.tryParse(orderId) ?? orderId},
     ));
+    _validateOrderDetail(detail, orderId, 'orderStatus');
     if (legacyAccount != null) {
       _validateLegacyDetail(detail, orderId, legacyAccount, 'orderStatus');
     }
@@ -299,7 +301,14 @@ class UjingHttpAdapter implements IUjingAdapter {
       body: <String, Object?>{'qrCode': qrCode.trim()},
     ));
     final result = _obj(scan, 'result');
-    final deviceId = _str(result, 'deviceId');
+    final deviceId = _requiredScalar(result, 'deviceId');
+    final enabled = result['createOrderEnabled'];
+    if (enabled is! bool &&
+        enabled != 0 &&
+        enabled != 1 &&
+        !const ['true', 'false', '1', '0'].contains(enabled)) {
+      throw const UjingException('设备响应缺少有效可用状态，结果未确认');
+    }
     final deviceTypeId = _int(result, 'deviceTypeId');
     final createOrderEnabled = _bool(result, 'createOrderEnabled');
     final reason = _str(result, 'reason');
@@ -329,7 +338,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       authToken: token,
       query: <String, Object?>{'deviceId': deviceId},
     ));
-    final storeId = _str(info, 'storeId');
+    final storeId = _requiredScalar(info, 'storeId');
     final deviceNo = _str(info, 'deviceNo');
     final models = _parseModels(info);
     // 默认套餐：优先 workModelId=1，否则第一个（对齐 legacy defaultWashModelId）。
@@ -401,9 +410,9 @@ class UjingHttpAdapter implements IUjingAdapter {
       authToken: token,
       body: body,
     ));
-    final orderId = _str(created, 'orderId');
-    if (orderId.isEmpty) {
-      throw const UjingException('创建订单成功但没有 orderId');
+    final orderId = _requiredScalar(created, 'orderId');
+    if (orderId == '0') {
+      throw const UjingException('创建订单结果未确认，缺少有效 orderId');
     }
     // 创建成功即交还订单号，先持久化再独立查询；详情离线不能丢掉已创建的单。
     return WasherOrderUi(
@@ -431,6 +440,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       authToken: token,
       requireVerifiedEnvelope: legacyAccount != null,
     ));
+    _validateOrderDetail(detail, orderId, 'status');
     if (legacyAccount != null) {
       _validateLegacyDetail(detail, orderId, legacyAccount, 'status');
     }
@@ -471,8 +481,8 @@ class UjingHttpAdapter implements IUjingAdapter {
       },
     ));
     final payInfo = _obj(args, 'payInfo');
-    final orderInfo = _str(payInfo, 'orderInfo');
-    if (orderInfo.isEmpty) {
+    final orderInfo = payInfo['orderInfo'];
+    if (orderInfo is! String || orderInfo.trim().isEmpty) {
       // 对齐 legacy：区分微信/H5/缺参，明确告知（本轮只支持支付宝）。
       if (payInfo.containsKey('prepayid') || payInfo.containsKey('prepayId')) {
         throw const UjingException('服务端返回了微信支付参数，但当前暂时只支持支付宝');
@@ -516,7 +526,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       weex: '1.1.68',
       authToken: token,
     ));
-    _log('洗衣启动确认完成 orderId=${order.orderId}');
+    _log('洗衣启动请求已确认，等待订单详情 orderId=${order.orderId}');
     return _fetchWasherOrderDetail(order.orderId, token);
   }
 
@@ -531,7 +541,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       weex: '1.1.68',
       authToken: token,
     ));
-    _log('洗衣提前停止完成 orderId=${order.orderId}');
+    _log('洗衣停止请求已确认，等待订单详情 orderId=${order.orderId}');
     return _fetchWasherOrderDetail(order.orderId, token);
   }
 
@@ -551,6 +561,38 @@ class UjingHttpAdapter implements IUjingAdapter {
   }
 
   // ===== 解析 helpers（容错 int/string/大小写，对齐 legacy optString/optInt）=====
+
+  static String _requiredScalar(Map<String, dynamic> data, String key) {
+    final value = data[key];
+    if ((value is String && value.trim().isNotEmpty) ||
+        (value is num && value.isFinite)) {
+      return '$value';
+    }
+    throw const UjingException('响应缺少必要信息，结果未确认，请查询状态后再操作');
+  }
+
+  static int _requireBalance(Object? value) {
+    final parsed = value is num
+        ? value
+        : value is String
+            ? num.tryParse(value)
+            : null;
+    if (parsed == null || !parsed.isFinite) {
+      throw const UjingException('账户响应缺少有效余额，结果未确认');
+    }
+    return parsed.toInt();
+  }
+
+  static void _validateOrderDetail(
+      Map<String, dynamic> data, String orderId, String statusField) {
+    _requiredScalar(data, statusField);
+    // 普通详情允许不返回请求 ID，但不能接受明确返回的另一订单。
+    // C1 核对仍额外要求返回 ID 和账号关系，不能用请求参数替代证据。
+    if (data.containsKey('orderId') &&
+        _requiredScalar(data, 'orderId') != orderId) {
+      throw const UjingException('订单响应标识不匹配，结果未确认，原记录已保留');
+    }
+  }
 
   List<WasherModelUi> _parseModels(Map<String, dynamic> info) {
     final raw = info['deviceWashModel'];

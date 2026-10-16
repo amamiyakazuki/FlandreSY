@@ -116,10 +116,10 @@ class IoUjingTransport implements UjingTransport {
     try {
       decoded = jsonDecode(text);
     } on FormatException catch (e) {
-      throw UjingException('响应不是合法 JSON：$e');
+      throw UjingException('响应不是合法 JSON，结果未确认：$e');
     }
     if (decoded is! Map<String, dynamic>) {
-      throw const UjingException('响应格式异常（顶层非对象）');
+      throw const UjingException('响应格式异常（顶层非对象），结果未确认');
     }
 
     if (request.requireVerifiedEnvelope &&
@@ -129,7 +129,10 @@ class IoUjingTransport implements UjingTransport {
       throw const UjingException('旧订单核对响应不完整，保留原记录');
     }
     final code = decoded['code'];
-    if (code is num && code != 0) {
+    if (code is! num) {
+      throw const UjingException('响应缺少有效成功码，结果未确认，请查询状态后再操作');
+    }
+    if (code != 0) {
       final message = decoded['message'];
       throw UjingException(
         message is String && message.isNotEmpty ? message : '接口返回错误 code=$code',

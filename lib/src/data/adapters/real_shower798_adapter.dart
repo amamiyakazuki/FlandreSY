@@ -105,8 +105,8 @@ class RealShower798Adapter implements IShower798Adapter {
       },
     ));
     final al = _obj(_obj(resp, 'data'), 'al');
-    final token = _str(al, 'token');
-    if (token.isEmpty) {
+    final token = al['token'];
+    if (token is! String || token.trim().isEmpty) {
       throw const Shower798Exception('登录返回缺少账号信息');
     }
     _token = token;
@@ -128,28 +128,30 @@ class RealShower798Adapter implements IShower798Adapter {
       token: _requireToken(),
     ));
     final data = _obj(resp, 'data');
-    if (!data.containsKey('account')) {
-      // account 缺失 = 登录失效（对齐 legacy logout + 抛错）。authInvalid 触发 RELOG 同步清 secure。
-      throw const Shower798Exception('798 洗浴登录已失效，请重新登录', authInvalid: true);
+    if (data['account'] == null) {
+      // 缺字段不能证明凭据已失效；保留账号，由明确的鉴权拒绝触发重登。
+      throw const Shower798Exception('账号响应不完整，暂时无法验证，登录信息已保留');
     }
     final favos = data['favos'];
+    if (favos is! List) {
+      throw const Shower798Exception('设备列表响应格式异常，原记录已保留');
+    }
     final devices = <Shower798DeviceUi>[];
-    if (favos is List) {
-      for (final row in favos) {
-        if (row is! Map) {
-          continue;
-        }
-        final m = row.cast<String, dynamic>();
-        final id = _str(m, 'id');
-        if (id.isEmpty) {
-          continue;
-        }
-        final name = _str(m, 'name');
-        devices.add(Shower798DeviceUi(
-          id: id,
-          name: name.isEmpty ? '洗浴设备 $id' : name,
-        ));
+    for (final row in favos) {
+      if (row is! Map) {
+        throw const Shower798Exception('设备列表条目格式异常，原记录已保留');
       }
+      final m = row.cast<String, dynamic>();
+      final rawId = m['id'];
+      if (!((rawId is String && rawId.trim().isNotEmpty) || rawId is num)) {
+        throw const Shower798Exception('设备列表缺少有效标识，原记录已保留');
+      }
+      final id = '$rawId';
+      final name = _str(m, 'name');
+      devices.add(Shower798DeviceUi(
+        id: id,
+        name: name.isEmpty ? '洗浴设备 $id' : name,
+      ));
     }
     return devices.reversed.toList();
   }
@@ -218,6 +220,9 @@ class RealShower798Adapter implements IShower798Adapter {
     if (subs is List && subs.isNotEmpty && subs.first is Map) {
       subStatus = _int((subs.first as Map).cast<String, dynamic>(), 'status',
           fallback: -1);
+    }
+    if (geneStatus == -1 && subStatus == -1) {
+      throw const Shower798Exception('设备状态响应不完整，结果未确认');
     }
     return geneStatus == 99 || subStatus == 0;
   }
