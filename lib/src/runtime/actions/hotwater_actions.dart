@@ -563,9 +563,30 @@ mixin HotwaterActions on ShuiRuntimeBase {
     if (session.system == BathSystemPreference.shower798) {
       emit(state.copyWith(
         shower798Devices: _mapDeviceStatus(session.deviceId, '停止请求已确认'),
-        localDevices: _mapLocalStatus(session.deviceId, '停止请求已确认'),
       ));
-      await devices.saveDevices(state.localDevices);
+      final saved = await commitDeviceList((list) {
+        if (!list.any((d) =>
+            d.deviceType == LocalDeviceType.shower798 &&
+            d.id == session.deviceId)) {
+          return null;
+        }
+        if (!deviceIdIsUnique(session.deviceId)) {
+          throw const FormatException('旧设备标识重复，未改写记录');
+        }
+        return list
+            .map((d) => d.deviceType == LocalDeviceType.shower798 &&
+                    d.id == session.deviceId
+                ? d.copyWith(lastStatus: '停止请求已确认')
+                : d)
+            .toList();
+      });
+      if (!saved.success && !isDisposed) {
+        emit(state.copyWith(
+            devicesNotice: RuntimeActionStatus(
+          state: RuntimeTaskState.failure,
+          message: '关水结果已确认；本地设备状态未保存：${saved.message}',
+        )));
+      }
     }
   }
 
@@ -697,16 +718,6 @@ mixin HotwaterActions on ShuiRuntimeBase {
         .map(
           (d) => d.id == deviceId
               ? Shower798DeviceUi(id: d.id, name: d.name, lastStatus: status)
-              : d,
-        )
-        .toList();
-  }
-
-  List<LocalDeviceShortcut> _mapLocalStatus(String deviceId, String status) {
-    return state.localDevices
-        .map(
-          (d) => d.deviceType == LocalDeviceType.shower798 && d.id == deviceId
-              ? d.copyWith(lastStatus: status)
               : d,
         )
         .toList();

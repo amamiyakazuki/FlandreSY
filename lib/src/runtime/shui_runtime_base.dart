@@ -17,6 +17,7 @@ import '../data/app_bootstrap.dart';
 import '../data/legacy_data_migration.dart';
 import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
+import '../data/device_import.dart';
 import '../data/secure_session_repository.dart';
 import '../data/settings_repository.dart';
 import '../data/water_order_repository.dart';
@@ -109,6 +110,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     _invalidatedUjingEpoch = null;
     _invalidatedUjingOwner = null;
     ujingAuthEpoch++;
+    invalidateDeviceStatus();
   }
 
   bool canRetainUjingMutationResult(int epoch, String owner) =>
@@ -196,7 +198,9 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     RuntimeActionStatus? stopStatus,
   }) async {
     final session = state.hotwater.session;
-    if (isDisposed || session == null || pendingLegacy('hotwater', session.id)) {
+    if (isDisposed ||
+        session == null ||
+        pendingLegacy('hotwater', session.id)) {
       return false;
     }
     if (expected != null && expected.id != session.id) return false;
@@ -302,6 +306,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       _invalidatedUjingEpoch = ujingAuthEpoch;
       _invalidatedUjingOwner = ujingAccountKey;
       ujingAuthEpoch++;
+      invalidateDeviceStatus();
     } else {
       if (hotwaterAuthChanging ||
           (expectedEpoch != null && expectedEpoch != hotwaterAuthEpoch)) {
@@ -426,7 +431,12 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
             )
           : base.shower798Login,
       // PDEV：持久化设备列表非 null 时整体替换 seed（含空列表 = 用户删空，绝不 re-seed）。
-      localDevices: snap.localDevices,
+      localDevices: snap.localDevices
+          ?.map((d) => d.copyWith(
+              statusConfirmed: false,
+              statusQueryFailed: false,
+              statusCheckedAt: ''))
+          .toList(),
       // P1-FIX：恢复时不再假冒「刚刚」（无真实刷新时刻可用）。留空 → UI 显「未刷新」，
       // 用户点刷新后才按真实时钟打戳（见 refreshLocalDevices）。
       localDevicesLastRefreshed: null,
@@ -504,9 +514,82 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     return max;
   }
 
-  /// 自增计数器，用于在 fake 环境生成稳定且唯一的设备 id / 设备号。
+  /// 本地快捷入口 ID 分配序号，与服务端设备号无关。
   /// 初始 0；构造 + 恢复后由 [_maxDeviceSeq] 置为已存在设备的最大序号，避免撞号。
   int deviceSeq = 0;
+
+  int deviceListRevision = 0;
+  int _deviceStatusEpoch = 0;
+  Future<void> _deviceCommitTail = Future<void>.value();
+
+  bool deviceIdIsUnique(String id) =>
+      id.trim().isNotEmpty &&
+      state.localDevices.where((d) => d.id == id).length == 1;
+
+  int nextDeviceSequence() {
+    final max = _maxDeviceSeq(state.localDevices);
+    if (max > deviceSeq) deviceSeq = max;
+    do {
+      deviceSeq++;
+    } while (state.localDevices.any(
+        (d) => d.id == 'preset-$deviceSeq' || d.id == 'scanned-$deviceSeq'));
+    return deviceSeq;
+  }
+
+  void invalidateDeviceStatus({bool clearTimestamp = true}) {
+    _deviceStatusEpoch++;
+    emit(state.copyWith(
+        localDevices: state.localDevices
+            .map((d) => d.copyWith(statusConfirmed: false))
+            .toList(),
+        localDevicesLastRefreshed: clearTimestamp ? '' : null));
+  }
+
+  /// 所有本地列表写入共享此队列；调用方负责等待 ready。
+  /// 网络等待不进入队列，变更函数只在轮到本次提交时读取最新列表。
+  Future<DeviceChangeResult> commitDeviceList(
+    List<LocalDeviceShortcut>? Function(List<LocalDeviceShortcut>) update, {
+    bool replace = false,
+  }) {
+    final result = Completer<DeviceChangeResult>();
+    _deviceCommitTail = _deviceCommitTail.then((_) async {
+      if (isDisposed) {
+        result.complete(const DeviceChangeResult(false, '页面已关闭'));
+        return;
+      }
+      emit(state.copyWith(devicesSaving: true));
+      try {
+        final next = update(List.of(state.localDevices));
+        if (next == null) {
+          result.complete(const DeviceChangeResult(true, '无可提交的设备变化'));
+          return;
+        }
+        final statusEpoch = _deviceStatusEpoch;
+        await devices.saveDevices(next);
+        if (isDisposed) {
+          result.complete(const DeviceChangeResult(false, '页面已关闭'));
+          return;
+        }
+        deviceListRevision++;
+        emit(state.copyWith(
+          localDevicesLastRefreshed: replace ? '' : null,
+          devicesRefresh: replace ? const RuntimeActionStatus() : null,
+          localDevices: List.unmodifiable(statusEpoch == _deviceStatusEpoch
+              ? next
+              : next.map((d) => d.copyWith(statusConfirmed: false))),
+        ));
+        result.complete(const DeviceChangeResult(true, '已保存'));
+      } on FormatException catch (error) {
+        result.complete(DeviceChangeResult(false, error.message));
+      } catch (error) {
+        diagnosticLog.log('storage', '设备保存失败 type=${error.runtimeType}');
+        result.complete(const DeviceChangeResult(false, '设备保存失败，原列表已保留，请重试'));
+      } finally {
+        emit(state.copyWith(devicesSaving: false));
+      }
+    });
+    return result.future;
+  }
 
   /// 热水历史订单号自增计数器（PHIST）。初始 0；构造 + 恢复后由 [_maxOrderSeq]
   /// 置为已持久化历史 orderId 尾号的最大值，避免 append 撞号。HotwaterActions 读写它。

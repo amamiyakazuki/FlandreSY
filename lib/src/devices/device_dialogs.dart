@@ -3,6 +3,8 @@
 
 import 'package:flutter/material.dart';
 
+import '../data/device_import.dart';
+
 import '../../design_tokens.dart';
 import '../runtime/models/preset_washers.dart';
 import '../theme/shui_motion.dart';
@@ -377,7 +379,7 @@ class EditDeviceNameDialog extends StatefulWidget {
 
   final String initialName;
   final VoidCallback onDismiss;
-  final ValueChanged<String> onSave;
+  final Future<DeviceChangeResult> Function(String) onSave;
 
   @override
   State<EditDeviceNameDialog> createState() => _EditDeviceNameDialogState();
@@ -385,6 +387,8 @@ class EditDeviceNameDialog extends StatefulWidget {
 
 class _EditDeviceNameDialogState extends State<EditDeviceNameDialog> {
   late final TextEditingController _controller;
+  bool _saving = false;
+  String? _error;
 
   @override
   void initState() {
@@ -409,7 +413,7 @@ class _EditDeviceNameDialogState extends State<EditDeviceNameDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '编辑名称',
+            _saving ? '保存中…' : '编辑名称',
             style: textTheme.titleLarge?.copyWith(color: AppColors.deepText),
           ),
           const SizedBox(height: AppCustomTokens.spaceMd),
@@ -417,7 +421,9 @@ class _EditDeviceNameDialogState extends State<EditDeviceNameDialog> {
             controller: _controller,
             maxLines: 1,
             style: textTheme.bodyLarge?.copyWith(color: AppColors.deepText),
-            decoration: const InputDecoration(labelText: '洗衣机名称'),
+            enabled: !_saving,
+            decoration: InputDecoration(
+                labelText: '设备名称', errorText: _error, errorMaxLines: 4),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: AppCustomTokens.spaceMd),
@@ -435,8 +441,19 @@ class _EditDeviceNameDialogState extends State<EditDeviceNameDialog> {
               Expanded(
                 child: PrimaryGradientButton(
                   label: '保存',
-                  enabled: _controller.text.trim().isNotEmpty,
-                  onTap: () => widget.onSave(_controller.text),
+                  enabled: !_saving && _controller.text.trim().isNotEmpty,
+                  onTap: () async {
+                    setState(() {
+                      _saving = true;
+                      _error = null;
+                    });
+                    final result = await widget.onSave(_controller.text);
+                    if (!mounted) return;
+                    setState(() {
+                      _saving = false;
+                      _error = result.success ? null : result.message;
+                    });
+                  },
                 ),
               ),
             ],

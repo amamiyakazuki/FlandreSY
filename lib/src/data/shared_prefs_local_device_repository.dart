@@ -28,8 +28,15 @@ class SharedPrefsLocalDeviceRepository implements LocalDeviceRepository {
   @override
   Future<void> saveDevices(List<LocalDeviceShortcut> devices) async {
     final prefs = await SharedPreferences.getInstance();
-    if (!await prefs.setString(_devicesKey, LocalDeviceCodec.encode(devices))) {
-      throw StateError('设备保存失败');
+    try {
+      if (!await prefs.setString(
+          _devicesKey, LocalDeviceCodec.encode(devices))) {
+        throw StateError('设备保存失败');
+      }
+    } catch (_) {
+      // 返回 false / 抛异常均可能已改插件缓存，重载磁盘再交由调用方报告失败。
+      await prefs.reload();
+      rethrow;
     }
   }
 }

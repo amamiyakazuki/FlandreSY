@@ -1,3 +1,4 @@
+import 'package:flandresy/src/data/device_import.dart';
 import 'support/test_runtime.dart';
 import 'package:flandresy/src/theme/shui_motion.dart';
 import 'package:flutter/material.dart';
@@ -148,7 +149,8 @@ void main() {
                         ? EditDeviceNameDialog(
                             initialName: '设备',
                             onDismiss: () => update(() => visible = false),
-                            onSave: (_) {})
+                            onSave: (_) async =>
+                                const DeviceChangeResult(true, '已保存'))
                         : null)
               ]));
             }))));

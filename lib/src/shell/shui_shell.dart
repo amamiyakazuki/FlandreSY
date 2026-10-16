@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../data/local_device_repository.dart';
 import '../devices/device_dialogs.dart';
+import '../devices/device_import_dialog.dart';
 import '../data/permission_service.dart';
 import '../devices/devices_screen.dart';
 import '../devices/drinking_water_screen.dart';
@@ -96,6 +97,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   // Devices 模块的对话框/弹层状态（叠加在路由之上，由 PopScope 优先消费返回）。
   bool showAddDevice = false;
   bool showPresetPicker = false;
+  bool _deviceEditBusy = false;
   LocalDeviceShortcut? menuDevice;
   LocalDeviceShortcut? editingDevice;
 
@@ -492,10 +494,14 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
 
   Future<void> _importDevices(ShuiRuntime runtime) async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final ok = await runtime.importLocalDevicesFromJson(data?.text ?? '');
-    if (mounted) {
-      _showScanMessage(ok ? '设备列表已从剪贴板导入' : '剪贴板不是有效设备列表 JSON');
-    }
+    await runtime.ready;
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) =>
+            DeviceImportDialog(runtime: runtime, raw: data?.text ?? ''));
+    if (mounted && ok == true) _showScanMessage('设备列表已导入；状态尚未查询');
   }
 
   Widget _tabBody(ShuiRuntime runtime, MainTab tab) {
@@ -601,7 +607,26 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     if (qr == null || !mounted) {
       return;
     }
-    runtime.addScannedDeviceFromQr(qr);
+    var result = await runtime.addScannedDeviceFromQr(qr);
+    while (!result.success) {
+      if (!mounted) return;
+      final retry = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: const Text('设备未添加'),
+                content: Text(result.message),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('取消')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('重试'))
+                ],
+              ));
+      if (retry != true) return;
+      result = await runtime.addScannedDeviceFromQr(qr);
+    }
   }
 
   /// 打开全屏扫码页，返回识别到的 qr 字符串（取消返回 null）。
@@ -702,8 +727,17 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
       if (showPresetPicker)
         PresetDeviceDialog(
           onDismiss: () => setState(() => showPresetPicker = false),
-          onSelect: (preset) {
-            runtime.addPresetWasherDevice(preset.name, preset.qrCode);
+          onSelect: (preset) async {
+            if (_deviceEditBusy) return;
+            _deviceEditBusy = true;
+            final result =
+                await runtime.addPresetWasherDevice(preset.name, preset.qrCode);
+            _deviceEditBusy = false;
+            if (!mounted) return;
+            if (!result.success) {
+              _showScanMessage(result.message);
+              return;
+            }
             setState(() {
               showPresetPicker = false;
               showAddDevice = false;
@@ -717,18 +751,33 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
             editingDevice = menuDevice;
             menuDevice = null;
           }),
-          onDelete: () {
-            runtime.deleteLocalDevice(menuDevice!.id);
-            setState(() => menuDevice = null);
+          onDelete: () async {
+            if (_deviceEditBusy) return;
+            _deviceEditBusy = true;
+            final target = menuDevice!;
+            final result = await runtime.deleteLocalDevice(target.id,
+                expectedIncarnation: target.incarnation);
+            _deviceEditBusy = false;
+            if (!mounted) return;
+            if (result.success && identical(menuDevice, target)) {
+              setState(() => menuDevice = null);
+            } else {
+              _showScanMessage(result.message);
+            }
           },
         ),
       if (editingDevice != null)
         EditDeviceNameDialog(
           initialName: editingDevice!.customName,
           onDismiss: () => setState(() => editingDevice = null),
-          onSave: (name) {
-            runtime.renameLocalDevice(editingDevice!.id, name);
-            setState(() => editingDevice = null);
+          onSave: (name) async {
+            final target = editingDevice;
+            final result = await runtime.renameLocalDevice(target!.id, name,
+                expectedIncarnation: target.incarnation);
+            if (mounted && result.success && identical(editingDevice, target)) {
+              setState(() => editingDevice = null);
+            }
+            return result;
           },
         ),
     ];

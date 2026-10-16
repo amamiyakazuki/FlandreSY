@@ -56,7 +56,7 @@ class DevicesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final devices = state.visibleDevices;
-    final busy = state.devicesRefresh.isBusy;
+    final busy = state.devicesRefreshing;
     return Scaffold(
       body: Stack(
         children: [
@@ -91,9 +91,14 @@ class DevicesScreen extends StatelessWidget {
                         RuntimeStatusBanner(status: state.devicesRefresh),
                         const SizedBox(height: AppCustomTokens.spaceSm),
                       ],
+                      if (state.devicesNotice.message != null) ...[
+                        RuntimeStatusBanner(status: state.devicesNotice),
+                        const SizedBox(height: AppCustomTokens.spaceSm),
+                      ],
+                      if (state.devicesSaving) const Text('正在保存设备列表…'),
                       ShuiAnimatedList<LocalDeviceShortcut>(
                         items: devices,
-                        identity: (device) => device.id,
+                        identity: (device) => device.incarnation,
                         empty: const EmptyDeviceRuntimeCard(),
                         itemBuilder: (device, index) {
                           return Padding(
@@ -101,7 +106,7 @@ class DevicesScreen extends StatelessWidget {
                               bottom: AppCustomTokens.spaceSm,
                             ),
                             child: DeviceListItem(
-                              key: ValueKey(device.id),
+                              key: ObjectKey(device.incarnation),
                               device: device,
                               displayName: deviceDisplayName(device, index),
                               index: index,

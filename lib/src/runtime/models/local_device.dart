@@ -21,7 +21,19 @@ class LocalDeviceShortcut {
     this.storeName,
     this.lastStatus,
     this.sortOrder = 0,
-  });
+    this.statusConfirmed = false,
+    this.statusQueryFailed = false,
+    this.statusCheckedAt = '',
+    Object? incarnation,
+  }) : _incarnation = incarnation;
+
+  final Object? _incarnation;
+  Object get incarnation => _incarnation ?? this;
+
+  /// 只在当前运行期可信，不从导入或磁盘恢复信任标记。
+  final bool statusConfirmed;
+  final bool statusQueryFailed;
+  final String statusCheckedAt;
 
   final String id;
   final String customName;
@@ -50,6 +62,9 @@ class LocalDeviceShortcut {
     String? storeName,
     String? lastStatus,
     int? sortOrder,
+    bool? statusConfirmed,
+    bool? statusQueryFailed,
+    String? statusCheckedAt,
   }) {
     return LocalDeviceShortcut(
       id: id,
@@ -61,6 +76,10 @@ class LocalDeviceShortcut {
       storeName: storeName ?? this.storeName,
       lastStatus: lastStatus ?? this.lastStatus,
       sortOrder: sortOrder ?? this.sortOrder,
+      statusConfirmed: statusConfirmed ?? this.statusConfirmed,
+      statusQueryFailed: statusQueryFailed ?? this.statusQueryFailed,
+      statusCheckedAt: statusCheckedAt ?? this.statusCheckedAt,
+      incarnation: incarnation,
     );
   }
 }

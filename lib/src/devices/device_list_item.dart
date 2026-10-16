@@ -40,6 +40,7 @@ class DeviceListItem extends StatelessWidget {
     if (device.deviceType == LocalDeviceType.drinkingWater) {
       return AppColors.serviceBlue;
     }
+    if (!device.statusConfirmed) return AppColors.mutedText;
     final status = device.lastStatus;
     if (status == '可下单') {
       return AppColors.serviceGreen;
@@ -95,6 +96,16 @@ class DeviceListItem extends StatelessWidget {
                 ),
                 const SizedBox(height: AppCustomTokens.deviceListLineGap),
                 Text(
+                  device.statusQueryFailed
+                      ? '本次查询失败；上次结果：${device.lastStatus ?? '未知'}'
+                      : device.statusConfirmed
+                          ? '${device.lastStatus ?? '未知'}（查询于 ${device.statusCheckedAt}）'
+                          : device.lastStatus == null
+                              ? '状态未查询'
+                              : '上次结果：${device.lastStatus}（未核对）',
+                  style: textTheme.bodySmall?.copyWith(color: _statusColor),
+                ),
+                Text(
                   _typeLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -109,12 +120,6 @@ class DeviceListItem extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              StatusPill(
-                text: device.lastStatus ?? '未知',
-                color: _statusColor,
-                filled: true,
-              ),
-              const SizedBox(height: AppCustomTokens.spaceMd),
               ShuiPressable(
                 onTap: onMenu,
                 child: Container(
@@ -188,7 +193,7 @@ class RefreshBar extends StatelessWidget {
             const SizedBox(width: AppCustomTokens.spaceSm),
             Expanded(
               child: Text(
-                '最近刷新：$lastRefreshed',
+                '最近成功查询：$lastRefreshed',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: textTheme.bodySmall?.copyWith(

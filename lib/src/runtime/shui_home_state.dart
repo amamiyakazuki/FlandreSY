@@ -27,6 +27,9 @@ class ShuiHomeState {
     this.localDevices = const <LocalDeviceShortcut>[],
     this.localDevicesLastRefreshed = '',
     this.devicesRefresh = const RuntimeActionStatus(),
+    this.devicesNotice = const RuntimeActionStatus(),
+    this.devicesSaving = false,
+    this.devicesRefreshing = false,
     this.waterReady,
     this.currentWaterOrder,
     this.waterResult,
@@ -43,7 +46,6 @@ class ShuiHomeState {
   final RuntimeActionStatus waterScan;
   final RuntimeActionStatus washerScan;
   final BathSystemPreference bathSystemPreference;
-
 
   /// 首次权限引导是否已经确认。只记录引导完成，不代表系统权限已授予。
   final bool permissionIntroSeen;
@@ -66,8 +68,11 @@ class ShuiHomeState {
   /// 最近一次刷新时间文案（Devices RefreshBar 用）。
   final String localDevicesLastRefreshed;
 
-  /// 刷新动作状态（loading 时禁用刷新，避免并发）。
+  /// 刷新结果摘要；在途开关独立维护，编辑通知不会释放刷新锁。
   final RuntimeActionStatus devicesRefresh;
+  final RuntimeActionStatus devicesNotice;
+  final bool devicesSaving;
+  final bool devicesRefreshing;
 
   /// 当前饮水机 ready 信息（扫码确认校区/余额，B2）。
   final WaterReadyUi? waterReady;
@@ -129,10 +134,13 @@ class ShuiHomeState {
   int get localWasherCount =>
       localDevices.where((d) => d.deviceType == LocalDeviceType.washer).length;
 
-  /// Home「洗衣设备」卡的「空闲/可用」台数：lastStatus 标记为「可下单」的洗衣机。
+  /// 只统计当前运行期已查询确认的可下单设备，历史缓存不计入。
   int get availableWasherCount => localDevices
       .where(
-        (d) => d.deviceType == LocalDeviceType.washer && d.lastStatus == '可下单',
+        (d) =>
+            d.deviceType == LocalDeviceType.washer &&
+            d.statusConfirmed &&
+            d.lastStatus == '可下单',
       )
       .length;
 
@@ -260,6 +268,9 @@ class ShuiHomeState {
     List<LocalDeviceShortcut>? localDevices,
     String? localDevicesLastRefreshed,
     RuntimeActionStatus? devicesRefresh,
+    RuntimeActionStatus? devicesNotice,
+    bool? devicesSaving,
+    bool? devicesRefreshing,
     RuntimeActionStatus? waterOrder,
     List<WaterOrderHistoryUi>? waterHistory,
     // H1 热水字段（委托到 hotwater.copyWith）。
@@ -316,6 +327,9 @@ class ShuiHomeState {
       localDevicesLastRefreshed:
           localDevicesLastRefreshed ?? this.localDevicesLastRefreshed,
       devicesRefresh: devicesRefresh ?? this.devicesRefresh,
+      devicesNotice: devicesNotice ?? this.devicesNotice,
+      devicesSaving: devicesSaving ?? this.devicesSaving,
+      devicesRefreshing: devicesRefreshing ?? this.devicesRefreshing,
       waterReady: clearWaterReady ? null : (waterReady ?? this.waterReady),
       currentWaterOrder: clearCurrentWaterOrder
           ? null
