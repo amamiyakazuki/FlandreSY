@@ -59,7 +59,7 @@ mixin WasherActions on ShuiRuntimeBase {
   Future<void> resumeWasherOrders() async {
     final epoch = ujingAuthEpoch;
     final visited = <String>{};
-    while (isUjingRequestCurrent(epoch)) {
+    while (isUjingRequestCurrent(epoch) && !pollingPaused) {
       final current = state.washer.currentOrder;
       if (current == null ||
           !canAccessUjingOrder(current.ownerAccountKey) ||
@@ -244,18 +244,27 @@ mixin WasherActions on ShuiRuntimeBase {
     if (needsDetail) await refreshCurrentWasherOrder();
   }
 
-  Future<void> _runWasherMutation(
+  Future<bool> _runWasherMutation(
       String message, Future<WasherOrderUi> Function(WasherOrderUi) action,
-      {bool payment = false}) async {
+      {required bool Function(WasherOrderUi) canAct,
+      bool payment = false}) async {
     await ready;
-    if (!_washerStorageReady()) return;
+    if (!_washerStorageReady()) return false;
     final order = state.washer.currentOrder;
     if (order == null ||
         _washerMutationBusy ||
         _washerRefresh != null ||
         !isUjingRequestCurrent(ujingAuthEpoch) ||
         !_canUseWasherOrder(order)) {
-      return;
+      return false;
+    }
+    if (!canAct(order)) {
+      _washerMessage(
+          order.status == '21'
+              ? '启动中，等待设备确认；更新为运行中后可提前停止。'
+              : '当前订单状态不支持此操作，请刷新订单后重试',
+          failure: true);
+      return false;
     }
     final epoch = ujingAuthEpoch;
     _washerMutationBusy = true;
@@ -271,7 +280,7 @@ mixin WasherActions on ShuiRuntimeBase {
             washerPayment: payment ? loading : null)));
     try {
       final result = await action(order);
-      if (!_retainWasherResult(epoch, order)) return;
+      if (!_retainWasherResult(epoch, order)) return false;
       if (result.orderId != order.orderId) throw StateError('订单响应不匹配');
       final owned = result.copyWith(
           ownerAccountKey: order.ownerAccountKey,
@@ -290,6 +299,7 @@ mixin WasherActions on ShuiRuntimeBase {
                         : RuntimeTaskState.failure,
                     message: succeeded ? '支付宝支付已成功' : '支付尚未确认，请刷新订单状态'))));
       }
+      return true;
     } catch (error) {
       if (_sameWasher(epoch, order)) {
         await _washerError(error, epoch, payment: payment);
@@ -298,15 +308,18 @@ mixin WasherActions on ShuiRuntimeBase {
       _washerMutationBusy = false;
       ujingMutationCount--;
     }
+    return false;
   }
 
   Future<void> payCurrentWasherOrderWithAlipay(
       bool autoStartAfterPayment) async {
     final before = state.washer.currentOrder;
-    if (before == null || before.status != '10') return;
+    if (before == null) return;
     final epoch = ujingAuthEpoch;
-    await _runWasherMutation('正在启动支付宝支付', ujing.payWasherOrder, payment: true);
-    if (!autoStartAfterPayment ||
+    final paid = await _runWasherMutation('正在启动支付宝支付', ujing.payWasherOrder,
+        canAct: (order) => order.canPay, payment: true);
+    if (!paid ||
+        !autoStartAfterPayment ||
         !_sameWasher(epoch, before) ||
         state.washer.payment?.orderId != before.orderId ||
         state.washer.payment?.paymentSucceeded != true ||
@@ -321,26 +334,24 @@ mixin WasherActions on ShuiRuntimeBase {
   }
 
   Future<void> startCurrentWasherOrder() async {
-    if (state.washer.currentOrder?.status != '20') return;
     await _runWasherMutation('正在启动洗衣机', (order) {
       final models = state.washer.program?.models;
       final minutes =
           models != null && models.isNotEmpty ? models.first.timeMinutes : 35;
       return ujing.startWasherOrder(order, minutes * 60);
-    });
+    }, canAct: (order) => order.canStart);
   }
 
   Future<void> stopCurrentWasherOrder() async {
-    if (state.washer.currentOrder?.status != '40') return;
-    await _runWasherMutation('正在提前停止', ujing.stopWasherOrder);
+    await _runWasherMutation('正在提前停止', ujing.stopWasherOrder,
+        canAct: (order) => order.canStop);
   }
 
   Future<void> cancelCurrentWasherOrder() async {
-    if (!['10', '20'].contains(state.washer.currentOrder?.status)) return;
     await _runWasherMutation('正在取消洗衣订单', (order) async {
       await ujing.cancelWasherOrder(order);
       return order.copyWith(status: 'cancelled', statusText: '已取消');
-    });
+    }, canAct: (order) => order.canCancel);
   }
 
   @override

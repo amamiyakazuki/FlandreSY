@@ -107,6 +107,12 @@ class WasherOrderUi {
   /// 仅已知完成码或成功取消操作生成的本地 cancelled；不猜测文案。
   bool get isTerminal => status == '50' || status == 'cancelled';
 
+  /// 页面和运行时共同使用已支持的操作条件；未知状态只允许查询。
+  bool get canPay => status == '10';
+  bool get canStart => status == '20';
+  bool get canStop => status == '40';
+  bool get canCancel => status == '10' || status == '20';
+
   WasherOrderUi copyWith({
     String? statusText,
     String? status,

@@ -538,7 +538,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
             final cd = runtime.state.currentWaterOrder?.deviceNo ?? '';
             _setRoute(DrinkingWaterRoute(cd));
           },
-          onPollWasher: runtime.refreshCurrentWasherOrder,
         ),
       MainTab.devices => DevicesScreen(
           state: runtime.state,

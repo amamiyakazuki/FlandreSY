@@ -16,8 +16,7 @@ import '../widgets/shui_animated_list.dart';
 import '../widgets/shui_header.dart';
 import 'order_models.dart';
 
-/// Orders 聚合页（W2）。3 分类切换 + 各类当前/历史 + 洗衣 live 倒计时（每秒）+ 30s 轮询。
-/// 热水分类空态（真实热水控制未建）。
+/// Orders 聚合页：分类和历史展示，洗衣倒计时每秒更新；网络查询由运行时统一管理。
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({
     required this.state,
@@ -25,7 +24,6 @@ class OrdersScreen extends StatefulWidget {
     required this.onBack,
     required this.onOpenWasherOrder,
     required this.onOpenDrinking,
-    required this.onPollWasher,
     this.active = true,
     super.key,
   });
@@ -35,7 +33,6 @@ class OrdersScreen extends StatefulWidget {
   final VoidCallback onBack;
   final VoidCallback onOpenWasherOrder;
   final VoidCallback onOpenDrinking;
-  final VoidCallback onPollWasher;
   final bool active;
 
   @override
@@ -45,16 +42,14 @@ class OrdersScreen extends StatefulWidget {
 class _OrdersScreenState extends State<OrdersScreen> {
   OrderCategory _category = OrderCategory.hotwater;
   Timer? _tickTimer;
-  Timer? _pollTimer;
 
   @override
   void dispose() {
     _tickTimer?.cancel();
-    _pollTimer?.cancel();
     super.dispose();
   }
 
-  /// 仅在洗衣分类 + 有运行中当前订单时启动每秒 tick（live 倒计时）+ 30s 轮询。
+  /// 仅在可见洗衣分类且有活动订单时更新倒计时，不承担网络查询。
   void _syncTimers() {
     final order = widget.state.washer.currentOrder;
     final needsLive = widget.active &&
@@ -65,14 +60,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
       _tickTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() {});
       });
-      _pollTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-        if (mounted) widget.onPollWasher();
-      });
     } else {
       _tickTimer?.cancel();
       _tickTimer = null;
-      _pollTimer?.cancel();
-      _pollTimer = null;
     }
   }
 

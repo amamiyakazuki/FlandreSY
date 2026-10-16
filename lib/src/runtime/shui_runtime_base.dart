@@ -81,6 +81,8 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       await prepareLegacyRecords();
       await resumeHotwaterSession();
       await migrateLegacyUjingOrders();
+      _washerPollingReady = true;
+      syncWasherPolling();
       unawaited(resumeUjingOrders());
     });
   }
@@ -288,6 +290,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   void emit(ShuiHomeState next) {
     if (isDisposed) return;
     _state = next;
+    syncWasherPolling();
     notifyListeners();
   }
 
@@ -609,6 +612,44 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
 
   Future<void> pollHotwaterStatusOnce();
 
+  Timer? _washerPollingTimer;
+  bool _washerPollingReady = false;
+
+  bool get _canPollWasher {
+    final order = state.currentWasherOrder;
+    return _washerPollingReady &&
+        !isDisposed &&
+        !pollingPaused &&
+        !ujingOrderStorageBlocked &&
+        legacyServiceReady('ujing') &&
+        order != null &&
+        !order.isTerminal &&
+        !pendingLegacy('washer', order.orderId) &&
+        canAccessUjingOrder(order.ownerAccountKey);
+  }
+
+  /// 页面无关的单一查询时钟，沿用既有 30 秒间隔；控制与手动查询共用运行时互斥。
+  void syncWasherPolling() {
+    if (!_canPollWasher) {
+      _washerPollingTimer?.cancel();
+      _washerPollingTimer = null;
+      return;
+    }
+    _washerPollingTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_canPollWasher) {
+        unawaited(refreshCurrentWasherOrder());
+      } else {
+        syncWasherPolling();
+      }
+    });
+  }
+
+  Future<void> resumeWasherPolling() async {
+    await ready;
+    syncWasherPolling();
+    if (_canPollWasher) await resumeWasherOrders();
+  }
+
   void startWaterPolling() {
     if (isDisposed ||
         _pollingPaused ||
@@ -646,9 +687,11 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   void setPollingPaused(bool paused) {
     final wasPaused = _pollingPaused;
     _pollingPaused = paused;
+    syncWasherPolling();
     if (wasPaused && !paused) {
       unawaited(resumeHotwaterSession());
       resumeWaterPolling();
+      unawaited(resumeWasherPolling());
     }
   }
 
@@ -696,6 +739,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   @override
   void dispose() {
     isDisposed = true;
+    syncWasherPolling();
     _homeBannerTimer?.cancel();
     _deviceNoticeTimer?.cancel();
     _hotwaterErrorTimer?.cancel();

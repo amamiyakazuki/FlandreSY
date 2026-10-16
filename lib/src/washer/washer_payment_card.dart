@@ -38,9 +38,9 @@ class CurrentWasherOrderPaymentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = AppTypography.textTheme;
-    final canPay = order.status == '10';
-    final canStart = order.status == '20';
-    final canStop = order.status == '21' || order.status == '40';
+    final canPay = order.canPay;
+    final canStart = order.canStart;
+    final canStop = order.canStop;
     final busy = paying || orderBusy;
     return SectionCard(
       child: Column(
@@ -78,6 +78,13 @@ class CurrentWasherOrderPaymentCard extends StatelessWidget {
             RuntimeStatusBanner(status: paymentState),
           ],
           const SizedBox(height: AppCustomTokens.spaceSm),
+          if (order.status == '21') const Text('启动中，等待设备确认；更新为运行中后可提前停止。'),
+          if (!order.isTerminal &&
+              !canPay &&
+              !canStart &&
+              !canStop &&
+              order.status != '21')
+            const Text('订单状态待确认，请刷新订单；确认前暂不能操作。'),
           if (canPay) ...[
             PrimaryGradientButton(
               label: paying ? '支付中' : '支付宝支付',
@@ -85,12 +92,13 @@ class CurrentWasherOrderPaymentCard extends StatelessWidget {
               onTap: onPay,
             ),
             const SizedBox(height: AppCustomTokens.spaceSm),
-            PrimaryGradientButton(
-              label: orderBusy ? '处理中' : '取消订单',
-              enabled: !busy,
-              compact: true,
-              onTap: onCancel,
-            ),
+            if (order.canCancel)
+              PrimaryGradientButton(
+                label: orderBusy ? '处理中' : '取消订单',
+                enabled: !busy,
+                compact: true,
+                onTap: onCancel,
+              ),
           ] else if (canStart) ...[
             PrimaryGradientButton(
               label: orderBusy ? '启动中' : '启动洗衣机',
@@ -98,12 +106,13 @@ class CurrentWasherOrderPaymentCard extends StatelessWidget {
               onTap: onStart,
             ),
             const SizedBox(height: AppCustomTokens.spaceSm),
-            PrimaryGradientButton(
-              label: orderBusy ? '处理中' : '取消订单',
-              enabled: !busy,
-              compact: true,
-              onTap: onCancel,
-            ),
+            if (order.canCancel)
+              PrimaryGradientButton(
+                label: orderBusy ? '处理中' : '取消订单',
+                enabled: !busy,
+                compact: true,
+                onTap: onCancel,
+              ),
           ] else if (canStop)
             PrimaryGradientButton(
               label: orderBusy ? '处理中' : '提前停止',
