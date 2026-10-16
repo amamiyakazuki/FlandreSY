@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flandresy/src/hotwater/hotwater_detail_screen.dart';
 import 'package:flandresy/src/runtime/shui_runtime.dart';
 import 'package:flandresy/src/runtime/hotwater_state.dart';
+import 'package:flandresy/src/runtime/account_state.dart';
+import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/runtime/models/hotwater_history.dart';
 
 void main() {
@@ -28,6 +30,7 @@ void main() {
           ),
           home: HotwaterDetailScreen(
             state: const ShuiHomeState(
+              account: AccountState(zhuli: ZhuliSession(phone: 'a')),
               bathSystemPreference: BathSystemPreference.zhuli,
               hotwater: HotwaterState(
                 start: RuntimeActionStatus(
@@ -39,6 +42,7 @@ void main() {
                     RuntimeActionStatus(state: RuntimeTaskState.success),
                 history: [
                   HotwaterHistoryUi(
+                      ownerAccount: 'a',
                       time: '2026-09-21 12:34:56',
                       deviceId: device,
                       amount: '¥12345.67',

@@ -5,6 +5,8 @@ import 'package:flandresy/src/home/cards/hot_water_card.dart';
 import 'package:flandresy/src/hotwater/hotwater_detail_screen.dart';
 import 'package:flandresy/src/runtime/shui_runtime.dart';
 import 'package:flandresy/src/runtime/hotwater_state.dart';
+import 'package:flandresy/src/runtime/account_state.dart';
+import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/runtime/models/hotwater_history.dart';
 import 'package:flandresy/src/widgets/shui_components.dart';
 
@@ -19,6 +21,7 @@ ShuiHomeState _state({
   BathSystemPreference system = BathSystemPreference.zhuli,
 }) =>
     ShuiHomeState(
+        account: const AccountState(zhuli: ZhuliSession(phone: 'a')),
         bathSystemPreference: system,
         hotwater: HotwaterState(
           running: running,
@@ -40,6 +43,7 @@ ShuiHomeState _state({
           history: records
               ? const [
                   HotwaterHistoryUi(
+                      ownerAccount: 'a',
                       time: '12:00',
                       deviceId: '旧设备',
                       amount: '¥1.00',

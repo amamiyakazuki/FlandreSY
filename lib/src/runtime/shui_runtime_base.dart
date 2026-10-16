@@ -289,6 +289,9 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   /// 统一状态写入 + 通知。mixin 通过它更新状态，避免直接触碰私有字段。
   void emit(ShuiHomeState next) {
     if (isDisposed) return;
+    if (next.zhuli.phone != _state.zhuli.phone) {
+      next = next.copyWith(hotwaterHistoryStatus: const RuntimeActionStatus());
+    }
     _state = next;
     syncWasherPolling();
     notifyListeners();

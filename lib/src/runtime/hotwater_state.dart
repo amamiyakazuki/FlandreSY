@@ -29,7 +29,7 @@ class HotwaterState {
   /// 关热水/结束洗浴动作状态。
   final RuntimeActionStatus stop;
 
-  /// 热水使用历史（fake 累积）。
+  /// 各账号热水历史缓存及旧版无归属档案；显示时按账号筛选。
   final List<HotwaterHistoryUi> history;
 
   /// 历史加载动作状态。

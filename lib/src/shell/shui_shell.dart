@@ -446,6 +446,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onRefresh: runtime.resumeUjingOrders,
         ),
       HotwaterDetailRoute() => HotwaterDetailScreen(
+          onRefreshHistory: runtime.loadHotwaterHistory,
           state: runtime.state,
           onBack: _handlePop,
           onStart: () => _startHotwater(runtime),
@@ -524,6 +525,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onSwitchBathSystem: () => _setRoute(const AccountHubRoute()),
         ),
       MainTab.orders => OrdersScreen(
+          onRefreshHotwater: runtime.loadHotwaterHistory,
           active: _foreground && _mainTab == MainTab.orders && _details.isEmpty,
           state: runtime.state,
           clock: runtime.clock,

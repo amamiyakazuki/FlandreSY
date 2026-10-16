@@ -60,7 +60,16 @@ class ShuiHomeState {
       hotwater.session?.system ?? bathSystemPreference;
   RuntimeActionStatus get hotwaterStart => hotwater.start;
   RuntimeActionStatus get hotwaterStop => hotwater.stop;
+
+  /// 完整本地档案；页面使用 currentHotwaterHistory，不能把档案当作当前账号历史。
   List<HotwaterHistoryUi> get hotwaterHistory => hotwater.history;
+  List<HotwaterHistoryUi> get currentHotwaterHistory => zhuli.isLoggedIn
+      ? hotwater.history
+          .where((h) => h.ownerAccount == zhuli.phone.trim())
+          .toList()
+      : const [];
+  List<HotwaterHistoryUi> get unassignedHotwaterHistory =>
+      hotwater.history.where((h) => h.ownerAccount.isEmpty).toList();
 
   /// 本地快捷设备列表（B1）。Home 的设备统计从此派生，保持单一来源。
   final List<LocalDeviceShortcut> localDevices;

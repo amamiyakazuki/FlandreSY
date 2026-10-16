@@ -6,6 +6,7 @@ import '../../data/adapters/hotwater_adapter.dart';
 import '../../data/adapters/shower798_adapter.dart';
 import '../models/account_session.dart';
 import '../models/local_device.dart';
+import '../models/hotwater_history.dart';
 import '../runtime_status.dart';
 import '../hotwater_state.dart';
 import '../shui_runtime_base.dart';
@@ -20,6 +21,7 @@ mixin HotwaterActions on ShuiRuntimeBase {
   int _controlGeneration = 0;
   Future<void>? _historyRequest;
   Object? _historyRequestKey;
+  Future<void> _historySaveTail = Future<void>.value();
 
   String _accountFor(BathSystemPreference system) =>
       system == BathSystemPreference.zhuli
@@ -591,8 +593,19 @@ mixin HotwaterActions on ShuiRuntimeBase {
   }
 
   /// 查询只更新订单，不改变本地开水状态；同一上下文合并请求。
-  Future<void> loadHotwaterHistory() {
-    if (isDisposed || !legacyServiceReady('zhuli')) return Future<void>.value();
+  Future<void> loadHotwaterHistory() async {
+    await ready;
+    if (isDisposed || hotwaterAuthChanging) return;
+    if (!legacyServiceReady('zhuli') || !state.zhuli.isLoggedIn) {
+      emit(state.copyWith(
+          hotwaterHistoryStatus: RuntimeActionStatus(
+        state: legacyStorageBlocked
+            ? RuntimeTaskState.failure
+            : RuntimeTaskState.loginRequired,
+        message: legacyStorageBlocked ? '旧数据保全未完成，请先重试保全' : '请先登录住理账号后查询历史',
+      )));
+      return;
+    }
     final epoch = hotwaterAuthEpoch;
     final account = state.zhuli.phone;
     final sessionId = state.hotwater.session?.id;
@@ -603,23 +616,29 @@ mixin HotwaterActions on ShuiRuntimeBase {
     }
     bool current() =>
         !isDisposed &&
+        !hotwaterAuthChanging &&
+        legacyServiceReady('zhuli') &&
         epoch == hotwaterAuthEpoch &&
         account == state.zhuli.phone &&
         sessionId == state.hotwater.session?.id &&
         generation == _controlGeneration;
     _historyRequestKey = key;
     late final Future<void> request;
-    request = _refreshHistory(current).whenComplete(() {
+    request = _refreshHistory(account.trim(), current).whenComplete(() {
       if (identical(_historyRequest, request)) {
         _historyRequest = null;
         _historyRequestKey = null;
+        if (!current() && !isDisposed && state.hotwater.historyStatus.isBusy) {
+          emit(state.copyWith(
+              hotwaterHistoryStatus: const RuntimeActionStatus()));
+        }
       }
     });
     _historyRequest = request;
     return request;
   }
 
-  Future<void> _refreshHistory(bool Function() current) async {
+  Future<void> _refreshHistory(String account, bool Function() current) async {
     emit(
       state.copyWith(
         hotwaterHistoryStatus: const RuntimeActionStatus(
@@ -631,11 +650,10 @@ mixin HotwaterActions on ShuiRuntimeBase {
     try {
       final orders = await hotwater.loadHistory();
       if (!current()) return;
-      await history.saveHistory(orders);
+      await _saveAccountHistory(account, orders, current);
       if (!current()) return;
       emit(
         state.copyWith(
-          hotwaterHistory: orders,
           hotwaterHistoryStatus: const RuntimeActionStatus(
             state: RuntimeTaskState.success,
             message: '热水历史已加载',
@@ -657,9 +675,29 @@ mixin HotwaterActions on ShuiRuntimeBase {
       emit(state.copyWith(
           hotwaterHistoryStatus: RuntimeActionStatus(
         state: RuntimeTaskState.failure,
-        message: error is HotwaterException ? error.message : '订单更新失败，请重试',
+        message:
+            '${error is HotwaterException ? error.message : '订单更新或保存失败'}；历史未更新，已保留本地缓存，请重试',
       )));
     }
+  }
+
+  /// 网络查询可并行等待；落盘时按最新档案合并，避免切号后的保存互相覆盖。
+  Future<void> _saveAccountHistory(
+      String account, List<HotwaterHistoryUi> orders, bool Function() current) {
+    final save = _historySaveTail.then((_) async {
+      if (!current()) return;
+      final next = [
+        ...state.hotwater.history.where((h) => h.ownerAccount != account),
+        ...orders.map((h) => h.ownedBy(account)),
+      ];
+      await history.saveHistory(next);
+      // 已开始的磁盘写入不能撤销。同步完整档案供后续合并，页面仍按当前账号筛选。
+      if (!isDisposed) {
+        emit(state.copyWith(hotwaterHistory: List.unmodifiable(next)));
+      }
+    });
+    _historySaveTail = save.catchError((Object _) {});
+    return save;
   }
 
   void _emitStart(RuntimeTaskState taskState, String message) {

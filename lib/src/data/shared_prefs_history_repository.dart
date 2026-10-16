@@ -1,8 +1,3 @@
-// SharedPreferences-backed HistoryRepository (no visual constants). Stores the whole hotwater history
-// list as one JSON string under a single key (mirrors SharedPrefsLocalDeviceRepository). Uses the
-// key's presence to distinguish "never persisted" (null → first-launch adapter fetch) from "empty
-// history" ([] → restore empty, skip fetch).
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../runtime/models/hotwater_history.dart';
@@ -18,7 +13,7 @@ class SharedPrefsHistoryRepository implements HistoryRepository {
   @override
   Future<List<HotwaterHistoryUi>?> loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
-    // key 不存在 = 从未持久化过 → null（首启走 adapter 拉取）；存在（含空 JSON）= 用户数据。
+    // key 不存在为 null；已有空列表和旧记录均按存储恢复。
     if (!prefs.containsKey(_historyKey)) {
       return null;
     }
@@ -28,9 +23,14 @@ class SharedPrefsHistoryRepository implements HistoryRepository {
   @override
   Future<void> saveHistory(List<HotwaterHistoryUi> history) async {
     final prefs = await SharedPreferences.getInstance();
-    if (!await prefs.setString(
-        _historyKey, HotwaterHistoryCodec.encode(history))) {
-      throw StateError('热水历史保存失败');
+    try {
+      if (!await prefs.setString(
+          _historyKey, HotwaterHistoryCodec.encode(history))) {
+        throw StateError('热水历史保存失败');
+      }
+    } catch (_) {
+      await prefs.reload();
+      rethrow;
     }
   }
 }

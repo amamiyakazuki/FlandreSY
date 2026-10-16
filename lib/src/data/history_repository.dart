@@ -9,8 +9,8 @@ import '../runtime/models/hotwater_history.dart';
 
 /// 热水历史持久化接口（PHIST）。与 [LocalDeviceRepository] 同构。
 ///
-/// [loadHistory] 返回 null 表示「从未持久化过」（首启 → 走 adapter 拉取）；返回 `[]` 表示
-/// 「空历史」（恢复空，不再拉取——对齐 loadHotwaterHistory「非空则跳过」的现有语义）。
+/// null 表示从未保存；列表包含各账号缓存及旧版无归属记录。
+/// 是否刷新由调用入口决定，不能根据缓存非空跳过查询。
 abstract class HistoryRepository {
   Future<List<HotwaterHistoryUi>?> loadHistory();
   Future<void> saveHistory(List<HotwaterHistoryUi> history);
@@ -48,11 +48,17 @@ class HotwaterHistoryCodec {
       'amount': h.amount,
       'status': h.status,
       'orderId': h.orderId,
+      'ownerAccount': h.ownerAccount,
     };
   }
 
   static HotwaterHistoryUi fromMap(Map<String, dynamic> m) {
+    final owner = m['ownerAccount'];
+    if (owner != null && owner is! String) {
+      throw const FormatException('Invalid history owner');
+    }
     return HotwaterHistoryUi(
+      ownerAccount: (owner as String? ?? '').trim(),
       time: (m['time'] ?? '').toString(),
       deviceId: (m['deviceId'] ?? '').toString(),
       amount: (m['amount'] ?? '').toString(),

@@ -71,6 +71,7 @@ mixin AccountActions on ShuiRuntimeBase {
           state: RuntimeTaskState.loading,
           message: '正在登录住理生活',
         ),
+        hotwaterHistoryStatus: const RuntimeActionStatus(),
       ),
     );
     final ZhuliSessionData sessionData;

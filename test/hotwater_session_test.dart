@@ -250,6 +250,7 @@ void main() {
       final callsBefore = adapter.loadHistoryCalls;
       final firstPoll = runtime.pollHotwaterStatusOnce();
       final secondPoll = runtime.pollHotwaterStatusOnce();
+      await Future<void>.delayed(Duration.zero);
       expect(adapter.loadHistoryCalls, callsBefore + 1);
 
       expect(
@@ -392,7 +393,10 @@ void main() {
               runtime.state.hotwaterStart.message, expired ? '热水待启动' : '热水使用中');
           expect(adapter.loadHistoryCalls, expired ? 1 : 0);
           if (expired) {
-            expect(runtime.state.hotwaterHistory, const [_completedOrder]);
+            expect(runtime.state.currentHotwaterHistory.map((h) => h.orderId),
+                [_completedOrder.orderId]);
+            expect(runtime.state.currentHotwaterHistory.single.ownerAccount,
+                runtime.state.zhuli.phone);
           }
           expect(adapter.startCalls, 0);
           expect(adapter.stopCalls, 0);
@@ -421,7 +425,10 @@ void main() {
           runtime.state.hotwater.historyStatus.state, RuntimeTaskState.failure);
       adapter.historyLoader = () async => const [_completedOrder];
       await runtime.stopHotwater();
-      expect(runtime.state.hotwaterHistory, const [_completedOrder]);
+      expect(runtime.state.currentHotwaterHistory.map((h) => h.orderId),
+          [_completedOrder.orderId]);
+      expect(runtime.state.currentHotwaterHistory.single.ownerAccount,
+          runtime.state.zhuli.phone);
       expect(runtime.state.hotwaterStop.message, '订单已更新');
       expect(adapter.stopCalls, 0);
     });
@@ -466,12 +473,18 @@ void main() {
         await runtime.stopHotwater();
         expect(adapter.loadHistoryCalls, 1);
         expect(adapter.stopCalls, 0);
-        expect(runtime.state.hotwaterHistory, const [_completedOrder]);
+        expect(runtime.state.currentHotwaterHistory.map((h) => h.orderId),
+            [_completedOrder.orderId]);
+        expect(runtime.state.currentHotwaterHistory.single.ownerAccount,
+            runtime.state.zhuli.phone);
         expect(runtime.state.hotwaterStop.message, '订单已更新');
         expect(runtime.state.hotwaterRunning, withSession);
         adapter.historyLoader = () async => throw TimeoutException('offline');
         await runtime.stopHotwater();
-        expect(runtime.state.hotwaterHistory, const [_completedOrder]);
+        expect(runtime.state.currentHotwaterHistory.map((h) => h.orderId),
+            [_completedOrder.orderId]);
+        expect(runtime.state.currentHotwaterHistory.single.ownerAccount,
+            runtime.state.zhuli.phone);
         expect(runtime.state.hotwaterStop.state, RuntimeTaskState.failure);
         await runtime.startHotwater();
         expect(adapter.startCalls, withSession ? 0 : 1);

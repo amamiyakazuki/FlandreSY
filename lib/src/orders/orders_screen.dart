@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
 import '../runtime/shui_runtime.dart';
+import '../hotwater/hotwater_history_panel.dart';
 import '../runtime/live_clock.dart';
 import '../runtime/models/washer_order.dart';
 import '../theme/shui_assets.dart';
@@ -25,6 +26,7 @@ class OrdersScreen extends StatefulWidget {
     required this.onOpenWasherOrder,
     required this.onOpenDrinking,
     this.active = true,
+    this.onRefreshHotwater,
     super.key,
   });
 
@@ -34,6 +36,7 @@ class OrdersScreen extends StatefulWidget {
   final VoidCallback onOpenWasherOrder;
   final VoidCallback onOpenDrinking;
   final bool active;
+  final VoidCallback? onRefreshHotwater;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -42,6 +45,39 @@ class OrdersScreen extends StatefulWidget {
 class _OrdersScreenState extends State<OrdersScreen> {
   OrderCategory _category = OrderCategory.hotwater;
   Timer? _tickTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleHistoryLoad();
+  }
+
+  @override
+  void didUpdateWidget(covariant OrdersScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((!oldWidget.active && widget.active) ||
+        oldWidget.state.zhuli.phone != widget.state.zhuli.phone ||
+        oldWidget.state.hotwaterLogin.state !=
+            widget.state.hotwaterLogin.state) {
+      _scheduleHistoryLoad();
+    }
+  }
+
+  bool _historyLoadScheduled = false;
+  void _scheduleHistoryLoad() {
+    if (_historyLoadScheduled ||
+        !widget.active ||
+        _category != OrderCategory.hotwater) {
+      return;
+    }
+    _historyLoadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _historyLoadScheduled = false;
+      if (mounted && widget.active && _category == OrderCategory.hotwater) {
+        widget.onRefreshHotwater?.call();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -93,7 +129,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                       switch (_category) {
-                        OrderCategory.hotwater => '住理账号近 30 天记录',
+                        OrderCategory.hotwater => '住理热水记录与本地旧档案',
                         OrderCategory.drinking => '仅显示本机完成的接水订单',
                         OrderCategory.washer => '仅显示本机操作过的洗衣订单',
                       },
@@ -129,7 +165,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
             iconAsset: ShuiAssets.shuiReshui,
             color: AppColors.primary,
             selected: _category == OrderCategory.hotwater,
-            onTap: () => setState(() => _category = OrderCategory.hotwater),
+            onTap: () {
+              final changed = _category != OrderCategory.hotwater;
+              setState(() => _category = OrderCategory.hotwater);
+              if (changed) _scheduleHistoryLoad();
+            },
           ),
         ),
         const SizedBox(width: AppCustomTokens.spaceSm),
@@ -157,8 +197,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   List<Widget> _buildCategoryContent() {
+    if (_category == OrderCategory.hotwater) {
+      return [
+        HotwaterHistoryPanel(
+            state: widget.state, onRefresh: widget.onRefreshHotwater)
+      ];
+    }
     final rows = switch (_category) {
-      OrderCategory.hotwater => _hotwaterRows(),
+      OrderCategory.hotwater => <OrderRowUi>[],
       OrderCategory.drinking => _drinkingRows(),
       OrderCategory.washer => _washerRows(),
     };
@@ -178,7 +224,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return switch (_category) {
       OrderCategory.hotwater => const EmptyOrderState(
           title: '暂无热水订单',
-          detail: '在热水控制页开启/关闭热水后，记录会显示在这里。',
+          detail: '登录住理账号并刷新后可查看热水历史。',
         ),
       OrderCategory.drinking => const EmptyOrderState(
           title: '暂无饮水订单',
@@ -189,24 +235,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
           detail: '本机操作过的洗衣订单会显示在这里。',
         ),
     };
-  }
-
-  List<OrderRowUi> _hotwaterRows() {
-    return [
-      for (final h in widget.state.hotwaterHistory)
-        OrderRowUi(
-          id: 'hotwater-${h.orderId}',
-          type: '住理热水',
-          time: h.time,
-          device: '热水设备 ${h.deviceId}',
-          amount: h.amount,
-          status: h.status,
-          statusColor: h.status.contains('使用')
-              ? AppColors.serviceBlue
-              : AppColors.serviceGreen,
-          iconAsset: ShuiAssets.shuiReshui,
-        ),
-    ];
   }
 
   List<OrderRowUi> _drinkingRows() {

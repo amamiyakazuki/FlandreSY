@@ -7,6 +7,7 @@ import '../../design_tokens.dart';
 import '../runtime/shui_runtime.dart';
 import '../runtime/hotwater_state.dart';
 import '../theme/shui_assets.dart';
+import 'hotwater_history_panel.dart';
 import '../theme/shui_motion.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
@@ -19,6 +20,7 @@ class HotwaterDetailScreen extends StatelessWidget {
     required this.onStart,
     required this.onStop,
     this.onClearLocal,
+    this.onRefreshHistory,
     super.key,
   });
 
@@ -27,6 +29,7 @@ class HotwaterDetailScreen extends StatelessWidget {
   final VoidCallback onStart;
   final VoidCallback onStop;
   final VoidCallback? onClearLocal;
+  final VoidCallback? onRefreshHistory;
 
   bool get _use798 =>
       state.hotwaterControlSystem == BathSystemPreference.shower798;
@@ -34,20 +37,6 @@ class HotwaterDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = AppTypography.textTheme;
-    final historyStatus = state.hotwater.historyStatus;
-    final historyMessage = historyStatus.message?.trim().isNotEmpty == true
-        ? historyStatus.message
-        : switch (historyStatus.state) {
-            RuntimeTaskState.idle =>
-              state.hotwaterHistory.isEmpty ? '热水历史尚未加载' : '历史记录尚未刷新',
-            RuntimeTaskState.loading => '正在加载热水历史',
-            RuntimeTaskState.failure => '热水历史加载失败，请稍后重试',
-            RuntimeTaskState.loginRequired => '请先登录住理账号后查询历史',
-            RuntimeTaskState.permissionRequired => '查询热水历史所需权限尚未授予',
-            RuntimeTaskState.paymentInProgress => '正在处理热水历史请求',
-            RuntimeTaskState.unavailable => '热水历史暂不可用，请稍后重试',
-            RuntimeTaskState.success => null,
-          };
     final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
     final session = state.hotwater.session;
     final canClearLocal = !busy &&
@@ -143,48 +132,19 @@ class HotwaterDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: AppCustomTokens.spaceSm),
                   SectionCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _DetailTitle(
-                          icon: ShuiAssets.shuiReshui,
-                          title: _use798 ? '洗浴记录' : '住理热水历史',
-                        ),
-                        const SizedBox(height: AppCustomTokens.spaceSm),
-                        if (!_use798 && historyMessage != null)
-                          RuntimeStatusBanner(
-                              status: RuntimeActionStatus(
-                                  state: historyStatus.state,
-                                  message: historyMessage)),
-                        if (_use798)
-                          Text(
-                            '慧生活798暂不提供账号历史，本页不会混入住理订单。',
-                            style: textTheme.bodySmall
-                                ?.copyWith(color: AppColors.mutedText),
-                          )
-                        else if (state.hotwaterHistory.isEmpty &&
-                            historyStatus.state == RuntimeTaskState.success)
-                          Text(
-                            '暂无热水历史',
-                            style: textTheme.bodySmall
-                                ?.copyWith(color: AppColors.mutedText),
-                          )
-                        else
-                          ...state.hotwaterHistory.map(
-                            (h) => Padding(
-                              padding: const EdgeInsets.only(
-                                bottom: AppCustomTokens.spaceSm,
-                              ),
-                              child: _HistoryRow(
-                                time: h.time,
-                                device: '设备 ${h.deviceId}',
-                                amount: h.amount,
-                                status: h.status,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    child: _use798
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                                _DetailTitle(
+                                    icon: ShuiAssets.shuiReshui, title: '洗浴记录'),
+                                const SizedBox(height: AppCustomTokens.spaceSm),
+                                Text('慧生活798暂不提供账号历史，本页不会混入住理订单。',
+                                    style: textTheme.bodySmall
+                                        ?.copyWith(color: AppColors.mutedText)),
+                              ])
+                        : HotwaterHistoryPanel(
+                            state: state, onRefresh: onRefreshHistory),
                   ),
                 ],
               ),
@@ -253,82 +213,4 @@ class _ControlButton extends StatelessWidget {
                   ?.copyWith(color: AppColors.onPrimary)),
         ),
       );
-}
-
-class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({
-    required this.time,
-    required this.device,
-    required this.amount,
-    required this.status,
-  });
-
-  final String time;
-  final String device;
-  final String amount;
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = AppTypography.textTheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppCustomTokens.radiusMedium,
-        vertical: AppCustomTokens.spaceSm,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppCustomTokens.radiusMedium),
-        border: Border.all(
-          color: AppColors.cardBorder
-              .withValues(alpha: AppCustomTokens.alphaOverlay),
-          width: AppCustomTokens.strokeThin,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            time,
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
-          ),
-          const SizedBox(height: AppCustomTokens.spaceXs),
-          Text(
-            device,
-            softWrap: true,
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
-          ),
-          const SizedBox(height: AppCustomTokens.spaceSm),
-          Wrap(
-            spacing: AppCustomTokens.spaceSm,
-            runSpacing: AppCustomTokens.spaceXs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                amount,
-                style:
-                    textTheme.titleSmall?.copyWith(color: AppColors.deepText),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppCustomTokens.spaceSm,
-                    vertical: AppCustomTokens.spaceXs),
-                decoration: BoxDecoration(
-                  color: AppColors.serviceGreen
-                      .withValues(alpha: AppCustomTokens.alphaChip),
-                  borderRadius:
-                      BorderRadius.circular(AppCustomTokens.radiusSmall),
-                  border: Border.all(
-                      color: AppColors.serviceGreen
-                          .withValues(alpha: AppCustomTokens.alphaSoftBorder)),
-                ),
-                child: Text(status,
-                    style: textTheme.labelMedium
-                        ?.copyWith(color: AppColors.serviceGreen)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
