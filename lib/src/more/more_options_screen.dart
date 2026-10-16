@@ -20,8 +20,7 @@ class MoreOptionsScreen extends StatefulWidget {
     required this.onImportDevices,
     required this.onExportDevices,
     required this.onOpenLogs,
-    required this.useSimulatedBackend,
-    required this.onToggleSimulatedBackend,
+    this.onLegacyRecovery,
     this.appVersion = kCurrentAppVersion,
     super.key,
   });
@@ -33,12 +32,7 @@ class MoreOptionsScreen extends StatefulWidget {
   final VoidCallback onExportDevices;
   final VoidCallback onOpenLogs;
   final String appVersion;
-
-  /// 当前「使用模拟后端」开关值（Phase 0）。true = 模拟；false = 真实（默认）。
-  final bool useSimulatedBackend;
-
-  /// 切换「使用模拟后端」。持久化 + 提示「重启后生效」（adapter 启动时一次性构造，无法热切）。
-  final ValueChanged<bool> onToggleSimulatedBackend;
+  final VoidCallback? onLegacyRecovery;
 
   @override
   State<MoreOptionsScreen> createState() => _MoreOptionsScreenState();
@@ -110,27 +104,6 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
                     ),
                     child: Column(
                       children: [
-                        MoreOptionRow(
-                          iconAsset: ShuiAssets.shuiRed3,
-                          title: '使用模拟后端',
-                          subtitle: widget.useSimulatedBackend
-                              ? '当前：模拟数据（重启后生效）'
-                              : '当前：真实后端（重启后生效）',
-                          trailing: Switch(
-                            value: widget.useSimulatedBackend,
-                            onChanged: (value) {
-                              widget.onToggleSimulatedBackend(value);
-                              _showInfo(
-                                '使用模拟后端',
-                                value
-                                    ? '已切换到模拟后端。重启 App 后生效（将使用 Fake 数据，无需真实账号/设备）。'
-                                    : '已切换到真实后端。重启 App 后生效（将连接真实登录/网络/支付/蓝牙）。',
-                              );
-                            },
-                            activeThumbColor: AppColors.onPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: AppCustomTokens.spaceSm),
                         for (final row in _rows()) ...[
                           MoreOptionRow(
                             iconAsset: row.icon,
@@ -178,6 +151,12 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
 
   List<_OptionRowData> _rows() {
     return [
+      if (widget.onLegacyRecovery != null)
+        _OptionRowData(
+            icon: ShuiAssets.shuiRed3,
+            title: '旧数据保全',
+            subtitle: '查看旧记录与登录、核对进度',
+            onTap: widget.onLegacyRecovery!),
       _OptionRowData(
         icon: ShuiAssets.shuiRed1,
         title: '权限检测',

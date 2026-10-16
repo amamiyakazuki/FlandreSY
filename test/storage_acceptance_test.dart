@@ -7,7 +7,7 @@ import 'package:flandresy/src/data/shared_prefs_local_device_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_settings_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_water_order_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_washer_history_repository.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 
 void main() {
   test(
@@ -32,7 +32,7 @@ void main() {
     expect(prefs.getString('local_devices_json'), '{broken-devices');
     expect(prefs.getString('local_devices_json_recovery_backup'),
         '{broken-devices');
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         initial: snapshot,
         water: SharedPrefsWaterOrderRepository(),
         washerHistory: SharedPrefsWasherHistoryRepository());

@@ -7,7 +7,7 @@ import 'package:flandresy/src/data/settings_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_settings_repository.dart';
 import 'package:flandresy/src/home/cards/hot_water_card.dart';
 import 'package:flandresy/src/hotwater/hotwater_detail_screen.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/hotwater_state.dart';
 import 'package:flandresy/src/runtime/models/hotwater_history.dart';
 import 'package:flandresy/src/widgets/shui_components.dart';
@@ -33,7 +33,7 @@ void main() {
       'successful login selects default, clearing persists without clearing account',
       () async {
     final settings = InMemorySettingsRepository();
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
       settings: settings,
       initial: const PersistedSnapshot(bathSystem: BathSystemPreference.none),
     );

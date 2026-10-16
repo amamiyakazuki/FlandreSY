@@ -2,7 +2,7 @@
 // for login / start / stop / history, faithful to legacy ZhuliApi + HotwaterRuntimeAdapter +
 // service-interfaces.md §Zhuli. HTTP (build signed request + parse) is testable via fixtures through
 // the injected ZhuliTransport; the BLE GATT steps go through BleTransport (SkeletonBleTransport throws
-// until the user wires a real plugin on-device). NOT enabled by default (main line = FakeHotwaterAdapter).
+// with the BLE transport explicitly injected by main().
 //
 // 真机接入（用户）：
 // 1. 选 BLE 插件（如 flutter_blue_plus），实现 BleTransport（scanAndConnect / writeHex / awaitNotify），

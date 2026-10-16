@@ -81,11 +81,9 @@ flutter test
 flutter run
 ```
 
-默认走真实后端。若需要无账号、无设备的纯演示模式：
+应用仅使用真实后端，模拟模式及其运行参数已移除。离线测试使用 `test/support` 中显式注入的替身，不连接真实账号、支付或设备。
 
-```bash
-flutter run --dart-define=SIMULATE_BACKEND=true
-```
+升级时先保全旧数据，各服务首次使用需重新登录。来源不明的活动记录核对前不会自动删除或控制设备；在“更多选项 → 旧数据保全”查看进度并重试。详见 [C1 计划与验收](docs/engineering/README.md)。
 
 ## 持续集成（CI）
 

@@ -1,3 +1,4 @@
+import 'support/fake_payment_launcher.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flandresy/src/data/adapters/ujing_adapter.dart';
@@ -9,9 +10,9 @@ import 'package:flandresy/src/data/adapters/zhuli_transport.dart';
 import 'package:flandresy/src/data/adapters/shower798_adapter.dart';
 import 'package:flandresy/src/data/adapters/real_shower798_adapter.dart';
 import 'package:flandresy/src/data/adapters/shower798_transport.dart';
-import 'package:flandresy/src/data/adapters/fake_ujing_adapter.dart';
-import 'package:flandresy/src/data/adapters/fake_hotwater_adapter.dart';
-import 'package:flandresy/src/data/adapters/fake_shower798_adapter.dart';
+import 'support/fake_ujing_adapter.dart';
+import 'support/fake_hotwater_adapter.dart';
+import 'support/fake_shower798_adapter.dart';
 
 const _session = ZhuliSessionData(
     platformToken: 'p',
@@ -33,7 +34,11 @@ void main() {
     final z = _ZTransport()..error = error;
     final s = _STransport()..error = error;
     await expectLater(
-        UjingHttpAdapter(transport: u, token: 'old').checkAccountValidity(),
+        UjingHttpAdapter(
+                launcher: const FakePaymentLauncher(),
+                transport: u,
+                token: 'old')
+            .checkAccountValidity(),
         throwsA(same(error)));
     await expectLater(
         RealZhuliAdapter(transport: z, session: _session)
@@ -48,7 +53,10 @@ void main() {
   test('Ujing probe is credentialed GET only, no campus change or creation',
       () async {
     final transport = _UTransport();
-    await UjingHttpAdapter(transport: transport, token: 'old')
+    await UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: transport,
+            token: 'old')
         .checkAccountValidity();
     final request = transport.requests.single;
     expect(request.method, 'GET');
@@ -84,7 +92,10 @@ void main() {
           invalid ? 'unauthorized' : 'no current campus',
           authInvalid: invalid);
       final transport = _UTransport()..error = error;
-      final adapter = UjingHttpAdapter(transport: transport, token: 'old');
+      final adapter = UjingHttpAdapter(
+          launcher: const FakePaymentLauncher(),
+          transport: transport,
+          token: 'old');
       await expectLater(adapter.checkAccountValidity(), throwsA(same(error)));
       expect(adapter.lastToken, 'old');
       expect(transport.requests, hasLength(1));
@@ -109,7 +120,9 @@ void main() {
   }
   test('missing credentials never dispatch a probe', () async {
     final u = _UTransport(), z = _ZTransport(), s = _STransport();
-    await expectLater(UjingHttpAdapter(transport: u).checkAccountValidity(),
+    await expectLater(
+        UjingHttpAdapter(launcher: const FakePaymentLauncher(), transport: u)
+            .checkAccountValidity(),
         throwsA(isA<UjingException>()));
     await expectLater(RealZhuliAdapter(transport: z).checkAccountValidity(),
         throwsA(isA<HotwaterException>()));
@@ -120,7 +133,10 @@ void main() {
   test('late Ujing unauthorized probe never clears a new login token',
       () async {
     final transport = _UTransport()..gate = Completer<Map<String, dynamic>>();
-    final adapter = UjingHttpAdapter(transport: transport, token: 'old');
+    final adapter = UjingHttpAdapter(
+        launcher: const FakePaymentLauncher(),
+        transport: transport,
+        token: 'old');
     final probe = expectLater(
         adapter.checkAccountValidity(), throwsA(isA<UjingException>()));
     await adapter.login('new', '1234');

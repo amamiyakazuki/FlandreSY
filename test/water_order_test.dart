@@ -1,3 +1,4 @@
+import 'support/fake_payment_launcher.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,7 +6,7 @@ import 'package:flandresy/src/data/adapters/ujing_adapter.dart';
 import 'package:flandresy/src/data/adapters/ujing_http_adapter.dart';
 import 'package:flandresy/src/data/adapters/ujing_transport.dart';
 import 'package:flandresy/src/data/water_order_repository.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/models/water_order.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/data/account_session_repository.dart';
@@ -15,9 +16,12 @@ void main() {
       () async {
     final transport = _Transport()..detailError = const UjingException('离线');
     final repo = InMemoryWaterOrderRepository();
-    final first = FakeShuiRuntime(
+    final first = TestRuntime(
       sessions: _sessions(),
-      ujing: UjingHttpAdapter(transport: transport, token: 'test'),
+      ujing: UjingHttpAdapter(
+          launcher: const FakePaymentLauncher(),
+          transport: transport,
+          token: 'test'),
       water: repo,
     );
     await first.ready;
@@ -35,7 +39,7 @@ void main() {
       'leaving page keeps polling; background pauses and foreground resumes',
       (tester) async {
     final transport = _Transport();
-    late FakeShuiRuntime runtime;
+    late ShuiRuntime runtime;
     await tester.runAsync(() async {
       runtime = await _runtime(transport);
       await runtime.scanDrinkingWaterAndCreateOrder('device-a');
@@ -68,7 +72,10 @@ void main() {
 
   test('adapter returns created ID without waiting for details', () async {
     final transport = _Transport();
-    final adapter = UjingHttpAdapter(transport: transport, token: 'test');
+    final adapter = UjingHttpAdapter(
+        launcher: const FakePaymentLauncher(),
+        transport: transport,
+        token: 'test');
     final result = await adapter.scanAndCreateWaterOrder('device-a');
     expect(result.order?.orderId, '1');
     expect(result.order?.orderNo, 'number-1');
@@ -220,11 +227,14 @@ void main() {
   });
 }
 
-Future<FakeShuiRuntime> _runtime(_Transport transport,
+Future<ShuiRuntime> _runtime(_Transport transport,
     [WaterOrderRepository? repo]) async {
-  final runtime = FakeShuiRuntime(
+  final runtime = TestRuntime(
     sessions: _sessions(),
-    ujing: UjingHttpAdapter(transport: transport, token: 'test'),
+    ujing: UjingHttpAdapter(
+        launcher: const FakePaymentLauncher(),
+        transport: transport,
+        token: 'test'),
     water: repo,
   );
   addTearDown(runtime.dispose);

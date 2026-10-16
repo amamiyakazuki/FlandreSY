@@ -1,3 +1,4 @@
+import 'support/fake_payment_launcher.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flandresy/src/data/account_session_repository.dart';
@@ -6,7 +7,7 @@ import 'package:flandresy/src/data/adapters/ujing_transport.dart';
 import 'package:flandresy/src/data/app_bootstrap.dart';
 import 'package:flandresy/src/data/water_order_repository.dart';
 import 'package:flandresy/src/data/washer_history_repository.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/shui_runtime_base.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/runtime/models/water_order.dart';
@@ -56,11 +57,14 @@ void main() {
       final water = _GateWater(gate: gateWater);
       final washer = _GateWasher(gate: !gateWater);
       final transport = _Transport();
-      final runtime = FakeShuiRuntime(
+      final runtime = TestRuntime(
           water: water,
           washerHistory: washer,
           sessions: InMemoryAccountSessionRepository(ujing: _account),
-          ujing: UjingHttpAdapter(transport: transport, token: 'token'));
+          ujing: UjingHttpAdapter(
+              launcher: const FakePaymentLauncher(),
+              transport: transport,
+              token: 'token'));
       addTearDown(runtime.dispose);
       await (gateWater ? water.started.future : washer.started.future);
       await runtime.handleAuthInvalidation(AuthService.ujing,
@@ -249,16 +253,18 @@ void main() {
   });
 }
 
-Future<FakeShuiRuntime> _runtime(_Transport transport,
+Future<ShuiRuntime> _runtime(_Transport transport,
     {WaterOrderRepository? water,
     WasherHistoryRepository? washer,
     bool preload = false,
     bool token = true,
     bool account = true}) async {
   final history = await washer?.loadHistory();
-  final runtime = FakeShuiRuntime(
-    ujing:
-        UjingHttpAdapter(transport: transport, token: token ? 'token' : null),
+  final runtime = TestRuntime(
+    ujing: UjingHttpAdapter(
+        launcher: const FakePaymentLauncher(),
+        transport: transport,
+        token: token ? 'token' : null),
     sessions:
         InMemoryAccountSessionRepository(ujing: account ? _account : null),
     water: water,

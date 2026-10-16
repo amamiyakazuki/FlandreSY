@@ -5,7 +5,7 @@
 import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
-import '../runtime/fake_shui_runtime.dart';
+import '../runtime/shui_runtime.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
 import 'profile_widgets.dart';

@@ -1,8 +1,9 @@
+import 'support/fake_payment_launcher.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-import 'package:flandresy/src/app/flandre_app.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/orders/orders_screen.dart';
 import 'package:flandresy/src/shell/shui_shell.dart';
 import 'package:flandresy/src/shell/shui_shell_chrome.dart';
@@ -15,7 +16,6 @@ import 'package:flandresy/src/data/adapters/ujing_http_adapter.dart';
 import 'package:flandresy/src/data/adapters/ujing_transport.dart';
 import 'package:flandresy/src/data/secure_session_repository.dart';
 import 'package:flandresy/src/data/water_order_repository.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/runtime/models/water_order.dart';
 
@@ -26,10 +26,13 @@ void main() {
   test('login cannot race a read-result persistence commit', () async {
     final transport = _UjingTransport();
     final repo = _DelayedOrderSave(_order(owner: _a));
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         sessions: _sessions(),
         water: repo,
-        ujing: UjingHttpAdapter(transport: transport, token: 'token-a'));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: transport,
+            token: 'token-a'));
     addTearDown(runtime.dispose);
     await runtime.ready;
     await transport.detailStarted.future;
@@ -66,10 +69,13 @@ void main() {
     transport.beforeDetail = () async {
       expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
     };
-    await tester.pumpWidget(FlandreApp(
+    await tester.pumpWidget(TestApp(
         sessions: _sessions(),
         water: repo,
-        ujing: UjingHttpAdapter(transport: transport, token: 'token-a')));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: transport,
+            token: 'token-a')));
     await tester.pumpAndSettle();
     final permission = find.text('好，开启权限');
     if (permission.evaluate().isNotEmpty) {
@@ -98,11 +104,14 @@ void main() {
     final secure = InMemorySecureSessionRepository(ujingToken: 'token-a');
     final repo = InMemoryWaterOrderRepository(
         snapshot: WaterOrderSnapshot(currentOrder: _order(owner: _a)));
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         sessions: _sessions(),
         secure: secure,
         water: repo,
-        ujing: UjingHttpAdapter(transport: transport, token: 'token-a'));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: transport,
+            token: 'token-a'));
     addTearDown(runtime.dispose);
     await runtime.ready;
     await transport.detailStarted.future;
@@ -122,10 +131,13 @@ void main() {
     final transport = _UjingTransport()..detail.complete({'orderStatus': '0'});
     final repo = InMemoryWaterOrderRepository(
         snapshot: WaterOrderSnapshot(currentOrder: _order()));
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         sessions: _sessions(),
         water: repo,
-        ujing: UjingHttpAdapter(transport: transport, token: 'token-a'));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: transport,
+            token: 'token-a'));
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.resumeUjingOrders();
@@ -145,10 +157,11 @@ void main() {
     final transport = _UjingTransport()..detail.complete({'orderStatus': '0'});
     final repo = InMemoryWaterOrderRepository(
         snapshot: WaterOrderSnapshot(currentOrder: _order()));
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         sessions: InMemoryAccountSessionRepository(),
         water: repo,
-        ujing: UjingHttpAdapter(transport: transport));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(), transport: transport));
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.pollWaterOrderOnce();
@@ -172,10 +185,13 @@ void main() {
   test('legacy owner must finish persistence before first query', () async {
     final transport = _UjingTransport();
     final repo = _DelayedOrderSave(_order());
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         sessions: _sessions(),
         water: repo,
-        ujing: UjingHttpAdapter(transport: transport, token: 'token-a'));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: transport,
+            token: 'token-a'));
     addTearDown(runtime.dispose);
     await repo.started.future;
     expect(runtime.state.currentWaterOrder?.ownerAccountKey, '');
@@ -195,10 +211,11 @@ void main() {
     final transport = _UjingTransport();
     final repo = InMemoryWaterOrderRepository(
         snapshot: WaterOrderSnapshot(currentOrder: _order()));
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         sessions: _sessions(),
         water: repo,
-        ujing: UjingHttpAdapter(transport: transport));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(), transport: transport));
     addTearDown(runtime.dispose);
     await runtime.ready;
     expect(runtime.state.ujingAccount, isNull);
@@ -215,10 +232,13 @@ void main() {
       () async {
     final transport = _UjingTransport();
     final repo = _FailOrderSave(_order());
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         sessions: _sessions(),
         water: repo,
-        ujing: UjingHttpAdapter(transport: transport, token: 'token-a'));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: transport,
+            token: 'token-a'));
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.resumeUjingOrders();
@@ -244,7 +264,7 @@ void main() {
       currentDeviceId: 'saved-device',
     ));
     final runtime =
-        FakeShuiRuntime(sessions: sessions, secure: secure, shower798: adapter);
+        TestRuntime(sessions: sessions, secure: secure, shower798: adapter);
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.loginShower798(_b, '1234');
@@ -269,7 +289,7 @@ void main() {
     final transport = _ShowerTransport()
       ..loginGate = Completer<Map<String, dynamic>>();
     final runtime =
-        FakeShuiRuntime(shower798: RealShower798Adapter(transport: transport));
+        TestRuntime(shower798: RealShower798Adapter(transport: transport));
     addTearDown(runtime.dispose);
     await runtime.ready;
     final login = runtime.loginShower798(_b, '1234');

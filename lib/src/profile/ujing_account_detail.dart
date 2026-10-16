@@ -6,7 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
-import '../runtime/fake_shui_runtime.dart';
+import '../runtime/shui_runtime.dart';
 import '../theme/shui_motion.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';

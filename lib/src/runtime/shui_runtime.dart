@@ -1,4 +1,4 @@
-// Composition entry for the fake runtime. State/enums and per-service actions are split
+// Composition entry for the application runtime. State/enums and per-service actions are split
 // into runtime_status / shui_home_state / shui_runtime_base / actions/* and re-exported here,
 // so existing consumers keep importing this single file unchanged.
 
@@ -9,6 +9,7 @@ import '../data/adapters/hotwater_adapter.dart';
 import '../data/adapters/shower798_adapter.dart';
 import '../data/adapters/ujing_adapter.dart';
 import '../data/app_bootstrap.dart';
+import '../data/legacy_data_migration.dart';
 import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
@@ -22,6 +23,7 @@ import '../data/water_order_repository.dart';
 import '../data/washer_history_repository.dart';
 import '../data/shared_prefs_washer_history_repository.dart';
 import 'actions/account_actions.dart';
+import 'actions/legacy_recovery_actions.dart';
 import 'actions/account_availability_actions.dart';
 import 'actions/devices_actions.dart';
 import 'actions/home_actions.dart';
@@ -36,10 +38,10 @@ import 'shui_runtime_base.dart';
 export 'runtime_status.dart';
 export 'shui_home_state.dart';
 
-/// Fake 运行时：组装各服务 action mixin 到统一的 [ShuiRuntimeBase]。
-/// 后续接真实 adapter 时，可按服务替换为独立 runtime / 真实 mixin，结构已就位。
-class FakeShuiRuntime extends ShuiRuntimeBase
+/// 组装各服务操作与旧数据恢复流程；业务适配器和安全仓库必须显式注入。
+class ShuiRuntime extends ShuiRuntimeBase
     with
+        LegacyRecoveryActions,
         HomeActions,
         DevicesActions,
         WaterActions,
@@ -48,18 +50,19 @@ class FakeShuiRuntime extends ShuiRuntimeBase
         WasherActions,
         HotwaterActions,
         AccountAvailabilityActions {
-  FakeShuiRuntime({
+  ShuiRuntime({
     super.settings,
     super.sessions,
     super.devices,
     super.history,
     super.water,
     super.washerHistory,
-    super.secure,
+    required super.secure,
+    required super.migration,
     super.clock,
-    super.ujing,
-    super.hotwater,
-    super.shower798,
+    required super.ujing,
+    required super.hotwater,
+    required super.shower798,
     super.diagnosticLog,
     super.appVersion,
     super.initial,
@@ -75,11 +78,12 @@ class ShuiRuntimeScope extends StatefulWidget {
     this.history,
     this.water,
     this.washerHistory,
-    this.secure,
+    required this.secure,
+    required this.migration,
     this.clock,
-    this.ujing,
-    this.hotwater,
-    this.shower798,
+    required this.ujing,
+    required this.hotwater,
+    required this.shower798,
     this.diagnosticLog,
     this.appVersion,
     this.initial,
@@ -105,19 +109,20 @@ class ShuiRuntimeScope extends StatefulWidget {
   final WasherHistoryRepository? washerHistory;
 
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
-  final SecureSessionRepository? secure;
+  final SecureSessionRepository secure;
+  final LegacyDataMigration migration;
 
   /// 可选注入的时间源（测试传 FixedLiveClock 保证 golden 确定性）。
   final LiveClock? clock;
 
-  /// 可选注入的 Ujing 适配器（默认 FakeUjingAdapter；真机验证注入 UjingHttpAdapter）。
-  final IUjingAdapter? ujing;
+  /// 必须显式注入的 U净适配器；生产使用 UjingHttpAdapter。
+  final IUjingAdapter ujing;
 
-  /// 可选注入的 Zhuli 热水适配器（默认 FakeHotwaterAdapter；真机验证注入 RealZhuliAdapter）。
-  final IHotwaterAdapter? hotwater;
+  /// 必须显式注入的住理适配器；生产使用 RealZhuliAdapter。
+  final IHotwaterAdapter hotwater;
 
-  /// 可选注入的 798 洗浴适配器（默认 FakeShower798Adapter；真机验证注入 RealShower798Adapter）。
-  final IShower798Adapter? shower798;
+  /// 必须显式注入的 798 适配器；生产使用 RealShower798Adapter。
+  final IShower798Adapter shower798;
 
   final DiagnosticLog? diagnosticLog;
   final String? appVersion;
@@ -126,7 +131,7 @@ class ShuiRuntimeScope extends StatefulWidget {
   /// 为 null 时由 runtime 异步从 repository 回填（测试路径）。
   final PersistedSnapshot? initial;
 
-  static FakeShuiRuntime of(BuildContext context) {
+  static ShuiRuntime of(BuildContext context) {
     final scope =
         context.dependOnInheritedWidgetOfExactType<_ShuiRuntimeInherited>();
     assert(scope != null, 'ShuiRuntimeScope is missing from the widget tree.');
@@ -139,13 +144,13 @@ class ShuiRuntimeScope extends StatefulWidget {
 
 class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
     with WidgetsBindingObserver {
-  late final FakeShuiRuntime runtime;
+  late final ShuiRuntime runtime;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    runtime = FakeShuiRuntime(
+    runtime = ShuiRuntime(
       settings: widget.settings ?? SharedPrefsSettingsRepository(),
       sessions: widget.sessions ?? SharedPrefsAccountSessionRepository(),
       devices: widget.devices ?? SharedPrefsLocalDeviceRepository(),
@@ -153,8 +158,7 @@ class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
       water: widget.water ?? SharedPrefsWaterOrderRepository(),
       washerHistory:
           widget.washerHistory ?? SharedPrefsWasherHistoryRepository(),
-      secure: widget
-          .secure, // null → base 默认 InMemory；real 模式由 main() 注入 flutter_secure_storage
+      secure: widget.secure,
       clock: widget.clock,
       ujing: widget.ujing,
       hotwater: widget.hotwater,
@@ -162,6 +166,7 @@ class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
       diagnosticLog: widget.diagnosticLog,
       appVersion: widget.appVersion,
       initial: widget.initial,
+      migration: widget.migration,
     );
   }
 
@@ -183,9 +188,9 @@ class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
   }
 }
 
-class _ShuiRuntimeInherited extends InheritedNotifier<FakeShuiRuntime> {
+class _ShuiRuntimeInherited extends InheritedNotifier<ShuiRuntime> {
   const _ShuiRuntimeInherited({required this.runtime, required super.child})
       : super(notifier: runtime);
 
-  final FakeShuiRuntime runtime;
+  final ShuiRuntime runtime;
 }

@@ -93,6 +93,20 @@ mixin HotwaterActions on ShuiRuntimeBase {
     await ready;
     if (isDisposed) return;
     final system = requestedSystem ?? state.hotwaterControlSystem;
+    if (!legacyServiceReady(
+        system == BathSystemPreference.zhuli ? 'zhuli' : 'shower798')) {
+      (start ? _emitStart : _emitStop)(
+          RuntimeTaskState.unavailable, '请先重新登录并完成旧数据保全');
+      return;
+    }
+    final old = state.hotwater.session;
+    if (old != null && pendingLegacy('hotwater', old.id)) {
+      if (start || !await verifyLegacyHotwater()) {
+        (start ? _emitStart : _emitStop)(
+            RuntimeTaskState.unavailable, '旧热水记录待核对，未发送控制指令');
+        return;
+      }
+    }
     if (hotwaterAuthChanging) {
       (start ? _emitStart : _emitStop)(
           RuntimeTaskState.unavailable, '正在更新登录状态，请稍后重试');
@@ -127,6 +141,10 @@ mixin HotwaterActions on ShuiRuntimeBase {
   Future<void> resumeHotwaterSession() => _enqueue(() async {
         final session = state.hotwater.session;
         if (session == null) return;
+        if (pendingLegacy('hotwater', session.id)) {
+          _pending('旧热水记录待核对，请重新登录原账号后重试；未自动清理或控制设备');
+          return;
+        }
         final expired = session.hasExceededRestoreWindow(clock.nowMillis());
         if (expired || !session.mayHaveStarted) {
           final cleared = await clearHotwaterSessionLocally(
@@ -153,7 +171,8 @@ mixin HotwaterActions on ShuiRuntimeBase {
       });
 
   bool _matchesAccount(HotwaterSession session) =>
-      session.simulated == simulatedHotwater &&
+      !session.simulated &&
+      !pendingLegacy('hotwater', session.id) &&
       (session.system == BathSystemPreference.zhuli
           ? state.zhuli.phone == session.account && !state.hotwaterLogin.isBusy
           : state.shower798Account?.mobile == session.account &&
@@ -218,7 +237,7 @@ mixin HotwaterActions on ShuiRuntimeBase {
         account: account,
         deviceId: device,
         system: system,
-        simulated: simulatedHotwater,
+        simulated: false,
         startedAtMillis: clock.nowMillis(),
         baselineOrderIds: const [],
       );
@@ -537,7 +556,7 @@ mixin HotwaterActions on ShuiRuntimeBase {
 
   /// 查询只更新订单，不改变本地开水状态；同一上下文合并请求。
   Future<void> loadHotwaterHistory() {
-    if (isDisposed) return Future<void>.value();
+    if (isDisposed || !legacyServiceReady('zhuli')) return Future<void>.value();
     final epoch = hotwaterAuthEpoch;
     final account = state.zhuli.phone;
     final sessionId = state.hotwater.session?.id;

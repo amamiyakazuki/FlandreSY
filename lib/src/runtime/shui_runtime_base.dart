@@ -7,9 +7,6 @@ import 'package:flutter/widgets.dart';
 
 import '../data/account_session_repository.dart';
 import '../data/diagnostic_log_repository.dart';
-import '../data/adapters/fake_hotwater_adapter.dart';
-import '../data/adapters/fake_shower798_adapter.dart';
-import '../data/adapters/fake_ujing_adapter.dart';
 import '../data/adapters/hotwater_adapter.dart';
 import '../data/adapters/real_shower798_adapter.dart';
 import '../data/adapters/real_zhuli_adapter.dart';
@@ -17,6 +14,7 @@ import '../data/adapters/shower798_adapter.dart';
 import '../data/adapters/ujing_adapter.dart';
 import '../data/adapters/ujing_http_adapter.dart';
 import '../data/app_bootstrap.dart';
+import '../data/legacy_data_migration.dart';
 import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
@@ -47,11 +45,12 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     HistoryRepository? history,
     WaterOrderRepository? water,
     WasherHistoryRepository? washerHistory,
-    SecureSessionRepository? secure,
+    required this.secure,
+    required this.migration,
     LiveClock? clock,
-    IUjingAdapter? ujing,
-    IHotwaterAdapter? hotwater,
-    IShower798Adapter? shower798,
+    required this.ujing,
+    required this.hotwater,
+    required this.shower798,
     DiagnosticLog? diagnosticLog,
     String? appVersion,
     PersistedSnapshot? initial,
@@ -62,11 +61,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
         water = water ?? InMemoryWaterOrderRepository(),
         washerHistoryRepository =
             washerHistory ?? InMemoryWasherHistoryRepository(),
-        secure = secure ?? InMemorySecureSessionRepository(),
         clock = clock ?? const SystemLiveClock(),
-        ujing = ujing ?? const FakeUjingAdapter(),
-        hotwater = hotwater ?? FakeHotwaterAdapter(),
-        shower798 = shower798 ?? FakeShower798Adapter(),
         diagnosticLog = diagnosticLog ??
             DiagnosticLog(repo: InMemoryDiagnosticLogRepository()),
         appVersion = appVersion ?? kCurrentAppVersion,
@@ -74,25 +69,33 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     // 恢复 deviceSeq / hotwaterOrderSeq 起点，避免新增 id 与已持久化数据撞号。
     deviceSeq = _maxDeviceSeq(_state.localDevices);
     hotwaterOrderSeq = _maxOrderSeq(_state.hotwater.history);
-    if (initial != null) applyRecoveryWarnings(initial);
-    // 若已由 main() 预加载注入快照（生产路径，消除首帧闪烁），无需再异步回填；
-    // 否则（测试/未预加载）从 repository 异步恢复，完成后 emit 一次。
-    if (initial == null) {
-      ready = _restorePersisted().then((_) async {
-        reconcileRestoredAuth();
-        await resumeHotwaterSession();
-        await migrateLegacyUjingOrders();
-        unawaited(resumeUjingOrders());
-      });
-    } else {
+    ready = Future<void>.microtask(() async {
+      await migration.prepare();
+      if (initial == null) {
+        await _restorePersisted();
+      } else {
+        applyRecoveryWarnings(initial);
+      }
       reconcileRestoredAuth();
-      ready = Future<void>.microtask(() async {
-        await resumeHotwaterSession();
-        await migrateLegacyUjingOrders();
-        unawaited(resumeUjingOrders());
-      });
-    }
+      await prepareLegacyRecords();
+      await resumeHotwaterSession();
+      await migrateLegacyUjingOrders();
+      unawaited(resumeUjingOrders());
+    });
   }
+
+  final LegacyDataMigration migration;
+  bool get legacyStorageBlocked =>
+      migration.blocked || recoveryWarnings.isNotEmpty;
+  Future<void> prepareLegacyRecords();
+  Future<void> retryLegacyRecovery();
+  Future<bool> verifyLegacyWater();
+  Future<bool> verifyLegacyWasher();
+  Future<bool> verifyLegacyHotwater();
+  bool pendingLegacy(String kind, String id) =>
+      legacyStorageBlocked || migration.isPending(kind, id);
+  bool legacyServiceReady(String service) =>
+      !legacyStorageBlocked && !migration.needsLogin(service);
 
   late final Future<void> ready;
   bool isDisposed = false;
@@ -128,14 +131,15 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     }
   }
 
-  String get ujingAccountKey =>
-      state.ujingAccount?.mobile.trim() ??
-      (ujing is UjingHttpAdapter ? '' : '__simulated__');
+  String get ujingAccountKey => legacyServiceReady('ujing')
+      ? state.ujingAccount?.mobile.trim() ?? ''
+      : '';
   bool isUjingRequestCurrent(int epoch) =>
       !isDisposed && epoch == ujingAuthEpoch && !ujingAuthChanging;
   bool canAccessUjingOrder(String owner) =>
       !isDisposed &&
       !ujingAuthChanging &&
+      legacyServiceReady('ujing') &&
       ujingAccountKey.isNotEmpty &&
       owner == ujingAccountKey;
   Future<void> resumeUjingOrders();
@@ -157,28 +161,29 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       message: '请重新登录',
     );
     if (ujing is UjingHttpAdapter &&
-        ((ujing as UjingHttpAdapter).lastToken?.isNotEmpty != true ||
+        (migration.needsLogin('ujing') ||
+            (ujing as UjingHttpAdapter).lastToken?.isNotEmpty != true ||
             state.ujingAccount == null)) {
       (ujing as UjingHttpAdapter).invalidateAuth();
       emit(state.copyWith(clearUjingAccount: true, washerLogin: required));
     }
     if (hotwater is RealZhuliAdapter &&
-        (!(hotwater as RealZhuliAdapter).hasCredentials ||
+        (migration.needsLogin('zhuli') ||
+            !(hotwater as RealZhuliAdapter).hasCredentials ||
             !state.zhuli.isLoggedIn)) {
       (hotwater as RealZhuliAdapter).invalidateAuth();
       emit(state.copyWith(
           zhuli: state.zhuli.copyWith(phone: ''), hotwaterLogin: required));
     }
     if (shower798 is RealShower798Adapter &&
-        ((shower798 as RealShower798Adapter).lastToken?.isNotEmpty != true ||
+        (migration.needsLogin('shower798') ||
+            (shower798 as RealShower798Adapter).lastToken?.isNotEmpty != true ||
             state.shower798Account == null)) {
       (shower798 as RealShower798Adapter).invalidateAuth();
       emit(state.copyWith(
           clearShower798Account: true, shower798Login: required));
     }
   }
-
-  bool get simulatedHotwater => hotwater is FakeHotwaterAdapter;
 
   Future<void> resumeHotwaterSession();
 
@@ -191,7 +196,9 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     RuntimeActionStatus? stopStatus,
   }) async {
     final session = state.hotwater.session;
-    if (isDisposed || session == null) return false;
+    if (isDisposed || session == null || pendingLegacy('hotwater', session.id)) {
+      return false;
+    }
     if (expected != null && expected.id != session.id) return false;
 
     try {
@@ -244,22 +251,19 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   final WasherHistoryRepository washerHistoryRepository;
 
   /// 敏感凭证持久化（PTOK）。token/secretKey 加密存储；action 层登录成功后写入。
-  /// 默认 InMemory（测试确定）；生产 real 模式注入 flutter_secure_storage 实现。
+  /// 生产注入 flutter_secure_storage；测试显式提供内存仓库。
   final SecureSessionRepository secure;
 
   /// 时间源（W2 live 倒计时）。生产 SystemLiveClock，测试 FixedLiveClock。
   final LiveClock clock;
 
   /// Ujing 后端适配器（P4 A1）。生产默认注入 UjingHttpAdapter（Phase 0 翻真）；
-  /// 未注入（null）→ FakeUjingAdapter，用于测试/golden 及模拟后端模式。
   final IUjingAdapter ujing;
 
   /// Zhuli 热水适配器（P4 Z1）。生产默认注入 RealZhuliAdapter；
-  /// 未注入（null）→ FakeHotwaterAdapter（测试/golden/模拟模式）。
   final IHotwaterAdapter hotwater;
 
   /// 慧生活798 洗浴适配器（P4 S798）。生产默认注入 RealShower798Adapter；
-  /// 未注入（null）→ FakeShower798Adapter（测试/golden/模拟模式）。
   final IShower798Adapter shower798;
 
   final DiagnosticLog diagnosticLog;
@@ -395,7 +399,6 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     final base = seedState();
     return base.copyWith(
       bathSystemPreference: snap.bathSystem,
-      useSimulatedBackend: snap.useSimulatedBackend,
       permissionIntroSeen: snap.permissionIntroSeen,
       zhuli: snap.zhuli,
       hotwaterLogin: snap.zhuli?.isLoggedIn ?? false
@@ -459,6 +462,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       history,
       water,
       washerHistoryRepository,
+      migration: migration,
     );
     final restored = _applySnapshot(snap);
     applyRecoveryWarnings(snap);
@@ -523,7 +527,11 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   Future<void> pollHotwaterStatusOnce();
 
   void startWaterPolling() {
-    if (isDisposed || _pollingPaused || state.currentWaterOrder == null) {
+    if (isDisposed ||
+        _pollingPaused ||
+        state.currentWaterOrder == null ||
+        pendingLegacy('water', state.currentWaterOrder!.orderId) ||
+        !legacyServiceReady('ujing')) {
       return;
     }
     stopWaterPolling();

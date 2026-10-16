@@ -1,6 +1,6 @@
 import 'package:flandresy/src/data/app_bootstrap.dart';
 import 'package:flandresy/src/data/washer_history_repository.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/models/washer_order.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -27,7 +27,7 @@ void main() {
   });
 
   test('restored washer history survives leaving washer flow', () async {
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
       initial: const PersistedSnapshot(
         bathSystem: BathSystemPreference.none,
         washerHistory: [record],
@@ -44,7 +44,7 @@ void main() {
 
   test('creating a washer order writes its history repository', () async {
     final repository = InMemoryWasherHistoryRepository();
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
       washerHistory: repository,
       initial: const PersistedSnapshot(
         bathSystem: BathSystemPreference.none,
@@ -53,6 +53,7 @@ void main() {
     addTearDown(runtime.dispose);
 
     await runtime.ready;
+    await runtime.loginUjing('test-account', 'test-code');
     await runtime.scanWasher('washer-code');
     final model = runtime.state.washer.program!.models.first;
     await runtime.createWasherOrder(

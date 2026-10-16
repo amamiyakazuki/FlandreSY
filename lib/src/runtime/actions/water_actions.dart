@@ -19,6 +19,7 @@ mixin WaterActions on ShuiRuntimeBase {
 
   @override
   Future<void> migrateLegacyUjingOrders() {
+    if (migration.hasLegacy || legacyStorageBlocked) return Future.value();
     if (_legacyMigration != null) return _legacyMigration!;
     late final Future<void> request;
     request = _migrateLegacyUjingOrders().whenComplete(() {
@@ -84,7 +85,7 @@ mixin WaterActions on ShuiRuntimeBase {
   }
 
   bool _waterStorageReady() {
-    if (!ujingOrderStorageBlocked) return true;
+    if (!ujingOrderStorageBlocked && !legacyStorageBlocked) return true;
     emit(state.copyWith(
         waterOrder: const RuntimeActionStatus(
             state: RuntimeTaskState.failure,
@@ -96,6 +97,7 @@ mixin WaterActions on ShuiRuntimeBase {
   Future<void> resumeUjingOrders() async {
     if (isDisposed || ujingAuthChanging) return;
     if (!_waterStorageReady()) return;
+    if (!legacyServiceReady('ujing')) return;
     await migrateLegacyUjingOrders();
     if (isDisposed || ujingAuthChanging) return;
     final order = state.currentWaterOrder;
@@ -109,6 +111,13 @@ mixin WaterActions on ShuiRuntimeBase {
   }
 
   bool _canUseWaterOrder(WaterOrderUi order) {
+    if (pendingLegacy('water', order.orderId)) {
+      emit(state.copyWith(
+          waterOrder: const RuntimeActionStatus(
+              state: RuntimeTaskState.unavailable,
+              message: '旧接水记录待核对，请登录后重试核对')));
+      return false;
+    }
     if (canAccessUjingOrder(order.ownerAccountKey)) return true;
     stopWaterPolling();
     emit(state.copyWith(
@@ -126,6 +135,10 @@ mixin WaterActions on ShuiRuntimeBase {
       required String accountKey,
       required int epoch}) async {
     if (!_waterStorageReady()) return;
+    if (migration.hasLegacy) {
+      await verifyLegacyWater();
+      return;
+    }
     final order = state.currentWaterOrder;
     if (order == null ||
         order.orderId != orderId ||
@@ -340,6 +353,8 @@ mixin WaterActions on ShuiRuntimeBase {
   /// fake：第一次刷新视为用户已在机器上完成接水 → status=50 + 上报扣费，
   /// 写入历史并清空当前订单（终态）。
   Future<void> refreshCurrentDrinkingWaterOrder() async {
+    await ready;
+    if (!await verifyLegacyWater()) return;
     await _refreshCurrentDrinkingWaterOrder(showLoading: true);
   }
 

@@ -23,13 +23,6 @@ mixin HomeActions on ShuiRuntimeBase {
     setBathSystem(next);
   }
 
-  /// 切换「使用模拟后端」（Phase 0）。emit 新值让开关即时反映 + 持久化。
-  /// adapter 在启动时一次性构造，故实际生效需重启（UI 侧提示「重启后生效」）。
-  void setUseSimulatedBackend(bool useSimulated) {
-    emit(state.copyWith(useSimulatedBackend: useSimulated));
-    settings.saveUseSimulatedBackend(useSimulated);
-  }
-
   void _clearHomeBannerLater() {
     scheduleHomeBannerClear(() {
       emit(

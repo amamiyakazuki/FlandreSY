@@ -23,14 +23,6 @@ abstract class SettingsRepository {
   Future<HotwaterSession?> loadHotwaterSession();
   Future<void> saveHotwaterSession(HotwaterSession? session);
 
-  /// 读取「使用模拟后端」开关（Phase 0）；无记录时返回 [fallback]。
-  /// true = 强制全 Fake + InMemory（无账号/设备的开发演示）；false = 真实后端（默认）。
-  /// main() 在建 adapter 前读取此值决定注入真实还是 Fake。
-  Future<bool> loadUseSimulatedBackend({bool fallback = false});
-
-  /// 持久化「使用模拟后端」开关。因 adapter 在启动时一次性构造，改动需重启才生效。
-  Future<void> saveUseSimulatedBackend(bool useSimulated);
-
   Future<bool> loadPermissionIntroSeen({bool fallback = false});
 
   Future<void> savePermissionIntroSeen(bool seen);
@@ -40,12 +32,9 @@ abstract class SettingsRepository {
 class InMemorySettingsRepository implements SettingsRepository {
   InMemorySettingsRepository({
     BathSystemPreference? initial,
-    bool? useSimulatedBackend,
-  })  : _bathSystem = initial,
-        _useSimulatedBackend = useSimulatedBackend;
+  }) : _bathSystem = initial;
 
   BathSystemPreference? _bathSystem;
-  bool? _useSimulatedBackend;
   bool? _permissionIntroSeen;
 
   @override
@@ -66,16 +55,6 @@ class InMemorySettingsRepository implements SettingsRepository {
   @override
   Future<void> saveHotwaterSession(HotwaterSession? session) async {
     _hotwaterSession = session;
-  }
-
-  @override
-  Future<bool> loadUseSimulatedBackend({bool fallback = false}) async {
-    return _useSimulatedBackend ?? fallback;
-  }
-
-  @override
-  Future<void> saveUseSimulatedBackend(bool useSimulated) async {
-    _useSimulatedBackend = useSimulated;
   }
 
   @override

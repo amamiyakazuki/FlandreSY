@@ -5,7 +5,7 @@
 //
 // THIS IS THE ONLY LAYER THAT TOUCHES THE REAL BLE RADIO, and it is NOT verified by Codex (no BLE
 // hardware on the build host) — real scan/connect/GATT behavior MUST be verified ON-DEVICE by the user.
-// Not enabled by default (main line = FakeHotwaterAdapter; RealZhuliAdapter defaults to SkeletonBleTransport).
+// Production explicitly injects this transport into RealZhuliAdapter.
 //
 // 真机接入前提：Android 已声明 BLUETOOTH_SCAN/CONNECT（<31 用 ACCESS_FINE_LOCATION）+ 运行时授权；
 // iOS 已声明 NSBluetooth*UsageDescription。蓝牙需已开启。

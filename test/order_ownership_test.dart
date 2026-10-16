@@ -1,13 +1,14 @@
+import 'support/fake_payment_launcher.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flandresy/src/data/account_session_repository.dart';
-import 'package:flandresy/src/data/adapters/fake_ujing_adapter.dart';
+import 'support/fake_ujing_adapter.dart';
 import 'package:flandresy/src/data/adapters/ujing_adapter.dart';
 import 'package:flandresy/src/data/adapters/ujing_http_adapter.dart';
 import 'package:flandresy/src/data/adapters/ujing_transport.dart';
 import 'package:flandresy/src/data/washer_history_repository.dart';
 import 'package:flandresy/src/data/water_order_repository.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/shui_runtime_base.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/runtime/models/washer_order.dart';
@@ -87,8 +88,11 @@ void main() {
       () async {
     final transport = _WasherTransport();
     final repo = InMemoryWasherHistoryRepository();
-    final runtime = FakeShuiRuntime(
-        ujing: UjingHttpAdapter(transport: transport, token: 'token'),
+    final runtime = TestRuntime(
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: transport,
+            token: 'token'),
         washerHistory: repo,
         sessions: InMemoryAccountSessionRepository(ujing: _account));
     addTearDown(runtime.dispose);
@@ -499,9 +503,9 @@ void main() {
   });
 }
 
-Future<FakeShuiRuntime> _runtime(_Adapter adapter,
+Future<ShuiRuntime> _runtime(_Adapter adapter,
     {WaterOrderRepository? water, WasherHistoryRepository? washer}) async {
-  final runtime = FakeShuiRuntime(
+  final runtime = TestRuntime(
       ujing: adapter,
       water: water,
       washerHistory: washer,

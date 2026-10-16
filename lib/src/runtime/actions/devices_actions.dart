@@ -122,10 +122,11 @@ mixin DevicesActions on ShuiRuntimeBase {
 
   /// 刷新本地设备状态（P1-FIX：按已存的 qrUrl 逐台查真实状态回填，取代旧 no-op / 更早的 fake 盲切）。
   /// 洗衣机的码固定存在 [LocalDeviceShortcut.qrUrl] → 逐台 `scanWasher(qrUrl)` 得真实
-  /// createOrderEnabled/reason → 回填 lastStatus（真实模式=真实后端；模拟模式=fake adapter 的合理值）。
+  /// createOrderEnabled/reason → 回填 lastStatus（来自已注入的业务适配器）。
   /// 单台失败不中断整批（保留原状态）；authInvalid 停止并走 RELOG。饮水机无单台状态查询，跳过。
   Future<void> refreshLocalDevices() async {
     await ready;
+    if (!legacyServiceReady('ujing')) return;
     if (isDisposed || ujingAuthChanging || state.devicesRefresh.isBusy) {
       return;
     }

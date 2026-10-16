@@ -1,4 +1,4 @@
-// Immutable aggregate UI state (no visual constants). Split out of fake_shui_runtime.dart.
+// Immutable aggregate UI state (no visual constants). Split out of shui_runtime.dart.
 
 import 'package:flutter/foundation.dart';
 
@@ -23,7 +23,6 @@ class ShuiHomeState {
     ),
     this.washerScan = const RuntimeActionStatus(),
     this.bathSystemPreference = BathSystemPreference.none,
-    this.useSimulatedBackend = false,
     this.permissionIntroSeen = false,
     this.localDevices = const <LocalDeviceShortcut>[],
     this.localDevicesLastRefreshed = '',
@@ -45,8 +44,6 @@ class ShuiHomeState {
   final RuntimeActionStatus washerScan;
   final BathSystemPreference bathSystemPreference;
 
-  /// 「使用模拟后端」开关（Phase 0）。反映持久化/待生效值；改后需重启才真正切换 adapter。
-  final bool useSimulatedBackend;
 
   /// 首次权限引导是否已经确认。只记录引导完成，不代表系统权限已授予。
   final bool permissionIntroSeen;
@@ -259,7 +256,6 @@ class ShuiHomeState {
     RuntimeActionStatus? waterScan,
     RuntimeActionStatus? washerScan,
     BathSystemPreference? bathSystemPreference,
-    bool? useSimulatedBackend,
     bool? permissionIntroSeen,
     List<LocalDeviceShortcut>? localDevices,
     String? localDevicesLastRefreshed,
@@ -315,7 +311,6 @@ class ShuiHomeState {
       waterScan: waterScan ?? this.waterScan,
       washerScan: washerScan ?? this.washerScan,
       bathSystemPreference: bathSystemPreference ?? this.bathSystemPreference,
-      useSimulatedBackend: useSimulatedBackend ?? this.useSimulatedBackend,
       permissionIntroSeen: permissionIntroSeen ?? this.permissionIntroSeen,
       localDevices: localDevices ?? this.localDevices,
       localDevicesLastRefreshed:

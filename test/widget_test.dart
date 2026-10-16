@@ -1,6 +1,6 @@
 // Design tokens used indirectly via FlandreApp; this smoke test verifies the current bounded module shell.
 
-import 'package:flandresy/src/app/flandre_app.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/profile/account_detail_screen.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets('Flandre shell shows Home first screen', (tester) async {
-    await tester.pumpWidget(const FlandreApp());
+    await tester.pumpWidget(TestApp());
     await tester.pumpAndSettle(const Duration(milliseconds: 700));
 
     expect(find.text('芙兰水衣'), findsWidgets);
@@ -19,7 +19,7 @@ void main() {
   });
 
   testWidgets('permission dialog can be dismissed', (tester) async {
-    await tester.pumpWidget(const FlandreApp());
+    await tester.pumpWidget(TestApp());
     await tester.pumpAndSettle(const Duration(milliseconds: 700));
 
     expect(find.text('先给小助手一点权限吧'), findsOneWidget);
@@ -30,9 +30,11 @@ void main() {
 
   testWidgets('account hub opens and routes to selected account',
       (tester) async {
-    await tester.pumpWidget(const FlandreApp());
+    await tester.pumpWidget(TestApp());
     await tester.pumpAndSettle(const Duration(milliseconds: 700));
 
+    await tester.tap(find.text('好，开启权限'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('账号中心'));

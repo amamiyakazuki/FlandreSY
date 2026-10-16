@@ -1,8 +1,7 @@
 // Real 慧生活798 adapter (no visual constants). Orchestrates the token-auth HTTP endpoints for
 // captcha / sms / login / devices / start / stop / idle, faithful to legacy Shower798RuntimeAdapter.kt.
 // HTTP (build request + parse) is testable via fixtures through the injected Shower798Transport;
-// the real socket lives in IoShower798Transport (verified ON-DEVICE by the user). NOT enabled by
-// default (main line = FakeShower798Adapter). Pure HTTP — no BLE, no signing.
+// Production injects IoShower798Transport. Pure HTTP — no BLE, no signing.
 //
 // 真机接入（用户）：注入 RealShower798Adapter(transport: IoShower798Transport())，用真实 798 账号走
 // 验证码 → 登录 → 设备列表/增删 → 开关洗浴。doubleRandom/timestamp 由客户端生成（真机用真实值）。

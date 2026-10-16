@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
-import '../runtime/fake_shui_runtime.dart';
+import '../runtime/shui_runtime.dart';
 import '../runtime/hotwater_state.dart';
 import '../theme/shui_assets.dart';
 import '../theme/shui_motion.dart';
@@ -76,8 +76,7 @@ class HotwaterDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _DetailTitle(
-                            icon: ShuiAssets.shuiFire, title: '当前热水'),
+                        _DetailTitle(icon: ShuiAssets.shuiFire, title: '当前热水'),
                         const SizedBox(height: AppCustomTokens.spaceSm),
                         RuntimeStatusBanner(status: state.hotwaterStart),
                         if (state.hotwaterStop.message != null) ...[

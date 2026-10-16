@@ -3,7 +3,7 @@
 // The Android native side is wired (MainActivity.kt payV2 handler + alipaysdk dependency +
 // H5PayActivity from the SDK's own manifest). iOS native side is NOT yet wired.
 // Real money / sandbox verification is done ON-DEVICE by the user. Injected in the default
-// (real) mode; skipped only when the simulate-backend toggle is ON (or --dart-define=SIMULATE_BACKEND=true).
+// production composition; offline tests inject a test launcher.
 
 import 'package:flutter/services.dart';
 

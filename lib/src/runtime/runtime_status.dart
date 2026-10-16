@@ -1,4 +1,4 @@
-// Pure runtime status/enums (no visual constants). Split out of fake_shui_runtime.dart
+// Pure runtime status/enums (no visual constants). Split out of shui_runtime.dart
 // for maintainability (Grok B1 Major 1 / B2 Major 1: avoid runtime aggregation).
 
 import 'package:flutter/foundation.dart';

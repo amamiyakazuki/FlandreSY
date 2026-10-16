@@ -13,12 +13,13 @@ import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
 import '../hotwater/hotwater_detail_screen.dart';
 import '../more/more_options_screen.dart';
+import '../more/legacy_recovery_sheet.dart';
 import '../more/log_screen.dart';
 import '../orders/orders_screen.dart';
 import '../profile/account_detail_screen.dart';
 import '../profile/account_hub_screen.dart';
 import '../profile/profile_screen.dart';
-import '../runtime/fake_shui_runtime.dart';
+import '../runtime/shui_runtime.dart';
 import '../runtime/models/local_device.dart';
 import '../runtime/scan_routing.dart';
 import '../theme/shui_motion.dart';
@@ -324,15 +325,24 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
                             child: Stack(children: _overlays(runtime)),
                           ),
                   ),
-                  if (runtime.recoveryWarnings.isNotEmpty)
+                  if (runtime.legacyStorageBlocked ||
+                      runtime.migration.hasPendingRecords ||
+                      (runtime.migration.hasLegacy &&
+                          ['ujing', 'zhuli', 'shower798']
+                              .any(runtime.migration.needsLogin)))
                     Align(
                         alignment: Alignment.topCenter,
                         child: SafeArea(
                           child: Material(
                             color: Theme.of(context).colorScheme.errorContainer,
-                            child: const Padding(
-                                padding: EdgeInsets.all(12),
-                                child: Text('部分本地记录未能恢复，原数据已保留，请查看诊断日志')),
+                            child: TextButton(
+                                onPressed: () => showLegacyRecoverySheet(
+                                    context,
+                                    runtime,
+                                    () => _setRoute(const AccountHubRoute())),
+                                child: Text(runtime.legacyStorageBlocked
+                                    ? '旧数据保全未完成 · 查看与重试'
+                                    : '旧数据已保留，首次使用请重新登录 · 查看')),
                           ),
                         )),
                   AnimatedSwitcher(
@@ -372,7 +382,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     return 'no-overlay';
   }
 
-  Widget _routeBody(FakeShuiRuntime runtime, ShuiRoute route) {
+  Widget _routeBody(ShuiRuntime runtime, ShuiRoute route) {
     final body = switch (route) {
       TabRoute(:final tab) => _tabBody(runtime, tab),
       EmptyDevicesRoute() => EmptyDevicesView(
@@ -445,9 +455,12 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onImportDevices: () => _importDevices(runtime),
           onExportDevices: () => _exportDevices(runtime),
           onOpenLogs: () => _setRoute(const DiagnosticLogRoute()),
+          onLegacyRecovery: runtime.migration.hasLegacy ||
+                  runtime.legacyStorageBlocked
+              ? () => showLegacyRecoverySheet(
+                  context, runtime, () => _setRoute(const AccountHubRoute()))
+              : null,
           appVersion: runtime.appVersion,
-          useSimulatedBackend: runtime.state.useSimulatedBackend,
-          onToggleSimulatedBackend: runtime.setUseSimulatedBackend,
         ),
       DiagnosticLogRoute() => LogScreen(
           log: runtime.diagnosticLog,
@@ -471,13 +484,13 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     };
   }
 
-  Future<void> _exportDevices(FakeShuiRuntime runtime) async {
+  Future<void> _exportDevices(ShuiRuntime runtime) async {
     final json = LocalDeviceCodec.encode(runtime.state.localDevices);
     await Clipboard.setData(ClipboardData(text: json));
     if (mounted) _showScanMessage('设备列表已复制到剪贴板');
   }
 
-  Future<void> _importDevices(FakeShuiRuntime runtime) async {
+  Future<void> _importDevices(ShuiRuntime runtime) async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final ok = await runtime.importLocalDevicesFromJson(data?.text ?? '');
     if (mounted) {
@@ -485,7 +498,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     }
   }
 
-  Widget _tabBody(FakeShuiRuntime runtime, MainTab tab) {
+  Widget _tabBody(ShuiRuntime runtime, MainTab tab) {
     return switch (tab) {
       MainTab.home => HomeScreen(
           state: runtime.state,
@@ -537,7 +550,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     };
   }
 
-  void _openDevice(FakeShuiRuntime runtime, LocalDeviceShortcut device) {
+  void _openDevice(ShuiRuntime runtime, LocalDeviceShortcut device) {
     if (device.deviceType == LocalDeviceType.drinkingWater) {
       final cd = device.cd ?? '';
       _setRoute(DrinkingWaterRoute(cd));
@@ -552,7 +565,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   }
 
   /// 离开洗衣下单页：清理 washer 瞬态，回到 Devices tab。
-  void _leaveWasherOrder(FakeShuiRuntime runtime) {
+  void _leaveWasherOrder(ShuiRuntime runtime) {
     _handlePop();
   }
 
@@ -560,7 +573,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   /// 洗衣机：自动加到设备页（去重+持久化）后进下单页 + scanWasher；
   /// 饮水机回首页 + 一步式接水（一次性，不落设备）；无法识别 → SnackBar 提示。
   /// 对齐 legacy ShuiScreens.kt scannerLauncher 分发。相机层由用户真机验证。
-  Future<void> _scanFromHome(FakeShuiRuntime runtime) async {
+  Future<void> _scanFromHome(ShuiRuntime runtime) async {
     final qr = await _openScanner();
     if (qr == null || !mounted) {
       return;
@@ -583,7 +596,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
 
   /// 设备页「+」→「开始扫码」→ 打开真实相机（RSCAN）→ 得 qr →
   /// runtime.addScannedDeviceFromQr（分类落洗衣/饮水快捷入口，去重 + 持久化）。
-  Future<void> _scanToAddDevice(FakeShuiRuntime runtime) async {
+  Future<void> _scanToAddDevice(ShuiRuntime runtime) async {
     final qr = await _openScanner();
     if (qr == null || !mounted) {
       return;
@@ -614,12 +627,12 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   }
 
   /// 按浴室偏好路由热水启动：798（已登录+选设备）走洗浴，否则走住理热水。
-  bool _use798(FakeShuiRuntime runtime) {
+  bool _use798(ShuiRuntime runtime) {
     final s = runtime.state;
     return s.hotwaterControlSystem == BathSystemPreference.shower798;
   }
 
-  void _startHotwater(FakeShuiRuntime runtime) {
+  void _startHotwater(ShuiRuntime runtime) {
     if (runtime.state.hotwaterControlSystem == BathSystemPreference.none) {
       _showScanMessage('请先选择洗浴系统');
       return;
@@ -631,11 +644,17 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     }
   }
 
-  void _stopHotwater(FakeShuiRuntime runtime) {
+  void _stopHotwater(ShuiRuntime runtime) {
     runtime.stopActiveHotwater();
   }
 
-  Future<void> _clearLocalHotwater(FakeShuiRuntime runtime) async {
+  Future<void> _clearLocalHotwater(ShuiRuntime runtime) async {
+    final session = runtime.state.hotwater.session;
+    if (session != null && runtime.pendingLegacy('hotwater', session.id)) {
+      await showLegacyRecoverySheet(
+          context, runtime, () => _setRoute(const AccountHubRoute()));
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -665,11 +684,11 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   }
 
   /// 离开饮水页：清理 ready/banner，回到 Devices tab。
-  void _leaveDrinkingWater(FakeShuiRuntime runtime) {
+  void _leaveDrinkingWater(ShuiRuntime runtime) {
     _handlePop();
   }
 
-  List<Widget> _overlays(FakeShuiRuntime runtime) {
+  List<Widget> _overlays(ShuiRuntime runtime) {
     return [
       if (showAddDevice && !showPresetPicker)
         AddDeviceDialog(

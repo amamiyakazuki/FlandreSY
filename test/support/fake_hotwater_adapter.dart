@@ -5,8 +5,8 @@
 
 import 'dart:async';
 
-import '../../runtime/models/hotwater_history.dart';
-import 'hotwater_adapter.dart';
+import 'package:flandresy/src/runtime/models/hotwater_history.dart';
+import 'package:flandresy/src/data/adapters/hotwater_adapter.dart';
 
 /// Fake 实现：保留原有 fake 时序/数值/文案。网络+BLE 延迟由本类承载（对齐真实 IO）。
 class FakeHotwaterAdapter implements IHotwaterAdapter {

@@ -1,7 +1,7 @@
 // Payment SDK seam (no visual constants). Splits "the Alipay SDK jump" (PayTask.payV2 — native,
 // real money, verified ON-DEVICE by the user) from the payment HTTP layer (payment/methods +
 // payment/arguments → orderInfo, testable via fixtures). UjingHttpAdapter depends on this interface;
-// tests + main line inject FakePaymentLauncher; real-device verification injects RealPaymentLauncher.
+// Production explicitly injects RealPaymentLauncher; tests supply their own launcher.
 
 /// 支付 SDK 调用 seam：拿到支付宝 `orderInfo` 后，负责拉起 SDK 并返回结果码。
 ///
@@ -12,16 +12,4 @@
 abstract class PaymentLauncher {
   /// 用支付宝 SDK 支付给定 orderInfo，返回 resultStatus。
   Future<String> payWithAlipay(String orderInfo);
-}
-
-/// Fake 实现：不接触真实 SDK，直接返回成功码 '9000'。
-/// 默认注入（主线 + 测试），保持 A2 前的 fake「支付成功」行为一致。
-class FakePaymentLauncher implements PaymentLauncher {
-  const FakePaymentLauncher();
-
-  /// 支付宝成功码（对齐 legacy `"9000".equals(resultStatus)` 判定）。
-  static const String kAlipaySuccess = '9000';
-
-  @override
-  Future<String> payWithAlipay(String orderInfo) async => kAlipaySuccess;
 }

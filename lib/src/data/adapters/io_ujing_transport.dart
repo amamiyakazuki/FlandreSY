@@ -2,7 +2,7 @@
 // UjingApi.java's HttpURLConnection: BASE + cookie jar + appCode/weex/brand/model headers + Bearer).
 // THIS IS THE ONLY LAYER THAT TOUCHES A REAL SOCKET, and it is NOT verified by Codex — real network
 // behavior (login/scan/order round-trips) must be verified ON-DEVICE by the user. Used in the default
-// (real) mode; the simulate-backend toggle (or --dart-define=SIMULATE_BACKEND=true) swaps in Fake instead.
+// production composition; tests explicitly inject a transport.
 
 import 'dart:async';
 import 'dart:convert';
@@ -122,6 +122,12 @@ class IoUjingTransport implements UjingTransport {
       throw const UjingException('响应格式异常（顶层非对象）');
     }
 
+    if (request.requireVerifiedEnvelope &&
+        (decoded['code'] != 0 ||
+            decoded['data'] is! Map<String, dynamic> ||
+            (decoded['data'] as Map).isEmpty)) {
+      throw const UjingException('旧订单核对响应不完整，保留原记录');
+    }
     final code = decoded['code'];
     if (code is num && code != 0) {
       final message = decoded['message'];

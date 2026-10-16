@@ -16,8 +16,6 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
   /// 浴室系统偏好存储 key。值为 [BathSystemPreference.name]。
   static const String _bathSystemKey = 'bath_system_preference';
 
-  /// 「使用模拟后端」开关存储 key（Phase 0）。bool。缺省 false = 真实后端。
-  static const String _useSimulatedBackendKey = 'use_simulated_backend';
   static const String _permissionIntroSeenKey = 'permission_intro_seen';
   static const String _hotwaterSessionKey = 'hotwater_session';
 
@@ -62,20 +60,6 @@ class SharedPrefsSettingsRepository implements SettingsRepository {
         ? await p.remove(_hotwaterSessionKey)
         : await p.setString(_hotwaterSessionKey, jsonEncode(session.toJson()));
     if (!saved) throw StateError('Unable to persist hotwater session');
-  }
-
-  @override
-  Future<bool> loadUseSimulatedBackend({bool fallback = false}) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_useSimulatedBackendKey) ?? fallback;
-  }
-
-  @override
-  Future<void> saveUseSimulatedBackend(bool useSimulated) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!await prefs.setBool(_useSimulatedBackendKey, useSimulated)) {
-      throw StateError('后端偏好保存失败');
-    }
   }
 
   @override

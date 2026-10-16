@@ -1,3 +1,4 @@
+import 'support/fake_payment_launcher.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flandresy/src/data/account_session_repository.dart';
@@ -5,7 +6,7 @@ import 'package:flandresy/src/data/adapters/ujing_http_adapter.dart';
 import 'package:flandresy/src/data/adapters/ujing_transport.dart';
 import 'package:flandresy/src/data/app_bootstrap.dart';
 import 'package:flandresy/src/data/secure_session_repository.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/runtime/shui_runtime_base.dart';
 
@@ -16,13 +17,14 @@ void main() {
   test('metadata without real token cannot restore login on either boot path',
       () async {
     for (final preload in [false, true]) {
-      final runtime = FakeShuiRuntime(
+      final runtime = TestRuntime(
         sessions: InMemoryAccountSessionRepository(ujing: _account),
         initial: preload
             ? const PersistedSnapshot(
                 bathSystem: BathSystemPreference.none, ujing: _account)
             : null,
-        ujing: UjingHttpAdapter(transport: _Transport()),
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(), transport: _Transport()),
       );
       addTearDown(runtime.dispose);
       await runtime.ready;
@@ -36,10 +38,13 @@ void main() {
       () async {
     final sessions = InMemoryAccountSessionRepository(ujing: _account);
     final secure = InMemorySecureSessionRepository(ujingToken: 'old');
-    final runtime = FakeShuiRuntime(
+    final runtime = TestRuntime(
         sessions: sessions,
         secure: secure,
-        ujing: UjingHttpAdapter(transport: _Transport(), token: 'old'));
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(),
+            transport: _Transport(),
+            token: 'old'));
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.handleAuthInvalidation(AuthService.ujing, expectedEpoch: 0);
@@ -47,11 +52,13 @@ void main() {
     expect(await sessions.loadUjing(), isNull);
     expect(runtime.state.waterOrder.isBusy, isFalse);
     expect(runtime.state.washer.washerPayment.isBusy, isFalse);
-    final restarted = FakeShuiRuntime(
+    final restarted = TestRuntime(
         sessions: sessions,
         secure: secure,
         ujing: UjingHttpAdapter(
-            transport: _Transport(), token: await secure.loadUjingToken()));
+            launcher: const FakePaymentLauncher(),
+            transport: _Transport(),
+            token: await secure.loadUjingToken()));
     addTearDown(restarted.dispose);
     await restarted.ready;
     expect(restarted.state.washerLogin.state, RuntimeTaskState.loginRequired);
@@ -60,8 +67,10 @@ void main() {
   test('old auth error cannot clear newly logged in credentials', () async {
     final transport = _Transport();
     final secure = InMemorySecureSessionRepository();
-    final runtime = FakeShuiRuntime(
-        secure: secure, ujing: UjingHttpAdapter(transport: transport));
+    final runtime = TestRuntime(
+        secure: secure,
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(), transport: transport));
     addTearDown(runtime.dispose);
     await runtime.ready;
     final oldEpoch = runtime.ujingAuthEpoch;
@@ -74,8 +83,9 @@ void main() {
 
   test('account switching rejected during a mutating order action', () async {
     final transport = _Transport();
-    final runtime =
-        FakeShuiRuntime(ujing: UjingHttpAdapter(transport: transport));
+    final runtime = TestRuntime(
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(), transport: transport));
     addTearDown(runtime.dispose);
     await runtime.ready;
     runtime.ujingMutationCount++;
@@ -90,8 +100,10 @@ void main() {
   test('credential cleanup in flight cannot erase a later login', () async {
     final secure = _SlowSecure();
     final transport = _Transport();
-    final runtime = FakeShuiRuntime(
-        secure: secure, ujing: UjingHttpAdapter(transport: transport));
+    final runtime = TestRuntime(
+        secure: secure,
+        ujing: UjingHttpAdapter(
+            launcher: const FakePaymentLauncher(), transport: transport));
     addTearDown(runtime.dispose);
     await runtime.ready;
     final cleanup = runtime.handleAuthInvalidation(AuthService.ujing);
@@ -107,8 +119,9 @@ void main() {
   test('login storage failure clears mixed identity and releases auth lock',
       () async {
     final secure = _FailSaveSecure();
-    final adapter = UjingHttpAdapter(transport: _Transport());
-    final runtime = FakeShuiRuntime(secure: secure, ujing: adapter);
+    final adapter = UjingHttpAdapter(
+        launcher: const FakePaymentLauncher(), transport: _Transport());
+    final runtime = TestRuntime(secure: secure, ujing: adapter);
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.loginUjing('13800000002', '1234');

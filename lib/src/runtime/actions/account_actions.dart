@@ -1,7 +1,6 @@
 // Account login actions (Module P2; U净 refactored in P4 A1 to orchestrate IUjingAdapter;
 // 住理 wired to IHotwaterAdapter in Z2-fix so real login populates the adapter session).
-// Boundary: Zhuli (住理) + Ujing (U净) login both go through their adapter (Fake by default,
-// real HTTP on device). 798 lives in shower798_actions. All paths persist via AccountSessionRepository.
+// Boundary: Zhuli (住理) + Ujing (U净) login both go through explicitly injected adapters. 798 lives in shower798_actions. All paths persist via AccountSessionRepository.
 // Field names + messages align 1:1 with legacy ShuiRuntime.kt login methods.
 
 import 'dart:async';
@@ -16,11 +15,16 @@ import '../shui_runtime_base.dart';
 mixin AccountActions on ShuiRuntimeBase {
   /// 住理生活登录（经 `hotwater` adapter）。对齐 legacy loginHotwater。
   ///
-  /// Fake：620ms 延迟 + 占位 session（时序/文案与原内联 fake 1:1，零行为变化）。
   /// 真实（RealZhuliAdapter）：平台签名 HTTP 登录并在 adapter 内部持 session
   /// （startHotwater/stopHotwater 依赖 `_requireSession()`，否则「一点开水就显示未登录」）。
   Future<void> loginZhuli(String phone, String password) async {
     await ready;
+    if (legacyStorageBlocked) {
+      emit(state.copyWith(
+          hotwaterLogin: const RuntimeActionStatus(
+              state: RuntimeTaskState.failure, message: '旧数据保全未完成，请先重试保全')));
+      return;
+    }
     if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
       return;
     }
@@ -31,7 +35,11 @@ mixin AccountActions on ShuiRuntimeBase {
     } catch (error) {
       diagnosticLog.log('auth', '住理登录保存失败 type=${error.runtimeType}');
       hotwaterAuthChanging = false;
-      await handleAuthInvalidation(AuthService.zhuli);
+      if (migration.needsLogin('zhuli')) {
+        reconcileRestoredAuth();
+      } else {
+        await handleAuthInvalidation(AuthService.zhuli);
+      }
     } finally {
       hotwaterAuthChanging = false;
     }
@@ -80,12 +88,16 @@ mixin AccountActions on ShuiRuntimeBase {
       );
       return;
     }
+    if (migration.needsLogin('zhuli') && !sessionData.isValid) {
+      throw const HotwaterException('登录响应缺少有效身份，旧数据仍待核对');
+    }
     final session = state.zhuli.copyWith(phone: normalizedPhone);
     if (sessionData.isValid) {
       await sessions.clearZhuli();
       await secure.saveZhuliSession(sessionData);
     }
     await sessions.saveZhuli(session);
+    await migration.confirmLogin('zhuli');
     emit(
       state.copyWith(
         zhuli: session,
@@ -146,6 +158,8 @@ mixin AccountActions on ShuiRuntimeBase {
   /// 请求 U净验证码（fake：手机号非空即「已发送」，触发 30s cooldown）。
   /// 对齐 legacy requestUjingCaptcha。
   Future<void> requestUjingCaptcha(String phone) async {
+    await ready;
+    if (legacyStorageBlocked) return;
     if (state.ujingCaptcha.isBusy) {
       return;
     }
@@ -196,6 +210,12 @@ mixin AccountActions on ShuiRuntimeBase {
   /// 对齐 legacy loginUjing。
   Future<void> loginUjing(String phone, String captcha) async {
     await ready;
+    if (legacyStorageBlocked) {
+      emit(state.copyWith(
+          washerLogin: const RuntimeActionStatus(
+              state: RuntimeTaskState.failure, message: '旧数据保全未完成，请先重试保全')));
+      return;
+    }
     if (isDisposed || ujingAuthChanging || state.washerLogin.isBusy) {
       return;
     }
@@ -256,6 +276,7 @@ mixin AccountActions on ShuiRuntimeBase {
         await secure.saveUjingToken(token);
       }
       await sessions.saveUjing(account);
+      await migration.confirmLogin('ujing');
       emit(
         state.copyWith(
           ujingAccount: account,
@@ -277,7 +298,9 @@ mixin AccountActions on ShuiRuntimeBase {
                 error is UjingException ? error.message : '登录状态保存失败，请重新登录'),
       ));
       try {
-        await Future.wait([secure.clearUjingToken(), sessions.clearUjing()]);
+        if (!migration.needsLogin('ujing')) {
+          await Future.wait([secure.clearUjingToken(), sessions.clearUjing()]);
+        }
       } catch (cleanupError) {
         diagnosticLog.log('auth', '登录失败后清理失败 type=${cleanupError.runtimeType}');
       }

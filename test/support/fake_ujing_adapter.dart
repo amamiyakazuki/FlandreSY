@@ -4,10 +4,11 @@
 
 import 'dart:async';
 
-import '../../runtime/models/account_session.dart';
-import '../../runtime/models/washer_order.dart';
-import '../../runtime/models/water_order.dart' hide formatFenAmount;
-import 'ujing_adapter.dart';
+import 'package:flandresy/src/runtime/models/account_session.dart';
+import 'package:flandresy/src/runtime/models/washer_order.dart';
+import 'package:flandresy/src/runtime/models/water_order.dart'
+    hide formatFenAmount;
+import 'package:flandresy/src/data/adapters/ujing_adapter.dart';
 
 /// Fake 实现：保留原有 fake 时序/数值/文案。网络延迟由本类承载（对齐真实 adapter 的 IO 延迟）。
 class FakeUjingAdapter implements IUjingAdapter {

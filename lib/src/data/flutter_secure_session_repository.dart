@@ -2,7 +2,7 @@
 // secrets encrypted via Android Keystore / iOS Keychain. THIS IS THE ONLY LAYER THAT TOUCHES REAL
 // secure storage, and it is NOT verified by Codex (no device / no platform channel under test) — real
 // Keystore/Keychain behavior must be verified ON-DEVICE by the user. Injected in the default (real)
-// mode; in simulate-backend mode the runtime uses InMemorySecureSessionRepository (no token) instead.
+// composition; offline tests explicitly inject an in-memory store.
 
 import 'dart:convert';
 

@@ -5,9 +5,9 @@
 
 import 'dart:async';
 
-import '../../runtime/fake_captcha.dart';
-import '../../runtime/models/account_session.dart';
-import 'shower798_adapter.dart';
+import 'fake_captcha.dart';
+import 'package:flandresy/src/runtime/models/account_session.dart';
+import 'package:flandresy/src/data/adapters/shower798_adapter.dart';
 
 /// Fake 实现：保留原有 fake 时序/数值/文案。有状态（captcha 刷新计数 + 设备列表切换），
 /// 复现原内联行为：login/首次 loadDevices=seed，后续 loadDevices=空闲/使用中翻转。

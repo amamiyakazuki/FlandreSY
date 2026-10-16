@@ -8,6 +8,7 @@ import '../data/adapters/hotwater_adapter.dart';
 import '../data/adapters/shower798_adapter.dart';
 import '../data/adapters/ujing_adapter.dart';
 import '../data/app_bootstrap.dart';
+import '../data/legacy_data_migration.dart';
 import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
@@ -15,7 +16,7 @@ import '../data/settings_repository.dart';
 import '../data/water_order_repository.dart';
 import '../data/washer_history_repository.dart';
 import '../runtime/diagnostic_log.dart';
-import '../runtime/fake_shui_runtime.dart';
+import '../runtime/shui_runtime.dart';
 import '../runtime/live_clock.dart';
 import '../shell/shui_shell.dart';
 
@@ -27,11 +28,12 @@ class FlandreApp extends StatelessWidget {
     this.history,
     this.water,
     this.washerHistory,
-    this.secure,
+    required this.secure,
+    required this.migration,
     this.clock,
-    this.ujing,
-    this.hotwater,
-    this.shower798,
+    required this.ujing,
+    required this.hotwater,
+    required this.shower798,
     this.diagnosticLog,
     this.appVersion,
     this.initial,
@@ -56,19 +58,20 @@ class FlandreApp extends StatelessWidget {
   final WasherHistoryRepository? washerHistory;
 
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
-  final SecureSessionRepository? secure;
+  final SecureSessionRepository secure;
+  final LegacyDataMigration migration;
 
   /// 可选注入的时间源（测试传 FixedLiveClock）。
   final LiveClock? clock;
 
-  /// 可选注入的 Ujing 适配器（默认 FakeUjingAdapter；真机验证注入 UjingHttpAdapter）。
-  final IUjingAdapter? ujing;
+  /// 必须显式注入的 U净适配器；生产使用 UjingHttpAdapter。
+  final IUjingAdapter ujing;
 
-  /// 可选注入的 Zhuli 热水适配器（默认 FakeHotwaterAdapter；真机验证注入 RealZhuliAdapter）。
-  final IHotwaterAdapter? hotwater;
+  /// 必须显式注入的住理适配器；生产使用 RealZhuliAdapter。
+  final IHotwaterAdapter hotwater;
 
-  /// 可选注入的 798 洗浴适配器（默认 FakeShower798Adapter；真机验证注入 RealShower798Adapter）。
-  final IShower798Adapter? shower798;
+  /// 必须显式注入的 798 适配器；生产使用 RealShower798Adapter。
+  final IShower798Adapter shower798;
 
   /// 可选注入的诊断日志器（M-REAL）。main() 注入持久化实现 + adapter 埋点。
   final DiagnosticLog? diagnosticLog;
@@ -106,6 +109,7 @@ class FlandreApp extends StatelessWidget {
         diagnosticLog: diagnosticLog,
         appVersion: appVersion,
         initial: initial,
+        migration: migration,
         child: const ShuiShell(),
       ),
     );

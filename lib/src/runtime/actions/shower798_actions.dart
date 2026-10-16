@@ -1,7 +1,6 @@
 // Shower798 login + device actions (Module P3; refactored in P4 S798 to orchestrate IShower798Adapter).
 // The adapter supplies data (captcha image bytes / sms / login / devices) + IO latency; this mixin
-// does validation + emit + cooldown-stamp + persist. Default FakeShower798Adapter (fakeCaptchaBase64),
-// real on device. Field names + messages align 1:1 with legacy ShuiRuntime.kt Shower798 methods.
+// does validation + emit + cooldown-stamp + persist with an explicitly injected adapter. Field names + messages align 1:1 with legacy ShuiRuntime.kt Shower798 methods.
 
 import 'dart:async';
 
@@ -18,6 +17,8 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 请求图形验证码（经 IShower798Adapter；真实拉图片字节→base64，fake=fakeCaptchaBase64）。
   /// 对齐 legacy requestShower798Captcha。
   Future<void> requestShower798Captcha() async {
+    await ready;
+    if (legacyStorageBlocked) return;
     if (state.shower798Captcha.isBusy) {
       return;
     }
@@ -58,6 +59,8 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 发送短信验证码（fake：手机号 + 图形码非空 → 「短信验证码已发送」→ 触发 cooldown）。
   /// 对齐 legacy sendShower798SmsCode。
   Future<void> sendShower798SmsCode(String phone, String imageCaptcha) async {
+    await ready;
+    if (legacyStorageBlocked) return;
     if (state.shower798Captcha.isBusy) {
       return;
     }
@@ -123,6 +126,12 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 对齐 legacy loginShower798。
   Future<void> loginShower798(String phone, String smsCode) async {
     await ready;
+    if (legacyStorageBlocked) {
+      emit(state.copyWith(
+          shower798Login: const RuntimeActionStatus(
+              state: RuntimeTaskState.failure, message: '旧数据保全未完成，请先重试保全')));
+      return;
+    }
     if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
       return;
     }
@@ -133,7 +142,11 @@ mixin Shower798Actions on ShuiRuntimeBase {
     } catch (error) {
       diagnosticLog.log('auth', '798登录保存失败 type=${error.runtimeType}');
       hotwaterAuthChanging = false;
-      await handleAuthInvalidation(AuthService.shower798);
+      if (migration.needsLogin('shower798')) {
+        reconcileRestoredAuth();
+      } else {
+        await handleAuthInvalidation(AuthService.shower798);
+      }
     } finally {
       hotwaterAuthChanging = false;
     }
@@ -194,6 +207,7 @@ mixin Shower798Actions on ShuiRuntimeBase {
               ? state.currentShower798DeviceId
               : '',
     ));
+    await migration.confirmLogin('shower798');
     emit(
       state.copyWith(
         shower798Account: account,
@@ -220,7 +234,9 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 对齐 legacy addShower798Device。
   Future<void> addShower798Device(String deviceId) async {
     await ready;
-    if (isDisposed || hotwaterAuthChanging) return;
+    if (isDisposed || hotwaterAuthChanging || !legacyServiceReady('shower798')) {
+      return;
+    }
     hotwaterAccountWriteCount++;
     try {
       await _addShower798Device(deviceId);
@@ -287,6 +303,8 @@ mixin Shower798Actions on ShuiRuntimeBase {
 
   /// 刷新 798 设备列表（经 IShower798Adapter.loadDevices）。对齐 legacy refreshShower798Devices。
   Future<void> refreshShower798Devices() async {
+    await ready;
+    if (!legacyServiceReady('shower798')) return;
     if (isDisposed || hotwaterAuthChanging || state.shower798Login.isBusy) {
       return;
     }
@@ -327,7 +345,9 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 选择当前 798 设备（对齐 legacy selectShower798Device）。
   Future<void> selectShower798Device(String deviceId) async {
     await ready;
-    if (isDisposed || hotwaterAuthChanging) return;
+    if (isDisposed || hotwaterAuthChanging || !legacyServiceReady('shower798')) {
+      return;
+    }
     if (state.currentShower798DeviceId == deviceId) {
       return;
     }

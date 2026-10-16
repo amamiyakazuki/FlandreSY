@@ -9,6 +9,7 @@ import '../runtime/models/washer_order.dart';
 import '../runtime/runtime_status.dart';
 import '../runtime/hotwater_state.dart';
 import 'account_session_repository.dart';
+import 'legacy_data_migration.dart';
 import 'history_repository.dart';
 import 'local_device_repository.dart';
 import 'settings_repository.dart';
@@ -20,7 +21,6 @@ import 'washer_history_repository.dart';
 class PersistedSnapshot {
   const PersistedSnapshot({
     required this.bathSystem,
-    this.useSimulatedBackend = false,
     this.permissionIntroSeen = false,
     this.zhuli,
     this.ujing,
@@ -38,9 +38,6 @@ class PersistedSnapshot {
 
   final BathSystemPreference bathSystem;
 
-  /// 「使用模拟后端」开关（Phase 0）。true = 强制 Fake + InMemory；false = 真实后端（默认）。
-  /// main() 在 await 本快照后、建 adapter 前读取此值决定注入真实还是 Fake。
-  final bool useSimulatedBackend;
   final bool permissionIntroSeen;
 
   final ZhuliSession? zhuli;
@@ -72,8 +69,10 @@ class AppBootstrap {
     LocalDeviceRepository devices,
     HistoryRepository history,
     WaterOrderRepository water,
-    WasherHistoryRepository washerHistory,
-  ) async {
+    WasherHistoryRepository washerHistory, {
+    LegacyDataMigration? migration,
+  }) async {
+    await migration?.prepare();
     final warnings = <String>[];
     bool orderBlocked = false;
     Future<T?> recover<T>(String domain, Future<T> Function() load,
@@ -89,8 +88,6 @@ class AppBootstrap {
 
     final bathSystem = await recover('洗浴偏好', settings.loadBathSystem) ??
         BathSystemPreference.none;
-    final useSimulatedBackend =
-        await recover('后端偏好', settings.loadUseSimulatedBackend) ?? false;
     final permissionIntroSeen =
         await recover('权限引导', settings.loadPermissionIntroSeen) ?? false;
     final zhuli = await recover('住理账号', sessions.loadZhuli);
@@ -106,7 +103,6 @@ class AppBootstrap {
         await recover('洗衣活动订单', washerHistory.loadCurrentOrder, orders: true);
     return PersistedSnapshot(
       bathSystem: bathSystem,
-      useSimulatedBackend: useSimulatedBackend,
       permissionIntroSeen: permissionIntroSeen,
       zhuli: zhuli,
       ujing: ujing,

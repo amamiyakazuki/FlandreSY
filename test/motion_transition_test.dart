@@ -1,11 +1,10 @@
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/theme/shui_motion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flandresy/src/widgets/shui_animated_list.dart';
 import 'package:flandresy/src/widgets/shui_overlay_host.dart';
 import 'package:flandresy/src/devices/device_dialogs.dart';
-import 'package:flandresy/src/app/flandre_app.dart';
 import 'package:flandresy/src/shell/shui_shell_chrome.dart';
 import 'package:flandresy/src/shell/shui_shell.dart';
 import 'package:flandresy/src/profile/account_detail_screen.dart';
@@ -167,7 +166,7 @@ void main() {
   testWidgets(
       'system back preserves account hierarchy and tabs retain category',
       (tester) async {
-    await tester.pumpWidget(const FlandreApp());
+    await tester.pumpWidget(TestApp());
     await tester.pumpAndSettle(const Duration(milliseconds: 700));
     final permission = find.text('好，开启权限');
     if (permission.evaluate().isNotEmpty) {
@@ -203,9 +202,10 @@ void main() {
   });
 
   test('completed water result survives active order cleanup', () async {
-    final runtime = FakeShuiRuntime();
+    final runtime = TestRuntime();
     addTearDown(runtime.dispose);
     await runtime.ready;
+    await runtime.loginUjing('test-account', 'test-code');
     await runtime.scanDrinkingWaterAndCreateOrder('CD-TEST');
     expect(runtime.state.currentWaterOrder, isNotNull);
     await runtime.refreshCurrentDrinkingWaterOrder();

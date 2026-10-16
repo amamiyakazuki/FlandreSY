@@ -8,6 +8,7 @@ import '../shui_runtime_base.dart';
 mixin WasherActions on ShuiRuntimeBase {
   @override
   Future<void> migrateLegacyWasherOrders(String owner, int epoch) async {
+    if (migration.hasLegacy || legacyStorageBlocked) return;
     if (owner.isEmpty ||
         !canRetainUjingMutationResult(epoch, owner) ||
         !_washerStorageReady()) {
@@ -77,7 +78,7 @@ mixin WasherActions on ShuiRuntimeBase {
   int _washerRefreshEpoch = -1;
 
   bool _washerStorageReady() {
-    if (!ujingOrderStorageBlocked) return true;
+    if (!ujingOrderStorageBlocked && !legacyStorageBlocked) return true;
     _washerMessage('本地订单恢复失败，请先处理存储问题，未创建新订单', failure: true);
     return false;
   }
@@ -94,6 +95,10 @@ mixin WasherActions on ShuiRuntimeBase {
   }
 
   bool _canUseWasherOrder(WasherOrderUi order) {
+    if (pendingLegacy('washer', order.orderId)) {
+      _washerMessage('旧洗衣记录待核对，请登录后重试核对', failure: true);
+      return false;
+    }
     if (canAccessUjingOrder(order.ownerAccountKey)) return true;
     _washerMessage(
         order.ownerAccountKey.isEmpty
@@ -129,6 +134,10 @@ mixin WasherActions on ShuiRuntimeBase {
 
   Future<void> scanWasher(String qrCode) async {
     await ready;
+    if (!legacyServiceReady('ujing')) {
+      _washerMessage('请先重新登录并完成旧数据保全', failure: true);
+      return;
+    }
     if (_washerScanBusy ||
         _washerMutationBusy ||
         !isUjingRequestCurrent(ujingAuthEpoch)) {
@@ -336,6 +345,16 @@ mixin WasherActions on ShuiRuntimeBase {
 
   @override
   Future<void> refreshCurrentWasherOrder() {
+    final order = state.washer.currentOrder;
+    if (order != null && pendingLegacy('washer', order.orderId)) {
+      return verifyLegacyWasher().then((verified) async {
+        if (verified) await _refreshCurrentWasherOrder();
+      });
+    }
+    return _refreshCurrentWasherOrder();
+  }
+
+  Future<void> _refreshCurrentWasherOrder() {
     if (!_washerStorageReady()) return Future.value();
     final pending = _washerRefresh;
     if (pending != null && _washerRefreshEpoch == ujingAuthEpoch) {
@@ -445,6 +464,10 @@ mixin WasherActions on ShuiRuntimeBase {
       required String accountKey,
       required int epoch}) async {
     if (!_washerStorageReady()) return;
+    if (migration.hasLegacy) {
+      await verifyLegacyWasher();
+      return;
+    }
     final order = state.washer.currentOrder;
     if (order == null ||
         order.orderId != orderId ||

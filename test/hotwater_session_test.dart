@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flandresy/src/data/adapters/ble_transport.dart';
 import 'package:flandresy/src/data/adapters/hotwater_adapter.dart';
-import 'package:flandresy/src/data/adapters/fake_shower798_adapter.dart';
+import 'support/fake_shower798_adapter.dart';
 import 'package:flandresy/src/data/adapters/real_zhuli_adapter.dart';
 import 'package:flandresy/src/data/adapters/zhuli_transport.dart';
 import 'package:flandresy/src/data/app_bootstrap.dart';
@@ -16,7 +16,7 @@ import 'package:flandresy/src/data/secure_session_repository.dart';
 import 'package:flandresy/src/data/settings_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_settings_repository.dart';
 import 'package:flandresy/src/hotwater/hotwater_detail_screen.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/hotwater_state.dart';
 import 'package:flandresy/src/runtime/live_clock.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
@@ -277,7 +277,7 @@ void main() {
     test('798 can stop without a local session and coalesces repeated start',
         () async {
       final adapter = _TestShowerAdapter();
-      final runtime = FakeShuiRuntime(
+      final runtime = TestRuntime(
         shower798: adapter,
         initial: const PersistedSnapshot(
           bathSystem: BathSystemPreference.shower798,
@@ -804,7 +804,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: ShuiRuntimeScope(
+        home: TestRuntimeScope(
           settings: settings,
           secure: secure,
           hotwater: adapter,
@@ -986,7 +986,7 @@ PersistedSnapshot _snapshot({HotwaterSession? session}) => PersistedSnapshot(
       hotwaterSession: session,
     );
 
-FakeShuiRuntime _runtime({
+ShuiRuntime _runtime({
   required _TestHotwaterAdapter adapter,
   required InMemorySettingsRepository settings,
   required InMemorySecureSessionRepository secure,
@@ -994,7 +994,7 @@ FakeShuiRuntime _runtime({
   LiveClock? clock,
   bool preloaded = true,
 }) {
-  return FakeShuiRuntime(
+  return TestRuntime(
     settings: settings,
     secure: secure,
     hotwater: adapter,

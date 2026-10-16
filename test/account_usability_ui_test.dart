@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flandresy/src/profile/account_detail_screen.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'package:flandresy/src/runtime/shui_runtime.dart';
 import 'package:flandresy/src/runtime/account_state.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 

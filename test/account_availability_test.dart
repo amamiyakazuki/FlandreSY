@@ -5,13 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flandresy/src/data/account_session_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_account_session_repository.dart';
 import 'package:flandresy/src/data/secure_session_repository.dart';
-import 'package:flandresy/src/data/adapters/fake_hotwater_adapter.dart';
-import 'package:flandresy/src/data/adapters/fake_ujing_adapter.dart';
-import 'package:flandresy/src/data/adapters/fake_shower798_adapter.dart';
+import 'support/fake_hotwater_adapter.dart';
+import 'support/fake_ujing_adapter.dart';
+import 'support/fake_shower798_adapter.dart';
 import 'package:flandresy/src/data/adapters/hotwater_adapter.dart';
 import 'package:flandresy/src/data/adapters/ujing_adapter.dart';
 import 'package:flandresy/src/data/adapters/shower798_adapter.dart';
-import 'package:flandresy/src/runtime/fake_shui_runtime.dart';
+import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/runtime/hotwater_state.dart';
 
@@ -54,12 +54,12 @@ class _Shower extends FakeShower798Adapter {
   Future<void> checkAccountValidity() => probe.run();
 }
 
-Future<FakeShuiRuntime> _runtime(_Probe probe,
+Future<ShuiRuntime> _runtime(_Probe probe,
     {AccountSessionRepository? sessions,
     SecureSessionRepository? secure,
     IHotwaterAdapter? hotwater,
     IShower798Adapter? shower}) async {
-  final runtime = FakeShuiRuntime(
+  final runtime = TestRuntime(
       hotwater: hotwater ?? _Hot(probe),
       ujing: _Water(probe),
       shower798: shower ?? _Shower(probe),
@@ -72,7 +72,7 @@ Future<FakeShuiRuntime> _runtime(_Probe probe,
   return runtime;
 }
 
-bool _logged(FakeShuiRuntime runtime, AccountKind kind) => switch (kind) {
+bool _logged(ShuiRuntime runtime, AccountKind kind) => switch (kind) {
       AccountKind.zhuli => runtime.state.zhuli.isLoggedIn,
       AccountKind.ujing => runtime.state.ujingAccount != null,
       AccountKind.shower798 => runtime.state.shower798Account != null,

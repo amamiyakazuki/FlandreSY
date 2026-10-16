@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
-import '../runtime/fake_shui_runtime.dart';
+import '../runtime/shui_runtime.dart';
 import '../runtime/models/account_session.dart';
 import '../widgets/shui_header.dart';
 import '../widgets/shui_components.dart';
