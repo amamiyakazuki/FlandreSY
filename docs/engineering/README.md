@@ -6,13 +6,15 @@
 
 | 模块 | 范围 | 状态 |
 |---|---|---|
-| [C1 去模拟与数据保全](c1-remove-simulation-plan.md) | 移除产品模拟模式，保护升级前账号与活动记录 | 实现与本地验收完成；[PR #4](https://github.com/amamiyakazuki/FlandreSY/pull/4)，真机待验 |
+| [C1 去模拟与数据保全](c1-remove-simulation-plan.md) | 移除产品模拟模式，保护升级前账号与活动记录 | 实现与本地、CI 验收完成；已批准直接合入 main，[PR #4](https://github.com/amamiyakazuki/FlandreSY/pull/4) 已关闭，真机待验 |
 
 [当前验收记录](c1-remove-simulation-acceptance.md)。后续设备一致性、洗衣状态、平台适配等模块尚未启动。
 
 ## 已确认的交付方式
 
-每个获批模块使用模块分支，经提交、推送 GitHub、PR 和 CI 检查交付。合并和正式版本发布单独处理。一个模块完成后更新状态，再决定下一模块。
+用户于 2026-10-16 调整交付方式：保留模块分支、Git 提交、测试、推送 GitHub 和 CI 检查，不再要求创建 PR。合并和正式版本发布仍按用户授权处理。一个模块完成后更新状态，再决定下一模块。
+
+C1 已按此前约定创建 PR #4，保留其验收链接；用户已授权直接合入 main、推送 GitHub 并关闭该 PR，不发布版本。
 
 ## 记录要求
 
