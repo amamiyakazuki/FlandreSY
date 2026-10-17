@@ -115,8 +115,26 @@ def apk_metadata(badging, certificates):
 
 
 def inspect_apk(path, tools):
-    return apk_metadata(run([tools['aapt'], 'dump', 'badging', path]),
-                        run([tools['apksigner'], 'verify', '--print-certs', path]))
+    record = apk_metadata(run([tools['aapt'], 'dump', 'badging', path]),
+                          run([tools['apksigner'], 'verify', '--print-certs', path]))
+    # aapt lists every native dependency directory, including architectures
+    # without a Flutter engine. Keep that evidence separate from runnable ABIs.
+    native_abis = record['abis']
+    libraries = {'libflutter.so': set(), 'libapp.so': set()}
+    seen = set()
+    with zipfile.ZipFile(path) as archive:
+        for entry in archive.infolist():
+            parts = entry.filename.split('/')
+            if len(parts) != 3 or parts[0] != 'lib' or parts[2] not in libraries:
+                continue
+            require(entry.file_size > 0 and entry.filename not in seen,
+                    'Empty or duplicate Flutter library in APK.')
+            seen.add(entry.filename)
+            libraries[parts[2]].add(parts[1])
+    engines, applications = libraries['libflutter.so'], libraries['libapp.so']
+    require(engines and engines == applications and engines <= set(native_abis),
+            'APK requires matching Flutter engine/application libraries for every runtime ABI.')
+    return dict(record, abis=sorted(engines), nativeAbis=native_abis)
 
 
 def validate_baseline(data, root, inspector):

@@ -104,6 +104,52 @@ class ReleaseTests(unittest.TestCase):
             r.run([sys.executable, '-c', 'import sys; print("private password"); sys.exit(1)'])
         self.assertNotIn('private password', str(error.exception))
 
+    def inspect_flutter_fixture(self, libraries, native_abis=None):
+        path = self.root / 'flutter.apk'
+        with zipfile.ZipFile(path, 'w') as archive:
+            for name, content in libraries.items(): archive.writestr(name, content)
+        native_abis = native_abis or ['arm64-v8a', 'armeabi-v7a', 'x86_64']
+        badging = ("package: name='com.flandresy' versionCode='5000' versionName='2.2.0'\n"
+                   + 'native-code: ' + ' '.join(f"'{abi}'" for abi in native_abis) + '\n')
+        with patch.object(r, 'run', side_effect=[badging, f'Signer #1 certificate SHA-256 digest: {CERT}\n']):
+            return r.inspect_apk(path, {'aapt': 'aapt', 'apksigner': 'apksigner'})
+
+    def flutter_libraries(self, abis=None):
+        return {f'lib/{abi}/{name}': b'fixture' for abi in (abis or r.ABIS)
+                for name in ('libapp.so', 'libflutter.so')}
+
+    def test_dependency_only_abi_does_not_count_as_flutter_runtime(self):
+        libraries = self.flutter_libraries()
+        libraries['lib/armeabi-v7a/libscanner.so'] = b'dependency'
+        value = self.inspect_flutter_fixture(libraries)
+        self.assertEqual(value['abis'], sorted(r.ABIS))
+        self.assertEqual(value['nativeAbis'], ['arm64-v8a', 'armeabi-v7a', 'x86_64'])
+        r.validate_artifact(value, '2.2.0', 5000, CERT)
+        # This inspected universal layout also satisfies the historical scope.
+        data, lookup = self.baseline()
+        lookup[next(iter(lookup))] = dict(value, versionCode=6, versionName='2.1.4')
+        self.assertEqual(len(r.validate_baseline(data, self.root, lookup.__getitem__)), 3)
+
+    def test_incomplete_empty_or_undeclared_flutter_runtime_is_rejected(self):
+        for case in ('engine_missing', 'app_missing', 'no_flutter', 'empty', 'undeclared'):
+            with self.subTest(case=case):
+                libraries = self.flutter_libraries()
+                native_abis = None
+                if case == 'engine_missing': del libraries['lib/x86_64/libflutter.so']
+                if case == 'app_missing': del libraries['lib/x86_64/libapp.so']
+                if case == 'no_flutter': libraries = {'lib/arm64-v8a/libscanner.so': b'dependency'}
+                if case == 'empty': libraries['lib/arm64-v8a/libflutter.so'] = b''
+                if case == 'undeclared': native_abis = ['arm64-v8a']
+                with self.assertRaises(r.ValidationError):
+                    self.inspect_flutter_fixture(libraries, native_abis)
+
+    def test_complete_extra_or_missing_target_flutter_abi_still_fails_candidate(self):
+        for abis in ({'arm64-v8a'}, {'arm64-v8a', 'x86_64', 'armeabi-v7a'}):
+            with self.subTest(abis=abis):
+                value = self.inspect_flutter_fixture(self.flutter_libraries(abis))
+                with self.assertRaises(r.ValidationError):
+                    r.validate_artifact(value, '2.2.0', 5000, CERT)
+
     def test_required_tool_missing_fails_closed(self):
         with patch.dict(os.environ, {'PATH': '', 'ANDROID_HOME': str(self.root), 'ANDROID_SDK_ROOT': str(self.root)}):
             with self.assertRaises(r.ValidationError): r.tool('aapt')

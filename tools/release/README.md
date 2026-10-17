@@ -2,14 +2,16 @@
 
 工具只负责本地候选构建与产物检查，不上传、不调用发布接口，也不修改现有稳定清单。
 
-当前仅进行 2.2.0 的本地文档与源码收口，未生成正式候选；用户确定更新 2.2.0 前禁止推送 GitHub。本轮跳过人工覆盖验收，既有未验状态保留。后续构建与发布执行边界见[交付计划](../../docs/engineering/upgrade-release-delivery-plan.md)，实际覆盖升级记录见 [C6b](../../docs/engineering/c6b-candidate-upgrade-acceptance.md)。
+用户已授权本地构建 `2.2.0+5000` 通用 APK，未授权推送 GitHub、发布或安装。实际覆盖升级仍保持未验；执行边界见[交付计划](../../docs/engineering/upgrade-release-delivery-plan.md)，历史记录见 [C6b](../../docs/engineering/c6b-candidate-upgrade-acceptance.md)。
+
+本次校验使用 build-tools 36.0.0（与 Android CI 一致）。37.0.0 的证书输出格式发生变化，当前解析器会拒绝；可将 36.0.0 目录加入 PATH 选择已验证的版本，不得跳过签名检查。
 
 ## 发布前准备
 
 - Python 3、JDK 17、已锁定 Flutter/依赖；Android SDK 的 `aapt`、`apksigner` 在 PATH，或配置 `ANDROID_HOME` / `ANDROID_SDK_ROOT`。
 - 原有正式签名的 `android/key.properties`。标准 Java Properties 格式；相对 storeFile 相对 `android/`，绝对路径原样解析。密码/密钥不提交，不作为命令行参数。
 - 已确认的升级范围与真实旧 APK。至少包括 2.1.4 通用、ARM64、x64 三种已发布包，其他要支持的旧版本一并纳入。分别从可信发布记录取得 SHA-256；不能用一个随意填写的最高码代替文件核验。
-- 更新候选 `pubspec.yaml` 的版本号/构建号后提交候选源码，**不要提前改稳定版 version.json**。构建号必须高于全部所选旧包及已公开扩展清单的构建号；当前仓库仍为 2.1.4+6，本工具应拒绝把它作为新迁移版本。
+- 更新候选 `pubspec.yaml` 的版本号/构建号后提交候选源码，**不要提前改稳定版 version.json**。构建号必须高于全部所选旧包及已公开扩展清单的构建号；候选源码为 2.2.0+5000，稳定清单仍为 2.1.4。
 - 工具要求已跟踪文件无未提交修改、构建输入无未跟踪文件。先处理自己的工作区记录，不由脚本自动清理或暂存用户改动。
 
 将本地基线 JSON 放在仓库之外，结构如下（说明占位不能直接用于构建）：
@@ -27,6 +29,8 @@
 ```
 
 path 相对该基线文件所在目录。工具逐个读取实际 APK，检查哈希、包名、非调试标志、版本码、ABI 和签名一致性，报告只覆盖提供的升级范围。
+
+APK 报告的 `abis` 是 ZIP 中 `libflutter.so` 与 `libapp.so` 成对存在的 Flutter 运行架构；`nativeAbis` 保留 aapt 列出的全部原生库目录。旧通用包中第三方 armeabi-v7a 库不能证明完整的 32 位支持。引擎或应用库缺失/为空、两者架构不一致，或候选不包含且仅包含 ARM64/x86_64 运行架构，均拒绝通过。AAB 的独立检查流程保持原样，本次不构建 AAB。
 
 ## 执行（仅在获准构建时）
 
