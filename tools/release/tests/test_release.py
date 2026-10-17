@@ -18,6 +18,13 @@ import prepare_stable_manifest as m
 
 CERT = 'a' * 64
 
+# Historical test input is independent of whichever stable version is published.
+STABLE_FIXTURE = {
+    'version': '2.1.4', 'release_date': '2026-09-28', 'changelog': ['fixture'],
+    'downloads': {'github': f'{r.RELEASES}/download/v2.1.4/app-release.apk'},
+}
+
+
 
 def metadata(code=5000, version='2.2.0', abis=None):
     return {'applicationId': r.APP_ID, 'versionName': version, 'versionCode': code,
@@ -164,7 +171,8 @@ class ReleaseTests(unittest.TestCase):
     def test_stable_copies_must_match_and_remain_unchanged(self):
         source = r.ROOT / 'assets/public/version.json'
         for target in ['assets/public/version.json', 'public/version.json']:
-            path = self.root / target; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(source.read_bytes())
+            path = self.root / target; path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(STABLE_FIXTURE))
         before = source.read_bytes()
         self.assertEqual(r.stable_manifest(self.root)['version'], '2.1.4')
         (self.root / 'public/version.json').write_text('{}')
@@ -232,7 +240,7 @@ class ReleaseTests(unittest.TestCase):
         for name in ['assets/public/version.json', 'public/version.json']:
             target = self.root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes((r.ROOT / name).read_bytes())
+            target.write_text(json.dumps(STABLE_FIXTURE))
         commands = []
         def fake_run(args, capture=True):
             commands.append([str(a) for a in args])
