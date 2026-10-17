@@ -1,11 +1,12 @@
 // Design tokens used: AppColors surface/service palette, AppTypography.textTheme, AppCustomTokens spacing/radius/sizing/alpha.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../design_tokens.dart';
 import '../../runtime/shui_runtime.dart';
 import '../../theme/shui_assets.dart';
-import '../../theme/shui_motion.dart';
 import '../../widgets/shui_components.dart';
 
 class OngoingCard extends StatelessWidget {
@@ -21,9 +22,8 @@ class OngoingCard extends StatelessWidget {
         children: [
           SectionTitle(icon: ShuiAssets.shuiFire, title: '进行中'),
           const SizedBox(height: AppCustomTokens.spaceSm),
-          AnimatedSize(
-            duration: ShuiMotion.duration(context, ShuiMotion.local),
-            curve: ShuiMotion.easeOut,
+          SizedBox(
+            height: _runningContentHeight(context),
             child: tasks.isEmpty
                 ? const _EmptyRunningCard()
                 : LayoutBuilder(builder: (context, constraints) {
@@ -38,8 +38,7 @@ class OngoingCard extends StatelessWidget {
                     final width =
                         (constraints.maxWidth - 2 * AppCustomTokens.spaceXs) /
                             3;
-                    return IntrinsicHeight(
-                        child: Row(
+                    return Row(
                       key: const ValueKey('running-task-row'),
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -57,7 +56,7 @@ class OngoingCard extends StatelessWidget {
                           ),
                         ],
                       ],
-                    ));
+                    );
                   }),
           ),
         ],
@@ -126,59 +125,94 @@ class RunningStatusCard extends StatelessWidget {
       HomeTaskTarget.washer => AppColors.serviceOrange,
       HomeTaskTarget.hotwater => AppColors.primary,
     };
-    return Container(
-      constraints: const BoxConstraints(
-        minHeight: AppCustomTokens.runningCardMinHeight,
-      ),
-      padding: const EdgeInsets.all(AppCustomTokens.spaceSm),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: AppCustomTokens.alphaVeryLow),
-        borderRadius: BorderRadius.circular(AppCustomTokens.radiusMedium),
-        border: Border.all(
-          color: color.withValues(alpha: AppCustomTokens.alphaSoftBorder),
-          width: AppCustomTokens.strokeThin,
+    return Tooltip(
+      message: '${task.title}\n${task.extra}',
+      child: Container(
+        height: _runningContentHeight(context),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppCustomTokens.spaceSm,
+          vertical: AppCustomTokens.spaceXs,
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _RunningTaskIcon(asset: ShuiAssets.png(task.asset)),
-          const SizedBox(height: AppCustomTokens.spaceXs),
-          Text(
-            task.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.textTheme.labelMedium?.copyWith(color: color),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: AppCustomTokens.alphaVeryLow),
+          borderRadius: BorderRadius.circular(AppCustomTokens.radiusMedium),
+          border: Border.all(
+            color: color.withValues(alpha: AppCustomTokens.alphaSoftBorder),
+            width: AppCustomTokens.strokeThin,
           ),
-          Text(
-            task.extra,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTypography.textTheme.bodySmall?.copyWith(
-              color: AppColors.mutedText,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _RunningTaskIcon(asset: ShuiAssets.png(task.asset)),
+            const SizedBox(height: AppCustomTokens.spaceXs),
+            Text(
+              task.title,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  AppTypography.textTheme.labelMedium?.copyWith(color: color),
             ),
-          ),
-        ],
+            Text(
+              task.extra,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.textTheme.bodySmall?.copyWith(
+                color: AppColors.mutedText,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+// The frame depends only on typography, never on task count or text length.
+// Keep the original empty height at normal text size; accommodate larger text
+// equally in empty and populated states instead of shrinking accessible text.
+double _runningContentHeight(BuildContext context) {
+  double lineHeight(TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: '任务', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
+  return math.max(
+    AppCustomTokens.runningCardMinHeight,
+    _RunningTaskIcon.size +
+        AppCustomTokens.spaceXs +
+        lineHeight(AppTypography.textTheme.labelMedium!) +
+        lineHeight(AppTypography.textTheme.bodySmall!) +
+        2 * AppCustomTokens.spaceXs +
+        2 * AppCustomTokens.strokeThin,
+  );
 }
 
 class _RunningTaskIcon extends StatelessWidget {
   const _RunningTaskIcon({required this.asset});
 
   final String asset;
+  static const double size = 20;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox.square(
-      dimension: AppCustomTokens.serviceIconBoxSize,
+      dimension: size,
       child: Align(
         alignment: Alignment.centerLeft,
         child: DecorativeImage(
           asset,
-          width: AppCustomTokens.serviceIconSize,
-          height: AppCustomTokens.serviceIconSize,
+          width: size,
+          height: size,
         ),
       ),
     );

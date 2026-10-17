@@ -26,15 +26,80 @@ class LogScreen extends StatefulWidget {
 class _LogScreenState extends State<LogScreen> {
   late String _logText = widget.log.read();
 
-  void _refresh() => setState(() => _logText = widget.log.read());
+  bool _busy = false;
+  String? _feedback;
 
-  void _clear() {
-    widget.log.clear();
-    _refresh();
+  @override
+  void initState() {
+    super.initState();
+    widget.log.addListener(_refresh);
+  }
+
+  @override
+  void didUpdateWidget(covariant LogScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.log != widget.log) {
+      oldWidget.log.removeListener(_refresh);
+      widget.log.addListener(_refresh);
+      _logText = widget.log.read();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.log.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() => _logText = widget.log.read());
+  }
+
+  Future<void> _clear() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _feedback = '正在清空日志';
+    });
+    try {
+      await widget.log.clear();
+      if (mounted) setState(() => _feedback = '日志已清空，后续新事件会继续记录');
+    } catch (_) {
+      if (mounted) setState(() => _feedback = '清空未完成，请重试');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _logText = widget.log.read();
+        });
+      }
+    }
+  }
+
+  Future<void> _retry() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _feedback = null;
+    });
+    try {
+      await widget.log.retryStorage();
+      if (mounted) setState(() => _feedback = '诊断存储已恢复');
+    } catch (_) {
+      if (mounted) setState(() => _feedback = '诊断存储未恢复，请重试');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _copy() async {
-    await Clipboard.setData(ClipboardData(text: widget.log.read()));
+    if (_busy) return;
+    try {
+      await Clipboard.setData(ClipboardData(text: widget.log.read()));
+    } catch (_) {
+      if (mounted) setState(() => _feedback = '复制未完成，请重试');
+      return;
+    }
     if (!mounted) {
       return;
     }
@@ -77,6 +142,7 @@ class _LogScreenState extends State<LogScreen> {
                       Expanded(
                         child: PrimaryGradientButton(
                           label: '刷新',
+                          enabled: !_busy,
                           compact: true,
                           onTap: _refresh,
                         ),
@@ -86,22 +152,39 @@ class _LogScreenState extends State<LogScreen> {
                         child: PrimaryGradientButton(
                           label: '复制',
                           compact: true,
-                          enabled: hasLog,
+                          enabled: hasLog && !_busy,
                           onTap: _copy,
                         ),
                       ),
                       const SizedBox(width: AppCustomTokens.spaceSm),
                       Expanded(
                         child: PrimaryGradientButton(
-                          label: '清空',
+                          label: _busy ? '处理中' : '清空',
                           compact: true,
-                          enabled: hasLog,
+                          enabled: hasLog && !_busy,
                           onTap: _clear,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: AppCustomTokens.spaceMd),
+                  if (_feedback != null || widget.log.storageError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(
+                          bottom: AppCustomTokens.spaceSm),
+                      child: Text(
+                          [
+                            if (_feedback != null) _feedback!,
+                            if (widget.log.storageError != null)
+                              widget.log.storageError!
+                          ].join('\n'),
+                          key: const ValueKey('diagnostic-feedback'),
+                          style: textTheme.bodySmall),
+                    ),
+                  if (widget.log.storageError != null)
+                    TextButton(
+                        onPressed: _busy ? null : _retry,
+                        child: const Text('重试存储')),
                   Expanded(
                     child: SectionCard(
                       child: SingleChildScrollView(

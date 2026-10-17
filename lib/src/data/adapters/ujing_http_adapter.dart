@@ -7,6 +7,7 @@
 // Endpoints/headers/parse shapes align with legacy UjingApi.java + UjingRuntimeAdapter.java +
 // the existing request contracts; production explicitly injects this adapter.
 
+import '../../runtime/diagnostic_privacy.dart';
 import '../../runtime/models/account_session.dart';
 import '../../runtime/models/washer_order.dart';
 import '../../runtime/models/water_order.dart';
@@ -109,7 +110,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       throw const UjingException('登录响应缺少有效 token，结果未确认');
     }
     _token = token;
-    _log('U净登录成功 mobile=$mobile');
+    _log('U净登录成功');
     return UjingAccountUi(
       mobile: _str(data, 'mobile', fallback: mobile),
       userId: _str(data, 'userId'),
@@ -494,9 +495,9 @@ class UjingHttpAdapter implements IUjingAdapter {
     }
 
     // SDK 那一跳经 launcher（Fake 返回 9000；真机 RealPaymentLauncher 接原生 PayTask）。
-    _log('启动支付宝支付 orderId=${order.orderId}');
+    _log('启动支付宝支付');
     final resultStatus = await _launcher.payWithAlipay(orderInfo);
-    _log('支付宝返回 resultStatus=$resultStatus orderId=${order.orderId}');
+    _log('支付宝返回 resultStatus=${DiagnosticPrivacy.paymentStatus(resultStatus)}');
 
     // 支付后必须刷新订单详情（对齐 legacy「不能只信 SDK 回调」）。
     final refreshed = await _fetchWasherOrderDetail(order.orderId, token);
@@ -526,7 +527,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       weex: '1.1.68',
       authToken: token,
     ));
-    _log('洗衣启动请求已确认，等待订单详情 orderId=${order.orderId}');
+    _log('洗衣启动请求已确认，等待订单详情');
     return _fetchWasherOrderDetail(order.orderId, token);
   }
 
@@ -541,7 +542,7 @@ class UjingHttpAdapter implements IUjingAdapter {
       weex: '1.1.68',
       authToken: token,
     ));
-    _log('洗衣停止请求已确认，等待订单详情 orderId=${order.orderId}');
+    _log('洗衣停止请求已确认，等待订单详情');
     return _fetchWasherOrderDetail(order.orderId, token);
   }
 

@@ -22,7 +22,7 @@ const _tasks = [
 ];
 
 Future<void> _show(WidgetTester tester, List<HomeTaskUi> tasks, double width,
-    {double scale = 1}) async {
+    {double scale = 1, bool settle = true}) async {
   await tester.pumpWidget(MaterialApp(
       home: Scaffold(
           body: SingleChildScrollView(
@@ -46,7 +46,11 @@ Future<void> _show(WidgetTester tester, List<HomeTaskUi> tasks, double width,
     await Future.wait(
         images.map((image) => precacheImage(image.image, context)));
   });
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
   for (final image in tester.widgetList<RawImage>(find.byType(RawImage))) {
     expect(image.image, isNotNull,
         reason: 'Evidence must contain decoded icons');
@@ -55,7 +59,7 @@ Future<void> _show(WidgetTester tester, List<HomeTaskUi> tasks, double width,
 
 void main() {
   testWidgets('capture ongoing card layout evidence', (tester) async {
-    for (var count = 1; count <= 3; count++) {
+    for (var count = 0; count <= 3; count++) {
       await _show(tester, _tasks.sublist(3 - count), 328);
       await expectLater(find.byKey(const ValueKey('capture-ongoing')),
           matchesGoldenFile('evidence/ongoing-$count.png'));
@@ -67,8 +71,8 @@ void main() {
       await _show(tester, _tasks, width);
       final baseline = tester.getSize(find.byType(OngoingCard)).height;
       final first = tester.getRect(find.byType(RunningStatusCard).at(0));
-      // Existing content + padding + 2dp border; no additional vertical spacing.
-      expect(first.height, closeTo(92, .3));
+      // Tasks must fit the original 76dp empty frame.
+      expect(first.height, closeTo(76, .3));
       final row =
           tester.getRect(find.byKey(const ValueKey('running-task-row')));
       expect(first.width, closeTo((row.width - 8) / 3, .01));
@@ -104,9 +108,63 @@ void main() {
       }
       await _show(tester, [], width);
       expect(find.text('无任务'), findsOneWidget);
+      expect(tester.getSize(find.byType(OngoingCard)).height,
+          closeTo(baseline, .01));
       expect(tester.takeException(), isNull);
     });
   }
+
+  for (final width in [288.0, 328.0, 380.0]) {
+    for (final scale in [1.0, 1.5, 2.0]) {
+      testWidgets('empty and tasks keep frame stable at $width / $scale',
+          (tester) async {
+        const long = HomeTaskUi(
+            target: HomeTaskTarget.washer,
+            title: '洗衣订单状态较长等待更新',
+            extra: '剩余时间正在重新查询，请稍后核对',
+            asset: 'shui_yifu.png');
+        await _show(tester, [], width, scale: scale);
+        final baseline = tester.getRect(find.byType(OngoingCard));
+        for (final tasks in [
+          [_tasks.first],
+          [_tasks[1]],
+          [_tasks.last],
+          _tasks.sublist(0, 2),
+          _tasks,
+          [_tasks.first, long, _tasks.last],
+          [long],
+          <HomeTaskUi>[],
+        ]) {
+          await _show(tester, tasks, width, scale: scale, settle: false);
+          expect(tester.getRect(find.byType(OngoingCard)), baseline);
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(tester.getRect(find.byType(OngoingCard)), baseline);
+          await tester.pumpAndSettle();
+          expect(tester.getRect(find.byType(OngoingCard)), baseline);
+          for (final label in tester.widgetList<Text>(find.descendant(
+              of: find.byType(RunningStatusCard),
+              matching: find.byType(Text)))) {
+            expect(label.maxLines, 1);
+          }
+          expect(tester.takeException(), isNull);
+        }
+      });
+    }
+  }
+
+  testWidgets('compact task exposes complete text on long press',
+      (tester) async {
+    const task = HomeTaskUi(
+        target: HomeTaskTarget.washer,
+        title: '洗衣订单状态较长等待更新',
+        extra: '剩余时间正在重新查询，请稍后核对',
+        asset: 'shui_yifu.png');
+    await _show(tester, [task], 288, scale: 2);
+    await tester.longPress(find.byType(RunningStatusCard));
+    await tester.pumpAndSettle();
+    expect(find.text('${task.title}\n${task.extra}'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('long labels have equal heights after task replacements settle',
       (tester) async {

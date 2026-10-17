@@ -61,7 +61,7 @@ class IoUjingTransport implements UjingTransport {
       req = await _client.openUrl(request.method, uri);
       deadline.attach(req);
     } on Exception catch (e) {
-      throw UjingException('网络请求失败：$e');
+      throw UjingException('网络请求失败（${e.runtimeType}）');
     }
 
     req.headers
@@ -100,14 +100,14 @@ class IoUjingTransport implements UjingTransport {
       resp = await req.close();
       text = await resp.transform(utf8.decoder).join();
     } on Exception catch (e) {
-      throw UjingException('网络响应读取失败：$e');
+      throw UjingException('网络响应读取失败（${e.runtimeType}）');
     }
     deadline.check();
     _rememberCookies(resp);
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       // 401/403 = 服务端拒绝当前凭证 → 标记 authInvalid 触发 RELOG 清凭证+重登。
-      throw UjingException('HTTP ${resp.statusCode}: $text',
+      throw UjingException('HTTP ${resp.statusCode}，请求未完成',
           code: '${resp.statusCode}',
           authInvalid: resp.statusCode == 401 || resp.statusCode == 403);
     }
@@ -116,7 +116,7 @@ class IoUjingTransport implements UjingTransport {
     try {
       decoded = jsonDecode(text);
     } on FormatException catch (e) {
-      throw UjingException('响应不是合法 JSON，结果未确认：$e');
+      throw UjingException('响应不是合法 JSON，结果未确认（${e.runtimeType}）');
     }
     if (decoded is! Map<String, dynamic>) {
       throw const UjingException('响应格式异常（顶层非对象），结果未确认');

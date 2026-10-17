@@ -110,7 +110,7 @@ class RealShower798Adapter implements IShower798Adapter {
       throw const Shower798Exception('登录返回缺少账号信息');
     }
     _token = token;
-    _log('798 洗浴登录成功 phone=${phone.trim()}');
+    _log('798 洗浴登录成功');
     return Shower798SessionData(
       phone: phone.trim(),
       uid: _str(al, 'uid'),

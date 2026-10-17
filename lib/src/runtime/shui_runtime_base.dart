@@ -142,8 +142,8 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   void applyRecoveryWarnings(PersistedSnapshot snapshot) {
     recoveryWarnings = List.of(snapshot.recoveryWarnings);
     ujingOrderStorageBlocked = snapshot.ujingOrderStorageBlocked;
-    for (final warning in recoveryWarnings) {
-      diagnosticLog.log('storage', warning);
+    if (recoveryWarnings.isNotEmpty) {
+      diagnosticLog.log('storage', '本地数据恢复存在异常');
     }
   }
 

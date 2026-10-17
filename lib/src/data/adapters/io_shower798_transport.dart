@@ -66,12 +66,12 @@ class IoShower798Transport implements Shower798Transport {
       resp = await req.close();
       text = await resp.transform(utf8.decoder).join();
     } on Exception catch (e) {
-      throw Shower798Exception('网络请求失败：$e');
+      throw Shower798Exception('网络请求失败（${e.runtimeType}）');
     }
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       // 401/403 = 服务端拒绝当前 token → 标记 authInvalid 触发 RELOG。
-      throw Shower798Exception('HTTP ${resp.statusCode}: $text',
+      throw Shower798Exception('HTTP ${resp.statusCode}，请求未完成',
           code: '${resp.statusCode}',
           authInvalid: resp.statusCode == 401 || resp.statusCode == 403);
     }
@@ -83,7 +83,7 @@ class IoShower798Transport implements Shower798Transport {
     try {
       decoded = jsonDecode(text);
     } on FormatException catch (e) {
-      throw Shower798Exception('响应不是合法 JSON，结果未确认：$e');
+      throw Shower798Exception('响应不是合法 JSON，结果未确认（${e.runtimeType}）');
     }
     if (decoded is! Map<String, dynamic>) {
       throw const Shower798Exception('响应格式异常（顶层非对象），结果未确认');
@@ -130,7 +130,7 @@ class IoShower798Transport implements Shower798Transport {
     } on Shower798Exception {
       rethrow;
     } on Exception catch (e) {
-      throw Shower798Exception('验证码请求失败：$e');
+      throw Shower798Exception('验证码请求失败（${e.runtimeType}）');
     }
   }
 

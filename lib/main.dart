@@ -59,7 +59,8 @@ Future<void> main() async {
   );
   final previousOnError = FlutterError.onError;
   FlutterError.onError = (details) {
-    diagnosticLog.log('flutter-error', details.exceptionAsString());
+    diagnosticLog.log(
+        'flutter-error', 'Flutter异常 type=${details.exception.runtimeType}');
     previousOnError?.call(details);
   };
 

@@ -78,8 +78,10 @@ Future<void> _detail(WidgetTester tester, ShuiHomeState state) async {
   await tester.pumpAndSettle();
 }
 
-Color? _statusColor(WidgetTester tester) =>
-    tester.widget<Text>(find.text('≋  状态测试')).style?.color;
+Color? _statusColor(WidgetTester tester) => tester
+    .widget<Text>(find.byKey(const ValueKey('hotwater-status-title')))
+    .style
+    ?.color;
 
 void main() {
   testWidgets(

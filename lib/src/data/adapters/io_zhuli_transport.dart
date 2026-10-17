@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'hotwater_adapter.dart';
+import 'http_request_deadline.dart';
 import 'zhuli_transport.dart';
 
 /// 真实 Zhuli 签名 HTTP 传输：dart:io [HttpClient] 实现，对齐 legacy `ZhuliApi`。
@@ -66,23 +67,29 @@ class IoZhuliTransport implements ZhuliTransport {
 
     final HttpClientResponse resp;
     final String text;
-    HttpClientRequest? req;
     try {
-      req = await _client.getUrl(uri).timeout(_requestTimeout);
-      req.headers.set('Accept', 'application/json, text/plain, */*');
-      req.headers.contentType = ContentType('application', 'json');
-      resp = await req.close().timeout(_requestTimeout);
-      text = await resp.transform(utf8.decoder).join().timeout(_requestTimeout);
+      final result =
+          await HttpRequestDeadline.run(_requestTimeout, (deadline) async {
+        final req = await _client.getUrl(uri);
+        deadline.attach(req);
+        req.headers.set('Accept', 'application/json, text/plain, */*');
+        req.headers.contentType = ContentType('application', 'json');
+        final response = await req.close();
+        final body = await response.transform(utf8.decoder).join();
+        deadline.check();
+        return (response: response, body: body);
+      });
+      resp = result.response;
+      text = result.body;
     } on TimeoutException {
-      req?.abort();
-      throw const HotwaterException('网络请求超时，请稍后重试');
+      throw const HotwaterException('网络请求超时，结果可能尚未确认，请核对设备后再操作');
     } on Exception catch (e) {
-      throw HotwaterException('网络请求失败：$e');
+      throw HotwaterException('网络请求失败（${e.runtimeType}）');
     }
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       // 401/403 = 服务端拒绝当前 session → 标记 authInvalid 触发 RELOG。
-      throw HotwaterException('HTTP ${resp.statusCode}: $text',
+      throw HotwaterException('HTTP ${resp.statusCode}，请求未完成',
           code: '${resp.statusCode}',
           authInvalid: resp.statusCode == 401 || resp.statusCode == 403);
     }
@@ -91,7 +98,7 @@ class IoZhuliTransport implements ZhuliTransport {
     try {
       decoded = jsonDecode(text);
     } on FormatException catch (e) {
-      throw HotwaterException('响应不是合法 JSON：$e');
+      throw HotwaterException('响应不是合法 JSON（${e.runtimeType}）');
     }
     if (decoded is! Map<String, dynamic>) {
       throw const HotwaterException('响应格式异常（顶层非对象）');

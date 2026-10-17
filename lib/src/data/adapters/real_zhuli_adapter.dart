@@ -13,6 +13,8 @@
 
 import 'dart:convert';
 
+import '../../runtime/diagnostic_privacy.dart';
+
 import '../../runtime/models/hotwater_history.dart';
 import 'ble_transport.dart';
 import 'hotwater_adapter.dart';
@@ -134,7 +136,7 @@ class RealZhuliAdapter implements IHotwaterAdapter, HotwaterControlReadiness {
       secretKey: secretKey,
     );
     _session = session;
-    _log('住理登录成功 phone=$phone');
+    _log('住理登录成功');
     return session;
   }
 
@@ -151,7 +153,7 @@ class RealZhuliAdapter implements IHotwaterAdapter, HotwaterControlReadiness {
       throw const HotwaterException('设备码为空');
     }
 
-    void stage(String name) => _log('热水启动阶段=$name deviceId=$deviceId');
+    void stage(String name) => _log('热水启动阶段=$name');
 
     // 1. device/get_by_id → ble 名称/mac/类型。
     stage('device_query');
@@ -263,7 +265,7 @@ class RealZhuliAdapter implements IHotwaterAdapter, HotwaterControlReadiness {
       });
 
       stage('completed');
-      _log('热水启动完成 deviceId=$deviceId orderId=$orderId');
+      _log('热水启动完成');
       return HotwaterActionResult(
         deviceId: deviceId,
         statusText: '热水启动完成，供应中',
@@ -306,7 +308,7 @@ class RealZhuliAdapter implements IHotwaterAdapter, HotwaterControlReadiness {
         'hex': endResp,
       });
       _lastIsn = '';
-      _log('热水已关闭 deviceId=$deviceId');
+      _log('热水已关闭');
       return HotwaterActionResult(deviceId: deviceId, statusText: '热水已关闭');
     } finally {
       await conn.close();
@@ -429,10 +431,12 @@ class RealZhuliAdapter implements IHotwaterAdapter, HotwaterControlReadiness {
       return await request();
     } on HotwaterException catch (error) {
       final code = error.code?.isNotEmpty == true ? error.code : 'unknown';
-      _log('住理接口失败 endpoint=$path code=$code');
+      _log(
+          '住理接口失败 endpoint=${DiagnosticPrivacy.endpoint(path)} code=${DiagnosticPrivacy.code(code!)}');
       rethrow;
     } on Object catch (error) {
-      _log('住理接口失败 endpoint=$path type=${error.runtimeType}');
+      _log(
+          '住理接口失败 endpoint=${DiagnosticPrivacy.endpoint(path)} type=${DiagnosticPrivacy.errorType(error)}');
       rethrow;
     }
   }
