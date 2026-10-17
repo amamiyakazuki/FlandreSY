@@ -122,7 +122,9 @@ mixin Shower798Actions on ShuiRuntimeBase {
     );
   }
 
-  /// 登录慧生活798（fake：手机号 + 短信码非空 → 成功 + 加载 fake 设备列表）。
+  String _loginStage = '登录请求';
+
+  /// 登录、读取列表与保存共同完成后才发布新身份。
   /// 对齐 legacy loginShower798。
   Future<void> loginShower798(String phone, String smsCode) async {
     await ready;
@@ -135,18 +137,23 @@ mixin Shower798Actions on ShuiRuntimeBase {
     if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
       return;
     }
+    _loginStage = '登录请求';
     resetAccountAvailability(AccountKind.shower798);
     hotwaterAuthChanging = true;
     try {
       await _loginShower798(phone, smsCode);
     } catch (error) {
-      diagnosticLog.log('auth', '798登录保存失败 type=${error.runtimeType}');
+      diagnosticLog.log(
+          'auth', '798登录失败 stage=$_loginStage type=${error.runtimeType}');
       hotwaterAuthChanging = false;
-      if (migration.needsLogin('shower798')) {
-        reconcileRestoredAuth();
-      } else {
-        await handleAuthInvalidation(AuthService.shower798);
-      }
+      final authInvalid = error is Shower798Exception && error.authInvalid;
+      final detail = error is Shower798Exception
+          ? error.message
+          : (_loginStage.contains('保存') ? '本地保存失败' : '请求异常，请重试');
+      await handleAuthInvalidation(
+        AuthService.shower798,
+        failureMessage: authInvalid ? null : '$_loginStage未完成：$detail；请重新登录',
+      );
     } finally {
       hotwaterAuthChanging = false;
     }
@@ -174,6 +181,7 @@ mixin Shower798Actions on ShuiRuntimeBase {
     }
     emit(
       state.copyWith(
+        shower798DevicesStatus: const RuntimeActionStatus(),
         shower798Login: const RuntimeActionStatus(
           state: RuntimeTaskState.loading,
           message: '正在登录慧生活798',
@@ -185,7 +193,10 @@ mixin Shower798Actions on ShuiRuntimeBase {
     final List<Shower798DeviceUi> devices;
     try {
       session = await shower798.login(mobile, smsCode.trim());
+      if (isDisposed) return;
+      _loginStage = '登录后设备列表读取';
       devices = await shower798.loadDevices();
+      if (isDisposed) return;
     } on Shower798Exception {
       // 包括登录后设备列表失败，由外层统一清理混合身份。
       rethrow;
@@ -195,19 +206,23 @@ mixin Shower798Actions on ShuiRuntimeBase {
       uid: session.uid,
       eid: session.eid,
     );
+    _loginStage = '登录信息保存';
     if (session.token.isNotEmpty) {
-      await sessions.clearShower798();
+      await withShower798Storage(sessions.clearShower798);
       await secure.saveShower798Token(session.token);
+      if (isDisposed) return;
     }
-    await sessions.saveShower798(Shower798Persisted(
-      account: account,
-      devices: devices,
-      currentDeviceId:
-          devices.any((d) => d.id == state.currentShower798DeviceId)
-              ? state.currentShower798DeviceId
-              : '',
-    ));
+    await withShower798Storage(() => sessions.saveShower798(Shower798Persisted(
+          account: account,
+          devices: devices,
+          currentDeviceId:
+              devices.any((d) => d.id == state.currentShower798DeviceId)
+                  ? state.currentShower798DeviceId
+                  : '',
+        )));
+    _loginStage = '旧数据登录确认保存';
     await migration.confirmLogin('shower798');
+    if (isDisposed) return;
     emit(
       state.copyWith(
         shower798Account: account,
@@ -230,147 +245,194 @@ mixin Shower798Actions on ShuiRuntimeBase {
   Future<void> checkShower798Status() =>
       checkAccountStatus(AccountKind.shower798);
 
-  /// 添加 798 设备（经 IShower798Adapter：add → reload；已存在则仅设为当前）。
-  /// 对齐 legacy addShower798Device。
-  Future<void> addShower798Device(String deviceId) async {
+  Future<void> _deviceTail = Future<void>.value();
+  Future<void>? _refresh;
+  // A server-confirmed addition is not resent after a subsequent sync failure.
+  final Set<String> _confirmedAdds = {};
+  int _confirmedAddsEpoch = -1;
+
+  bool _deviceContextCurrent(int epoch, String owner) =>
+      !isDisposed &&
+      !hotwaterAuthChanging &&
+      epoch == hotwaterAuthEpoch &&
+      legacyServiceReady('shower798') &&
+      state.shower798Account?.mobile == owner;
+
+  void _deviceStatus(RuntimeTaskState task, String message) {
+    if (!isDisposed) {
+      emit(state.copyWith(
+          shower798DevicesStatus:
+              RuntimeActionStatus(state: task, message: message)));
+    }
+  }
+
+  Future<void> _queueDevices(
+      String label, Future<void> Function(int, String) action) async {
     await ready;
-    if (isDisposed || hotwaterAuthChanging || !legacyServiceReady('shower798')) {
+    if (isDisposed) return;
+    final owner = state.shower798Account?.mobile ?? '';
+    if (hotwaterAuthChanging ||
+        !legacyServiceReady('shower798') ||
+        owner.isEmpty) {
+      _deviceStatus(RuntimeTaskState.failure, '请先完成 798 登录和旧数据保全');
       return;
     }
+    final epoch = hotwaterAuthEpoch;
     hotwaterAccountWriteCount++;
+    final result = _deviceTail.then((_) async {
+      if (!_deviceContextCurrent(epoch, owner)) return;
+      if (_confirmedAddsEpoch != epoch) {
+        _confirmedAdds.clear();
+        _confirmedAddsEpoch = epoch;
+      }
+      _deviceStatus(RuntimeTaskState.loading, label);
+      try {
+        await action(epoch, owner);
+      } on Shower798Exception catch (e) {
+        if (!_deviceContextCurrent(epoch, owner)) return;
+        if (e.authInvalid) {
+          await handleAuthInvalidation(AuthService.shower798,
+              expectedEpoch: epoch);
+        } else {
+          _deviceStatus(RuntimeTaskState.failure, e.message);
+        }
+      } catch (error) {
+        if (_deviceContextCurrent(epoch, owner)) {
+          diagnosticLog.log('storage', '798设备操作失败 type=${error.runtimeType}');
+          _deviceStatus(RuntimeTaskState.failure, '设备列表或选择未保存，请重试；原记录已保留');
+        }
+      }
+    });
+    _deviceTail =
+        result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
     try {
-      await _addShower798Device(deviceId);
+      await result;
     } finally {
       hotwaterAccountWriteCount--;
     }
   }
 
-  Future<void> _addShower798Device(String deviceId) async {
-    final epoch = hotwaterAuthEpoch;
-    final id = deviceId.trim();
-    if (id.isEmpty) {
-      emit(
-        state.copyWith(
-          shower798Login: const RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: '请输入设备号',
-          ),
-        ),
-      );
-      return;
-    }
-    if (state.shower798Devices.any((d) => d.id == id)) {
-      emit(
-        state.copyWith(currentShower798DeviceId: id),
-      );
-      await _persist();
-      return;
-    }
-    final List<Shower798DeviceUi> devices;
-    try {
-      await shower798.addDevice(id);
-      devices = await shower798.loadDevices();
-    } on Shower798Exception catch (e) {
-      if (isDisposed || epoch != hotwaterAuthEpoch) return;
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.shower798,
-            expectedEpoch: epoch);
-        return;
+  /// Publish a whole snapshot only after storage confirms it. Cleanup shares the
+  /// storage queue and invalidates the epoch before waiting for an active save.
+  Future<bool> _commitDevices(int epoch, String owner,
+      List<Shower798DeviceUi> devices, String selected) async {
+    return withShower798Storage(() async {
+      if (!_deviceContextCurrent(epoch, owner)) return false;
+      final account = state.shower798Account!;
+      await sessions.saveShower798(Shower798Persisted(
+        account: account,
+        devices: devices,
+        currentDeviceId: selected,
+      ));
+      if (!_deviceContextCurrent(epoch, owner)) return false;
+      emit(state.copyWith(
+          shower798Devices: devices, currentShower798DeviceId: selected));
+      return true;
+    });
+  }
+
+  Future<void> addShower798Device(String deviceId) =>
+      _queueDevices('正在添加并同步设备', (epoch, owner) async {
+        final id = deviceId.trim();
+        if (id.isEmpty) {
+          _deviceStatus(RuntimeTaskState.failure, '请输入设备号');
+          return;
+        }
+        if (state.shower798Devices.any((d) => d.id == id)) {
+          if (await _commitDevices(epoch, owner, state.shower798Devices, id)) {
+            _deviceStatus(RuntimeTaskState.success, '当前设备已保存：$id');
+          }
+          return;
+        }
+        if (!_confirmedAdds.contains(id)) {
+          await shower798.addDevice(id);
+          if (!_deviceContextCurrent(epoch, owner)) return;
+          _confirmedAdds.add(id);
+        }
+        var stage = '同步';
+        try {
+          final devices = await shower798.loadDevices();
+          if (!_deviceContextCurrent(epoch, owner)) return;
+          if (!devices.any((d) => d.id == id)) {
+            _deviceStatus(
+                RuntimeTaskState.failure, '添加请求已确认，但列表尚未包含该设备，请刷新列表核对');
+            return;
+          }
+          stage = '保存';
+          if (await _commitDevices(epoch, owner, devices, id)) {
+            _confirmedAdds.remove(id);
+            _deviceStatus(RuntimeTaskState.success, '设备已添加并保存：$id');
+          }
+        } catch (error) {
+          if (!_deviceContextCurrent(epoch, owner)) return;
+          if (error is Shower798Exception && error.authInvalid) {
+            await handleAuthInvalidation(AuthService.shower798,
+                expectedEpoch: epoch,
+                failureMessage: '添加请求已确认，但登录已失效，请重新登录后刷新列表核对');
+            return;
+          }
+          _deviceStatus(
+              RuntimeTaskState.failure, '添加请求已确认，列表尚未$stage，请刷新列表重试；不会自动重发添加');
+        }
+      });
+
+  Future<void> refreshShower798Devices() {
+    final pending = _refresh;
+    if (pending != null) return pending;
+    late final Future<void> operation;
+    operation = _queueDevices('正在刷新设备列表', (epoch, owner) async {
+      final devices = await shower798.loadDevices();
+      if (!_deviceContextCurrent(epoch, owner)) return;
+      final oldSelected = state.currentShower798DeviceId;
+      final selected =
+          devices.any((d) => d.id == oldSelected) ? oldSelected : '';
+      if (await _commitDevices(epoch, owner, devices, selected)) {
+        _confirmedAdds.removeWhere((id) => devices.any((d) => d.id == id));
+        _deviceStatus(
+            RuntimeTaskState.success,
+            oldSelected.isNotEmpty && selected.isEmpty
+                ? '设备列表已保存；原设备已不在列表中，请重新选择'
+                : '设备列表已刷新并保存');
       }
-      emit(
-        state.copyWith(
-          shower798Login: RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: e.message,
-          ),
-        ),
-      );
-      return;
-    }
-    if (isDisposed || epoch != hotwaterAuthEpoch) return;
-    emit(
-      state.copyWith(
-        shower798Devices: devices,
-        currentShower798DeviceId: id,
-        shower798Login: RuntimeActionStatus(
-          state: RuntimeTaskState.success,
-          message: '已添加设备：$id',
-        ),
-      ),
-    );
-    await _persist();
+    }).whenComplete(() {
+      if (identical(_refresh, operation)) _refresh = null;
+    });
+    _refresh = operation;
+    return operation;
   }
 
-  /// 刷新 798 设备列表（经 IShower798Adapter.loadDevices）。对齐 legacy refreshShower798Devices。
-  Future<void> refreshShower798Devices() async {
-    await ready;
-    if (!legacyServiceReady('shower798')) return;
-    if (isDisposed || hotwaterAuthChanging || state.shower798Login.isBusy) {
-      return;
-    }
-    final epoch = hotwaterAuthEpoch;
-    final List<Shower798DeviceUi> refreshed;
-    try {
-      refreshed = await shower798.loadDevices();
-    } on Shower798Exception catch (e) {
-      if (isDisposed || epoch != hotwaterAuthEpoch) return;
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.shower798,
-            expectedEpoch: epoch);
-        return;
+  Future<void> selectShower798Device(String deviceId) =>
+      _queueDevices('正在保存当前设备', (epoch, owner) async {
+        if (!state.shower798Devices.any((d) => d.id == deviceId)) {
+          _deviceStatus(RuntimeTaskState.failure, '设备已不在列表中，请刷新后重新选择');
+          return;
+        }
+        if (await _commitDevices(
+            epoch, owner, state.shower798Devices, deviceId)) {
+          _deviceStatus(RuntimeTaskState.success, '当前设备已保存');
+        }
+      });
+
+  @override
+  Future<void> recordShower798StopConfirmation(
+      String deviceId, String owner) async {
+    // Only records the already-confirmed request; never sends a control action.
+    if (state.shower798Account?.mobile != owner) return;
+    await _queueDevices('正在保存请求确认', (epoch, currentOwner) async {
+      if (currentOwner != owner) return;
+      final devices = state.shower798Devices
+          .map((d) => d.id == deviceId
+              ? Shower798DeviceUi(
+                  id: d.id,
+                  name: d.name,
+                  lastStatus: '停止请求已确认',
+                  statusConfirmed: true)
+              : d)
+          .toList();
+      if (await _commitDevices(
+          epoch, owner, devices, state.currentShower798DeviceId)) {
+        _deviceStatus(RuntimeTaskState.success, '停止请求确认已保存，请核对设备');
       }
-      emit(
-        state.copyWith(
-          shower798Login: RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: e.message,
-          ),
-        ),
-      );
-      return;
-    }
-    if (isDisposed || epoch != hotwaterAuthEpoch) return;
-    emit(
-      state.copyWith(
-        shower798Devices: refreshed,
-        shower798Login: const RuntimeActionStatus(
-          state: RuntimeTaskState.success,
-          message: '设备列表已刷新',
-        ),
-      ),
-    );
-    await _persist();
-  }
-
-  /// 选择当前 798 设备（对齐 legacy selectShower798Device）。
-  Future<void> selectShower798Device(String deviceId) async {
-    await ready;
-    if (isDisposed || hotwaterAuthChanging || !legacyServiceReady('shower798')) {
-      return;
-    }
-    if (state.currentShower798DeviceId == deviceId) {
-      return;
-    }
-    emit(state.copyWith(currentShower798DeviceId: deviceId));
-    await _persist();
-  }
-
-  Future<void> _persist() async {
-    final account = state.shower798Account;
-    if (account == null) {
-      return;
-    }
-    hotwaterAccountWriteCount++;
-    try {
-      await sessions.saveShower798(
-        Shower798Persisted(
-          account: account,
-          devices: state.shower798Devices,
-          currentDeviceId: state.currentShower798DeviceId,
-        ),
-      );
-    } finally {
-      hotwaterAccountWriteCount--;
-    }
+    });
   }
 }

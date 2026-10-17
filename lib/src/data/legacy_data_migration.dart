@@ -24,6 +24,7 @@ class SharedPrefsLegacyMigrationStore implements LegacyMigrationStore {
     'ujing_mobile',
     'ujing_user_id',
     'ujing_service_subject_id',
+    'shower798_snapshot_v2',
     'shower798_mobile',
     'shower798_uid',
     'shower798_eid',

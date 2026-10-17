@@ -106,6 +106,18 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   int ujingAuthEpoch = 0;
   int ujingMutationCount = 0;
   int hotwaterAccountWriteCount = 0;
+  Future<void> _shower798StorageTail = Future<void>.value();
+
+  /// Account cleanup must follow any already-started write, so stale saves
+  /// cannot restore an invalidated identity on disk.
+  Future<T> withShower798Storage<T>(Future<T> Function() action) {
+    final result = _shower798StorageTail.then((_) => action());
+    _shower798StorageTail =
+        result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
+
+  Future<void> recordShower798StopConfirmation(String deviceId, String owner);
   int? _invalidatedUjingEpoch;
   String? _invalidatedUjingOwner;
   void beginUjingLoginEpoch() {
@@ -305,7 +317,9 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   /// 先校验代次并关闭内存认证，再清 secure 与普通账号资料；整个清理期间禁止新登录。
   /// 不主动导航；UI 靠既有 loginRequired 橙色 banner + 静态「重新登录」入口引导（用户已定）。
   Future<void> handleAuthInvalidation(AuthService service,
-      {int? expectedEpoch, bool localLogout = false}) async {
+      {int? expectedEpoch,
+      bool localLogout = false,
+      String? failureMessage}) async {
     if (isDisposed) return;
     if (service == AuthService.ujing) {
       if (ujingAuthChanging ||
@@ -325,7 +339,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       hotwaterAuthChanging = true;
     }
     if (service != AuthService.ujing) hotwaterAuthEpoch++;
-    final message = localLogout ? '已退出本机登录' : '登录已失效，请重新登录';
+    final message = failureMessage ?? (localLogout ? '已退出本机登录' : '登录已失效，请重新登录');
     final kind = switch (service) {
       AuthService.zhuli => AccountKind.zhuli,
       AuthService.ujing => AccountKind.ujing,
@@ -389,16 +403,26 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
           }
           emit(state.copyWith(
             clearShower798Account: true,
+            shower798DevicesStatus: const RuntimeActionStatus(),
             shower798Login: RuntimeActionStatus(
               state: RuntimeTaskState.loginRequired,
               message: message,
             ),
           ));
-          await Future.wait(
-              [secure.clearShower798Token(), sessions.clearShower798()]);
+          await Future.wait([
+            secure.clearShower798Token(),
+            withShower798Storage(sessions.clearShower798)
+          ]);
       }
     } catch (error) {
       diagnosticLog.log('auth', '失效凭据清理失败 type=${error.runtimeType}');
+      if (service == AuthService.shower798 && !isDisposed) {
+        emit(state.copyWith(
+            shower798Login: RuntimeActionStatus(
+          state: RuntimeTaskState.loginRequired,
+          message: '$message；本机凭据清理未完成，已停止使用当前登录，请重试',
+        )));
+      }
       if (localLogout) rethrow;
     } finally {
       if (service == AuthService.ujing) {

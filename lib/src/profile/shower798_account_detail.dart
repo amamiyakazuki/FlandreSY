@@ -15,7 +15,7 @@ import '../widgets/shui_text_field.dart';
 import 'shower798_device_tile.dart';
 
 /// 慧生活798 登录详情（图形验证码 base64 刷新 + 短信 cooldown + 设备管理）。
-/// 图片解码/刷新链路真实（Image.memory），数据 fake。真实短信/账号登录留用户真机验证。
+/// 登录与设备列表分别展示结果；真实服务兼容性需现场验证。
 class Shower798AccountDetail extends StatefulWidget {
   const Shower798AccountDetail({
     required this.state,
@@ -150,11 +150,10 @@ class _Shower798AccountDetailState extends State<Shower798AccountDetail> {
         _DeviceCard(
           state: s,
           deviceId: _deviceId,
-          loginBusy: loginBusy,
-          onAdd: () {
-            widget.onAddDevice(_deviceId.text);
-            _deviceId.clear();
-          },
+          loginBusy: loginBusy ||
+              s.shower798DevicesStatus.isBusy ||
+              s.shower798Account == null,
+          onAdd: () => widget.onAddDevice(_deviceId.text),
           onRefresh: widget.onRefreshDevices,
           onSelect: widget.onSelectDevice,
         ),
@@ -376,6 +375,7 @@ class _DeviceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SectionTitle(icon: ShuiAssets.shuiHuisheng798, title: '慧生活798设备'),
+          RuntimeStatusBanner(status: state.shower798DevicesStatus),
           const SizedBox(height: AppCustomTokens.formFieldGap),
           Text(
             '登录后会自动刷新设备列表。先选择默认洗浴系统，再在这里指定当前使用的 798 设备。',
@@ -418,7 +418,7 @@ class _DeviceCard extends StatelessWidget {
                 child: Shower798DeviceTile(
                   device: device,
                   isCurrent: state.currentShower798DeviceId == device.id,
-                  onSelect: () => onSelect(device.id),
+                  onSelect: loginBusy ? null : () => onSelect(device.id),
                 ),
               ),
             ),

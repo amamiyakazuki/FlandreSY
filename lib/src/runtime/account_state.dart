@@ -31,6 +31,7 @@ class AccountState {
       state: RuntimeTaskState.loginRequired,
       message: '慧生活798未登录',
     ),
+    this.shower798DevicesStatus = const RuntimeActionStatus(),
     this.shower798Captcha = const RuntimeActionStatus(),
     this.shower798CaptchaSentAtMillis = 0,
     this.shower798CaptchaImageBase64,
@@ -67,6 +68,7 @@ class AccountState {
 
   /// 798 登录动作状态。
   final RuntimeActionStatus shower798Login;
+  final RuntimeActionStatus shower798DevicesStatus;
 
   /// 798 图形验证码请求状态（含短信 cooldown 触发判定）。
   final RuntimeActionStatus shower798Captcha;
@@ -96,6 +98,7 @@ class AccountState {
     bool clearUjingAccount = false,
     // P3 798 字段。
     RuntimeActionStatus? shower798Login,
+    RuntimeActionStatus? shower798DevicesStatus,
     RuntimeActionStatus? shower798Captcha,
     int? shower798CaptchaSentAtMillis,
     List<Shower798DeviceUi>? shower798Devices,
@@ -119,6 +122,8 @@ class AccountState {
           ? null
           : (shower798Account ?? this.shower798Account),
       shower798Login: shower798Login ?? this.shower798Login,
+      shower798DevicesStatus:
+          shower798DevicesStatus ?? this.shower798DevicesStatus,
       shower798Captcha: shower798Captcha ?? this.shower798Captcha,
       shower798CaptchaSentAtMillis:
           shower798CaptchaSentAtMillis ?? this.shower798CaptchaSentAtMillis,

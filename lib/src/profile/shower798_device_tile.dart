@@ -21,18 +21,19 @@ class Shower798DeviceTile extends StatelessWidget {
 
   final Shower798DeviceUi device;
   final bool isCurrent;
-  final VoidCallback onSelect;
+  final VoidCallback? onSelect;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = AppTypography.textTheme;
     final pillColor = isCurrent
         ? AppColors.primary
-        : (device.lastStatus == '空闲'
+        : (device.displayStatus == '空闲'
             ? AppColors.serviceGreen
-            : AppColors.serviceOrange);
+            : AppColors.mutedText);
     return ShuiPressable(
-      onTap: onSelect,
+      enabled: onSelect != null,
+      onTap: onSelect ?? () {},
       soft: true,
       child: AnimatedContainer(
         duration: ShuiMotion.duration(context, ShuiMotion.local),
@@ -69,7 +70,7 @@ class Shower798DeviceTile extends StatelessWidget {
                         ?.copyWith(color: AppColors.deepText),
                   ),
                   Text(
-                    '设备号：${device.id} · 状态：${device.lastStatus}',
+                    '设备号：${device.id} · 状态：${device.displayStatus}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: textTheme.bodySmall
@@ -80,9 +81,9 @@ class Shower798DeviceTile extends StatelessWidget {
             ),
             const SizedBox(width: AppCustomTokens.spaceSm),
             StatusPill(
-              text: isCurrent ? '当前设备' : device.lastStatus,
+              text: isCurrent ? '当前设备' : device.displayStatus,
               color: pillColor,
-              filled: isCurrent || device.lastStatus == '使用中',
+              filled: isCurrent || device.displayStatus == '使用中',
             ),
           ],
         ),

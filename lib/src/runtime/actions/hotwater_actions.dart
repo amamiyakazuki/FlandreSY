@@ -4,7 +4,6 @@ import 'dart:async';
 
 import '../../data/adapters/hotwater_adapter.dart';
 import '../../data/adapters/shower798_adapter.dart';
-import '../models/account_session.dart';
 import '../models/local_device.dart';
 import '../models/hotwater_history.dart';
 import '../runtime_status.dart';
@@ -575,9 +574,7 @@ mixin HotwaterActions on ShuiRuntimeBase {
     );
     if (!cleared || isDisposed) return;
     if (session.system == BathSystemPreference.shower798) {
-      emit(state.copyWith(
-        shower798Devices: _mapDeviceStatus(session.deviceId, '停止请求已确认'),
-      ));
+      await recordShower798StopConfirmation(session.deviceId, session.account);
       final saved = await commitDeviceList((list) {
         if (!list.any((d) =>
             d.deviceType == LocalDeviceType.shower798 &&
@@ -761,15 +758,5 @@ mixin HotwaterActions on ShuiRuntimeBase {
         ),
       );
     });
-  }
-
-  List<Shower798DeviceUi> _mapDeviceStatus(String deviceId, String status) {
-    return state.shower798Devices
-        .map(
-          (d) => d.id == deviceId
-              ? Shower798DeviceUi(id: d.id, name: d.name, lastStatus: status)
-              : d,
-        )
-        .toList();
   }
 }

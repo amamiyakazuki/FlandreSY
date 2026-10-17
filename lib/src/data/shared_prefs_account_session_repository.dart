@@ -35,6 +35,14 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   @override
   Future<void> clearShower798() async {
     final prefs = await SharedPreferences.getInstance();
+    final previous = await loadShower798();
+    if (previous != null) {
+      await saveShower798(Shower798Persisted(
+        account: const Shower798AccountUi(mobile: '', uid: '', eid: ''),
+        devices: previous.devices,
+        currentDeviceId: previous.currentDeviceId,
+      ));
+    }
     for (final key in [_s798MobileKey, _s798UidKey, _s798EidKey]) {
       if (!await prefs.remove(key)) throw StateError('账号状态保存失败');
     }
@@ -48,6 +56,7 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   static const String _ujingUserIdKey = 'ujing_user_id';
   static const String _ujingServiceSubjectKey = 'ujing_service_subject_id';
   // P3 798：session 三字段 + 设备列表 JSON + 当前设备 id。
+  static const String _s798SnapshotKey = 'shower798_snapshot_v2';
   static const String _s798MobileKey = 'shower798_mobile';
   static const String _s798UidKey = 'shower798_uid';
   static const String _s798EidKey = 'shower798_eid';
@@ -100,6 +109,30 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   @override
   Future<Shower798Persisted?> loadShower798() async {
     final prefs = await SharedPreferences.getInstance();
+    if (prefs.containsKey(_s798SnapshotKey)) {
+      return readRecoverableJson(prefs, _s798SnapshotKey, (raw) {
+        final data = jsonDecode(raw) as Map<String, dynamic>;
+        if (data['schemaVersion'] != 2) {
+          throw const FormatException('Unknown 798 snapshot schema');
+        }
+        final account = data['account'] as Map<String, dynamic>;
+        return Shower798Persisted(
+          account: Shower798AccountUi(
+            mobile: account['mobile'] as String,
+            uid: account['uid'] as String,
+            eid: account['eid'] as String,
+          ),
+          currentDeviceId: data['currentDeviceId'] as String,
+          devices: (data['devices'] as List)
+              .map((item) => Shower798DeviceUi(
+                    id: item['id'] as String,
+                    name: item['name'] as String,
+                    lastStatus: item['lastStatus'] as String,
+                  ))
+              .toList(),
+        );
+      });
+    }
     final mobile = prefs.getString(_s798MobileKey);
     if ((mobile == null || mobile.isEmpty) &&
         !prefs.containsKey(_s798DevicesKey) &&
@@ -122,7 +155,7 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
               Shower798DeviceUi(
                 id: (item['id'] ?? '').toString(),
                 name: (item['name'] ?? '').toString(),
-                lastStatus: (item['lastStatus'] ?? '待机').toString(),
+                lastStatus: (item['lastStatus'] ?? '状态未查询').toString(),
               ),
             );
           }
@@ -143,19 +176,26 @@ class SharedPrefsAccountSessionRepository implements AccountSessionRepository {
   @override
   Future<void> saveShower798(Shower798Persisted data) async {
     final prefs = await SharedPreferences.getInstance();
-    await _save(prefs, _s798UidKey, data.account.uid);
-    await _save(prefs, _s798EidKey, data.account.eid);
-    await _save(prefs, _s798CurrentDeviceKey, data.currentDeviceId);
-    final devicesJson = jsonEncode(
-      data.devices
-          .map((d) => {
-                'id': d.id,
-                'name': d.name,
-                'lastStatus': d.lastStatus,
-              })
+    // One stored value prevents a failed selection/list write from leaving a
+    // partially updated account. Old keys remain available as legacy evidence.
+    final snapshot = jsonEncode({
+      'schemaVersion': 2,
+      'account': {
+        'mobile': data.account.mobile,
+        'uid': data.account.uid,
+        'eid': data.account.eid
+      },
+      'currentDeviceId': data.currentDeviceId,
+      'devices': data.devices
+          .map((d) => {'id': d.id, 'name': d.name, 'lastStatus': d.lastStatus})
           .toList(),
-    );
-    await _save(prefs, _s798DevicesKey, devicesJson);
-    await _save(prefs, _s798MobileKey, data.account.mobile);
+    });
+    try {
+      await _save(prefs, _s798SnapshotKey, snapshot);
+    } catch (_) {
+      // SharedPreferences updates its cache before the platform confirms a write.
+      await prefs.reload();
+      rethrow;
+    }
   }
 }

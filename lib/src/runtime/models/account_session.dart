@@ -58,10 +58,15 @@ class Shower798DeviceUi {
   const Shower798DeviceUi({
     required this.id,
     required this.name,
-    this.lastStatus = '待机',
+    this.lastStatus = '状态未查询',
+    this.statusConfirmed = false,
   });
 
   final String id;
   final String name;
   final String lastStatus;
+
+  /// 仅本次运行中明确的请求结果可展示，旧缓存不能证明当前设备状态。
+  final bool statusConfirmed;
+  String get displayStatus => statusConfirmed ? lastStatus : '状态未查询';
 }

@@ -115,6 +115,8 @@ class ShuiHomeState {
   int get ujingCaptchaSentAtMillis => account.ujingCaptchaSentAtMillis;
   Shower798AccountUi? get shower798Account => account.shower798Account;
   RuntimeActionStatus get shower798Login => account.shower798Login;
+  RuntimeActionStatus get shower798DevicesStatus =>
+      account.shower798DevicesStatus;
   RuntimeActionStatus get shower798Captcha => account.shower798Captcha;
   int get shower798CaptchaSentAtMillis => account.shower798CaptchaSentAtMillis;
   String? get shower798CaptchaImageBase64 =>
@@ -300,6 +302,7 @@ class ShuiHomeState {
     bool clearUjingAccount = false,
     // P3 798 字段（委托到 account.copyWith）。
     RuntimeActionStatus? shower798Login,
+    RuntimeActionStatus? shower798DevicesStatus,
     RuntimeActionStatus? shower798Captcha,
     int? shower798CaptchaSentAtMillis,
     List<Shower798DeviceUi>? shower798Devices,
@@ -364,6 +367,7 @@ class ShuiHomeState {
                 ujingAccount: ujingAccount,
                 clearUjingAccount: clearUjingAccount,
                 shower798Login: shower798Login,
+                shower798DevicesStatus: shower798DevicesStatus,
                 shower798Captcha: shower798Captcha,
                 shower798CaptchaSentAtMillis: shower798CaptchaSentAtMillis,
                 shower798Devices: shower798Devices,
