@@ -34,6 +34,8 @@ C3a main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/
 
 [阶段 1 本地收口记录](release-preparation-local-acceptance.md)：624 项 Flutter 测试通过 / 1 原有跳过，发布工具 21 项通过，静态检查通过；清理约 203.4 MiB 可再生成残余。仅本地模块分支保存，不推送。
 
+用户后续已授权本地构建：**2.2.0+5000 通用 APK 已生成，正式签名和产物检查通过**，见[候选记录](c6b-local-candidate-2.2.0.md)。未推送或发布；12 条实际覆盖安装及数据保全仍未验。
+
 ## 暂缓的建议模块
 
 [剩余问题与 E2 调试采集计划](e2-debug-capture-plan.md)：原 RA 剩 iOS BLE 完整适配、暂停的覆盖升级、首页洗衣统计区导航；另有独立抓包工具敏感输出、798 功能范围、交互验收及工具链/文档欠账。建议先 E2，再单独确认 D2；E1 已修 App 日志，独立抓包脚本尚未覆盖。推荐 1A＋2A（先 E2、保留只含允许摘要的采集工具），仅规划、尚未实现；C6b 继续暂停。
