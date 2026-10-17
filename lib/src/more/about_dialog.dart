@@ -58,83 +58,97 @@ class AboutDialogCard extends StatelessWidget {
 }
 
 /// 版本检查结果弹窗（有新版 → 下载提示 / 已最新）。对齐 legacy VersionCheckDialog。
-class VersionCheckDialogCard extends StatelessWidget {
-  const VersionCheckDialogCard({
-    required this.result,
-    required this.onDismiss,
-    this.onRetry,
-    super.key,
-  });
-
+class VersionCheckDialogCard extends StatefulWidget {
+  const VersionCheckDialogCard(
+      {required this.result,
+      required this.onDismiss,
+      this.onRetry,
+      this.openUrl,
+      super.key});
   final VersionCheckResult result;
   final VoidCallback onDismiss;
   final VoidCallback? onRetry;
+  final Future<bool> Function(Uri)? openUrl;
 
-  Future<void> _openDownload(BuildContext context) async {
-    final latest = result.latest;
-    if (latest == null) return;
-    final uri = Uri.tryParse(latest.downloadUrl);
-    if (uri == null ||
-        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('无法打开下载地址，请稍后重试。')),
-        );
+  @override
+  State<VersionCheckDialogCard> createState() => _VersionCheckDialogCardState();
+}
+
+class _VersionCheckDialogCardState extends State<VersionCheckDialogCard> {
+  bool _opening = false;
+  String? _feedback;
+
+  Future<void> _openDownload() async {
+    if (_opening) return;
+    final result = widget.result;
+    final url = result.actionUrl;
+    if (url == null) return;
+    setState(() {
+      _opening = true;
+      _feedback = null;
+    });
+    try {
+      if (!isReleaseUrl(url,
+          version: result.latest?.version, apk: result.hasUpdate)) {
+        throw const FormatException('invalid destination');
       }
+      final opened = await (widget.openUrl ??
+              (uri) => launchUrl(uri, mode: LaunchMode.externalApplication))(
+          Uri.parse(url));
+      if (mounted) {
+        setState(() => _feedback = opened ? '已打开链接，请在浏览器中继续。' : '无法打开链接，请重试。');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _feedback = '打开链接失败，请重试。');
+    } finally {
+      if (mounted) setState(() => _opening = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = AppTypography.textTheme;
-    final title = result.failed
-        ? '检查更新失败'
-        : result.hasUpdate
-            ? '发现新版本'
-            : '已是最新版本';
-    final body = result.failed
-        ? result.error!
-        : result.hasUpdate
-            ? '最新版本 ${result.latest!.version}（当前 ${result.current}）\n'
-                '${result.latest!.releaseDate.isEmpty ? '' : '发布日期：${result.latest!.releaseDate}\n'}'
-                '${result.latest!.changelog.join('；')}'
-            : '当前版本 ${result.current} 已是最新。';
+    final result = widget.result;
+    final latest = result.latest;
+    final title = switch (result.state) {
+      UpdateState.available => '发现新版本',
+      UpdateState.failure => '检查更新失败',
+      UpdateState.unknown => '当前版本未知',
+      UpdateState.noChannel => '更新渠道',
+      UpdateState.reviewRelease => '发布信息',
+      _ => '暂无可用更新',
+    };
     return ShuiModalCard(
-      onDismiss: onDismiss,
-      child: Column(
+      onDismiss: widget.onDismiss,
+      child: SingleChildScrollView(
+          child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: textTheme.titleMedium?.copyWith(color: AppColors.deepText),
-          ),
+          Text(title,
+              textAlign: TextAlign.center,
+              style: AppTypography.textTheme.titleMedium),
           const SizedBox(height: AppCustomTokens.spaceSm),
-          Text(
-            body,
-            textAlign: TextAlign.center,
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.mutedText),
-          ),
-          const SizedBox(height: AppCustomTokens.spaceMd),
-          if (result.hasUpdate) ...[
-            PrimaryGradientButton(
-              label: '立即下载',
-              icon: Icons.download_rounded,
-              onTap: () => _openDownload(context),
-            ),
+          Text(result.message, textAlign: TextAlign.center),
+          if (latest != null) ...[
             const SizedBox(height: AppCustomTokens.spaceSm),
+            Text('发布版本 ${latest.version}（当前 ${result.current}）'),
+            if (latest.releaseDate.isNotEmpty)
+              Text('发布日期：${latest.releaseDate}'),
+            for (final change in latest.changelog) Text(change),
           ],
-          if (result.failed)
-            PrimaryGradientButton(
-              label: '重试',
-              icon: Icons.refresh_rounded,
-              onTap: onRetry ?? onDismiss,
-            )
-          else
-            PrimaryGradientButton(label: '知道啦', onTap: onDismiss),
+          if (_feedback != null) Text(_feedback!),
+          const SizedBox(height: AppCustomTokens.spaceMd),
+          if (result.actionUrl != null)
+            TextButton(
+                onPressed: _opening ? null : _openDownload,
+                child: Text(_opening ? '正在打开…' : result.actionLabel!)),
+          if (result.failed || result.state == UpdateState.unknown)
+            TextButton(
+                onPressed: widget.onRetry ?? widget.onDismiss,
+                child: const Text('重试')),
+          PrimaryGradientButton(label: '知道啦', onTap: widget.onDismiss),
         ],
-      ),
+      )),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:flandresy/src/more/version_check.dart';
@@ -17,25 +18,31 @@ void main() {
       client: MockClient((_) async => http.Response.bytes(
             utf8.encode(
               '{"version":"2.2.0","release_date":"2026-10-01",'
-              '"changelog":["修复问题"],"downloads":{"github":"https://example.com/app.apk"}}',
+              '"changelog":["修复问题"],"downloads":{"github":"https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.2.0/app-release.apk"}}',
             ),
             200,
           )),
-      currentVersion: '2.1.0',
+      installed: const InstalledAppInfo(
+          version: '2.1.0', buildNumber: 1, packageName: 'com.flandresy'),
+      platform: TargetPlatform.android,
       manifestUri: Uri.parse('https://example.com/version.json'),
     );
 
     expect(result.error, isNull, reason: result.error);
     expect(result.failed, isFalse);
-    expect(result.hasUpdate, isTrue);
-    expect(result.latest?.downloadUrl, 'https://example.com/app.apk');
+    expect(result.state, UpdateState.reviewRelease);
+    expect(result.actionLabel, '查看发布说明');
+    expect(result.latest?.downloadUrl,
+        'https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.2.0/app-release.apk');
   });
 
   test('non-success response is retryable failure', () async {
     final result = await checkLatestVersion(
       client:
           MockClient((_) async => http.Response('service unavailable', 503)),
-      currentVersion: '2.1.0',
+      installed: const InstalledAppInfo(
+          version: '2.1.0', buildNumber: 1, packageName: 'com.flandresy'),
+      platform: TargetPlatform.android,
       manifestUri: Uri.parse('https://example.com/version.json'),
     );
 

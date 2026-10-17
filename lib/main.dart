@@ -1,7 +1,6 @@
 // Design tokens used: AppTheme, AppColors.background, AppTypography.textTheme, AppCustomTokens adaptive shell tokens.
 
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import 'src/app/flandre_app.dart';
 import 'src/data/adapters/alipay_payment_launcher.dart';
@@ -25,7 +24,7 @@ import 'src/data/shared_prefs_local_device_repository.dart';
 import 'src/data/shared_prefs_settings_repository.dart';
 import 'src/data/shared_prefs_water_order_repository.dart';
 import 'src/data/shared_prefs_washer_history_repository.dart';
-import 'src/more/version_check.dart' show kCurrentAppVersion;
+import 'src/more/version_check.dart' show currentAppVersion;
 import 'src/runtime/diagnostic_log.dart';
 import 'src/runtime/live_clock.dart';
 
@@ -49,13 +48,8 @@ Future<void> main() async {
     migration: migration,
   );
 
-  // M-REAL 检查版本：真实 App 版本号（PackageInfo.version）。读失败回退常量兜底。
-  String appVersion;
-  try {
-    appVersion = (await PackageInfo.fromPlatform()).version;
-  } catch (_) {
-    appVersion = kCurrentAppVersion;
-  }
+  // 与更新入口共用系统元信息读取；失败明确显示未知。
+  final appVersion = await currentAppVersion();
 
   // M-REAL 日志与诊断：持久化环形日志器。真实 adapter 埋点写入，日志页读；
   // FlutterError 也灌进来（对齐 legacy「后台组件结果也记录」）。

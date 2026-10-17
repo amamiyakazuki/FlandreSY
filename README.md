@@ -51,7 +51,7 @@
 - 统一页面、弹窗、列表和操作反馈的动效节奏
 - 增加统一账号中心，并明确住理生活、慧生活 798 与 U净的状态
 - 持久化热水会话和饮水订单，恢复应用后继续核对状态
-- 在“更多选项”中在线检查版本并直接打开 APK 下载地址
+- 在“更多选项”中按平台检查更新；Android 构建兼容信息不足时查看发布说明，iOS 暂无下载渠道
 
 ## 主要能力
 
@@ -109,41 +109,15 @@ APK 包名为 `com.flandresy.debug`，可与正式版共存，但托管 runner �
 - GitHub Releases 下载页：
   - `https://github.com/amamiyakazuki/FlandreSY/releases/latest`
 
-发版时需同步更新 `pubspec.yaml` 与 `assets/public/version.json`，并确保清单中的下载地址指向已经上传的 GitHub Release asset。
+候选构建版本与已公开稳定版清单分开：构建候选时不提前修改在线清单。正式资产公开并核验后，再同步两份稳定清单；旧客户端字段/路径保留。C6a 未发布新版本，当前在线仍为 2.1.4。
 
 ## Android 发布
 
-本地安装验证可以直接构建 release 模式 APK：
+以后面向用户统一提供 ARM64+x86_64 通用 APK，旧 Release/专用包保留。下一正式包需核验并跨过所选旧包的最高内部版本码，才能支持旧专用包迁移；**当前尚未执行该候选构建或真机覆盖验收**。历史 2.1.4 的安装建议仍以其发布说明为准。
 
-```bash
-flutter build apk --release
-```
+正式发布继续在本地进行。工具先核验历史真实 APK、候选版本与签名配置，使用锁定依赖运行分析/测试，再检查实际产物的包名、版本、签名、架构及校验和。默认只构建通用 APK，AAB 可按需构建；不上传或自动发布。
 
-如果没有 `android/key.properties`，Gradle 会明确打印 `debug fallback (local verification only)`；该 APK 只用于本地验证，不能作为正式分发包。
-
-正式发布使用下面的脚本。它会先校验版本、签名文件、Dart 分析和全量测试，再生成正式签名 APK/AAB：
-
-1. 复制 `android/key.properties.example` 为 `android/key.properties`
-2. 填入真实 keystore 路径、alias 与密码
-3. 运行统一校验与构建脚本：
-
-```bash
-bash tools/release/build_android_release.sh
-```
-
-当前 Flutter SDK 的正式 Android 构建目标为 `android-arm64` 与 `android-x64`；脚本会生成这两种 split APK、包含两种架构的 `app-release.apk` 和 AAB。
-
-如果只想先检查签名配置是否齐全：
-
-```bash
-bash tools/release/build_android_release.sh --validate-only
-```
-
-说明：
-- 仓库已经接好 release signing 自动读取逻辑
-- 发布脚本强制使用正式 keystore；`android/key.properties` 缺失时会在构建前失败
-- 为保证 beta 用户可原地升级到正式版，Android `applicationId` 当前保持为 `com.flandresy`
-- 对于 GitHub Releases 分发，当前更推荐把 `app-release.apk` 作为主安装包
+完整参数与流程见 [发布工具说明](tools/release/README.md)。缺少正式签名时 release 构建失败，不再回退 Debug 签名；本地普通验证使用独立 Debug 包。保持正式 applicationId `com.flandresy` 和原有签名身份，不能靠卸载解决覆盖升级问题。
 
 ## iOS 发布
 

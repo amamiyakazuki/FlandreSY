@@ -37,6 +37,9 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Test release tooling without private keys
+        run: python3 -m unittest discover -s tools/release/tests -v
+
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
@@ -76,6 +79,16 @@ jobs:
 
       - name: Build Android debug ARM64
         run: flutter build apk --debug --target-platform android-arm64 --no-pub
+
+      - name: Verify missing release signing is rejected
+        working-directory: android
+        run: |
+          test ! -f key.properties
+          if ./gradlew :app:validateReleaseSigningForDistribution > /tmp/release-signing-check.log 2>&1; then
+            echo 'Release signing validation unexpectedly accepted missing credentials'
+            exit 1
+          fi
+          grep -q 'Release requires complete android/key.properties' /tmp/release-signing-check.log
 
       - name: Upload debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

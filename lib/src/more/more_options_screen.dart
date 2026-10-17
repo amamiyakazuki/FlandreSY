@@ -21,6 +21,7 @@ class MoreOptionsScreen extends StatefulWidget {
     required this.onExportDevices,
     required this.onOpenLogs,
     this.onLegacyRecovery,
+    this.checkVersion,
     this.appVersion = kCurrentAppVersion,
     super.key,
   });
@@ -33,6 +34,7 @@ class MoreOptionsScreen extends StatefulWidget {
   final VoidCallback onOpenLogs;
   final String appVersion;
   final VoidCallback? onLegacyRecovery;
+  final Future<VersionCheckResult> Function()? checkVersion;
 
   @override
   State<MoreOptionsScreen> createState() => _MoreOptionsScreenState();
@@ -44,6 +46,7 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
   _Overlay _overlay = _Overlay.none;
   VersionCheckResult? _versionResult;
   bool _checkingVersion = false;
+  String? _checkedVersion;
 
   void _dismiss() => setState(() => _overlay = _Overlay.none);
 
@@ -51,13 +54,14 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
   Future<void> _checkVersion() async {
     if (_checkingVersion) return;
     setState(() => _checkingVersion = true);
-    final result = await checkLatestVersion(currentVersion: widget.appVersion);
+    final result = await (widget.checkVersion ?? checkLatestVersion)();
     if (!mounted) {
       return;
     }
     setState(() {
       _checkingVersion = false;
       _versionResult = result;
+      _checkedVersion = result.current;
       _overlay = _Overlay.version;
     });
   }
@@ -118,7 +122,7 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
                         child: switch (_overlay) {
                           _Overlay.about => AboutDialogCard(
                               onDismiss: _dismiss,
-                              appVersion: widget.appVersion,
+                              appVersion: _checkedVersion ?? widget.appVersion,
                             ),
                           _Overlay.version => VersionCheckDialogCard(
                               result: _versionResult!,
@@ -158,7 +162,9 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
       _OptionRowData(
         icon: ShuiAssets.shuiRed3,
         title: '检查版本',
-        subtitle: _checkingVersion ? '正在检查更新…' : '当前版本 ${widget.appVersion}',
+        subtitle: _checkingVersion
+            ? '正在检查更新…'
+            : '当前版本 ${_checkedVersion ?? widget.appVersion}',
         onTap: _checkVersion,
       ),
       _OptionRowData(

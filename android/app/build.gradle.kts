@@ -10,7 +10,7 @@ val hasReleaseSigning = keystorePropertiesFile.exists()
 
 println(
     "FlandreSY Android release signing mode: " +
-        if (hasReleaseSigning) "formal release keystore" else "debug fallback (local verification only)",
+        if (hasReleaseSigning) "formal release keystore" else "not configured (Debug builds only)",
 )
 
 if (hasReleaseSigning) {
@@ -46,10 +46,10 @@ android {
     signingConfigs {
         create("release") {
             if (hasReleaseSigning) {
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = keystoreProperties.getProperty("storeFile")?.let { rootProject.file(it) }
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
             }
         }
     }
@@ -60,14 +60,8 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            // 正式发布时请提供 android/key.properties + 真 keystore。
-            // 若仓库内缺失签名文件，保留 debug fallback 便于验证 release 模式行为；
-            // 但这种产物不能作为正式分发包上传。
-            signingConfig = if (hasReleaseSigning) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // Release 必须有正式签名；Debug 仍使用独立包名且不需要正式配置。
+            signingConfig = signingConfigs.getByName("release")
             // 应用 CameraX / ML Kit / mobile_scanner 的 keep 规则，修复 release 真机
             // 扫码 R8 混淆导致的空指针崩溃（proguard-rules.pro）。
             proguardFiles(
@@ -92,4 +86,22 @@ dependencies {
     // Alipay SDK (for real payment with --dart-define=UJING_HTTP=true)
     // Version matches the legacy Kotlin project.
     implementation("com.alipay.sdk:alipaysdk-android:15.8.42")
+}
+
+// Gate release tasks, including aggregate build/assemble, without blocking Debug CI.
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.project == project && it.name.contains("Release", ignoreCase = true) }) {
+        val complete = listOf("storeFile", "storePassword", "keyAlias", "keyPassword").all {
+            !keystoreProperties.getProperty(it).isNullOrBlank()
+        }
+        check(complete && rootProject.file(keystoreProperties.getProperty("storeFile", "")).isFile) {
+            "Release requires complete android/key.properties and an existing keystore; Debug remains available."
+        }
+    }
+}
+
+// Explicit CI/preflight entry: the release task-graph gate above validates it too.
+tasks.register("validateReleaseSigningForDistribution") {
+    group = "verification"
+    description = "Reject release builds without complete signing configuration."
 }
