@@ -1,14 +1,26 @@
 {
-  "version": "2.1.4",
-  "release_date": "2026-09-28",
+  "version": "2.2.0",
+  "release_date": "2026-10-17",
   "changelog": [
-    "修复旧洗衣和饮水订单归属恢复，保留已有账号隔离",
-    "首页进行中卡片等宽三等分、紧凑间距、不足三项靠左",
-    "住理、U净和798新增本地登出及账号检测，保留订单与设备配置",
-    "区分热水待确认、历史加载失败与无记录",
-    "优化热水详情窄屏与大字号排版，长提示完整显示"
+    "优化设备状态、热水提示和进行中卡片布局，长说明可点击查看",
+    "修复设备刷新与编辑冲突，完善导入检查和保存失败反馈",
+    "改善洗衣订单同步、热水历史账号隔离与798设备状态反馈",
+    "移除模拟模式，保全旧数据并引导各服务重新登录",
+    "完善权限、更新检查与网络超时提示，修复日志清空并减少敏感内容"
   ],
   "downloads": {
-    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.1.4/app-release.apk"
+    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.2.0/app-release.apk"
+  },
+  "schemaVersion": 2,
+  "platforms": {
+    "android": {
+      "status": "available",
+      "version": "2.2.0",
+      "buildNumber": 5000,
+      "downloadUrl": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.2.0/app-release.apk"
+    },
+    "ios": {
+      "status": "unavailable"
+    }
   }
 }
