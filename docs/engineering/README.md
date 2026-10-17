@@ -22,11 +22,13 @@ C1 合入后的 main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/a
 
 C3a main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38864439197)、[iOS](https://github.com/amamiyakazuki/FlandreSY/actions/runs/38864439307) 均通过，对应 606a11c6922eca1e4efdf07b1769c359525c57d2。C2 新增 50 项专项测试，全量 338 通过 / 1 跳过。
 
+[C6 更新与发布计划](c6-update-release-plan.md)已按用户选择 1A＋2A＋3A 完成 C6a：通用 APK 策略、平台更新反馈、本地发布校验。全量 522 通过 / 1 跳过，发布工具 21 项通过；见[当前 C6a 验收](c6a-update-release-acceptance.md)。C6b 正式产物与覆盖升级待单独确认，未发布。
+
 ## 已确认的交付方式
 
 用户于 2026-10-16 调整交付方式：保留模块分支、Git 提交、测试、推送 GitHub 和 CI 检查，不再要求创建 PR。合并和正式版本发布仍按用户授权处理。一个模块完成后更新状态，再决定下一模块。
 
-C1 已按用户后续授权直接合入 main、推送 GitHub 并归档隐藏 PR #4，未发布版本。C3a 也已获单独授权：A 方案实现，测试后合入 main、推送并确认 CI，随后停止，不创建 PR、不发布。C2 随后也已获全部 A 实施、合入 main 和推送授权，沿用无 PR / 无发布 / CI 核验后停止；C3b 随后获“直接开始”授权，沿用该交付方式；C4 随后获“直接开始，测试通过后合入 main 并推送”授权，沿用无 PR / 无发布 / CI 核验后停止；C5a 随后获 1A＋2A＋3A 实施、测试后合入 main/推送/CI 后停止授权；C5b 与其他模块未获实施授权。
+C1 已按用户后续授权直接合入 main、推送 GitHub 并归档隐藏 PR #4，未发布版本。C3a 也已获单独授权：A 方案实现，测试后合入 main、推送并确认 CI，随后停止，不创建 PR、不发布。C2 随后也已获全部 A 实施、合入 main 和推送授权，沿用无 PR / 无发布 / CI 核验后停止；C3b 随后获“直接开始”授权，沿用该交付方式；C4 随后获“直接开始，测试通过后合入 main 并推送”授权，沿用无 PR / 无发布 / CI 核验后停止；C5a 随后获 1A＋2A＋3A 实施、测试后合入 main/推送/CI 后停止授权；C6a 随后获全 A 实施授权并沿用同样交付方式；C5b/C6b 与其他模块未获实施授权。
 
 ## 记录要求
 
