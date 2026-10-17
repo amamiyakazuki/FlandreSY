@@ -1,6 +1,8 @@
 # Android 候选构建与稳定清单
 
-C6a 只提供工具，不自动构建正式包或发布。后续 C6b 须先确认候选版本、旧包支持范围与安装验收；再单独批准发布。工具不上传、不调用发布接口，也不修改现有稳定清单。
+工具只负责本地候选构建与产物检查，不上传、不调用发布接口，也不修改现有稳定清单。
+
+当前仅进行 2.2.0 的本地文档与源码收口，未生成正式候选；用户确定更新 2.2.0 前禁止推送 GitHub。本轮跳过人工覆盖验收，既有未验状态保留。后续构建与发布执行边界见[交付计划](../../docs/engineering/upgrade-release-delivery-plan.md)，实际覆盖升级记录见 [C6b](../../docs/engineering/c6b-candidate-upgrade-acceptance.md)。
 
 ## 发布前准备
 
@@ -43,7 +45,7 @@ bash tools/release/build_android_release.sh --baseline /absolute/path/baseline.j
 
 直接 Gradle/Flutter release 也必须配置正式签名，缺失时失败，不回退 Debug。一般本地验证用独立 Debug 包；CI 自动验证缺少正式签名确实被拒绝。
 
-## 发布后的稳定清单准备
+## 发布后的稳定清单准备（当前不执行）
 
 正式候选包和覆盖升级通过、用户确认发布后，人工上传并公开该 Release。随后准备 notes.json（`release_date` 字符串、`changelog` 字符串数组）并运行：
 

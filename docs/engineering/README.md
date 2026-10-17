@@ -28,6 +28,16 @@ C3a main CI：[Android](https://github.com/amamiyakazuki/FlandreSY/actions/runs/
 
 [D1 798 状态、登录反馈与设备列表一致性](d1-798-consistency-plan.md)已按全 A 实施；新增 34 项测试，全量 556 通过 / 1 原有跳过，静态分析无诊断；见[验收记录](d1-798-consistency-acceptance.md)。交付按模块分支、合入 main/推送、同提交 CI 后停止，无 PR/发布；C6b 继续暂停。
 
+## 当前安排（2026-10-17 用户调整）
+
+用户暂缓 E2 / D2 等建议模块，后续先做两项：①外观缺陷优化；②覆盖更新验收、README / Release 完善与发包。当前只完成①的设备状态文案小修，见[验收记录](device-status-layout-acceptance.md)。第二项已整理[覆盖更新、文档与发包计划](upgrade-release-delivery-plan.md)，用户已确认先本地完成文档、外观代码收口及测试残余清理；README / Release 只写功能迭代和修复。确定更新 2.2.0 前不推送 GitHub；本轮跳过人工覆盖验收，C6b 原未验状态保留，未构建正式包、安装或发布。
+
+[阶段 1 本地收口记录](release-preparation-local-acceptance.md)：624 项 Flutter 测试通过 / 1 原有跳过，发布工具 21 项通过，静态检查通过；清理约 203.4 MiB 可再生成残余。仅本地模块分支保存，不推送。
+
+## 暂缓的建议模块
+
+[剩余问题与 E2 调试采集计划](e2-debug-capture-plan.md)：原 RA 剩 iOS BLE 完整适配、暂停的覆盖升级、首页洗衣统计区导航；另有独立抓包工具敏感输出、798 功能范围、交互验收及工具链/文档欠账。建议先 E2，再单独确认 D2；E1 已修 App 日志，独立抓包脚本尚未覆盖。推荐 1A＋2A（先 E2、保留只含允许摘要的采集工具），仅规划、尚未实现；C6b 继续暂停。
+
 ## 已确认的交付方式
 
 [E1 日志清空、请求期限与诊断脱敏](e1-diagnostics-request-plan.md)已按 1A＋2A＋3A 实施，纳入[热水状态布局](hotwater-status-layout-acceptance.md)及[进行中任务卡片](ongoing-card-layout-acceptance.md)两处小修。新增 54 项（E1 32、页面 22），全量 610 通过 / 1 原有跳过，静态分析无诊断；[验收与交付记录](e1-diagnostics-acceptance.md)。用户已授权测试后 main/推送/CI 后停止，无 PR/发布，C6b 继续暂停。

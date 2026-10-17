@@ -7,9 +7,9 @@ import 'package:flutter/material.dart';
 import '../../design_tokens.dart';
 import '../runtime/models/account_session.dart';
 import '../theme/shui_motion.dart';
-import '../widgets/shui_components.dart';
+import '../widgets/device_status_label.dart';
 
-/// 798 设备列表项：名称/设备号/状态 + StatusPill；点击选为当前设备。
+/// 798 设备列表项：名称/设备号/单行短状态；点击选为当前设备。
 /// 对齐 legacy Shower798AccountDetail 内的设备 SectionCard。
 class Shower798DeviceTile extends StatelessWidget {
   const Shower798DeviceTile({
@@ -54,36 +54,28 @@ class Shower798DeviceTile extends StatelessWidget {
             width: AppCustomTokens.strokeThin,
           ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    device.name,
-                    // P2：设备名允许两行，避免与右侧 StatusPill 抢宽被裁。
-                    maxLines: 2,
-                    softWrap: true,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.titleSmall
-                        ?.copyWith(color: AppColors.deepText),
-                  ),
-                  Text(
-                    '设备号：${device.id} · 状态：${device.displayStatus}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodySmall
-                        ?.copyWith(color: AppColors.mutedText),
-                  ),
-                ],
-              ),
+            Text(
+              device.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.titleSmall?.copyWith(color: AppColors.deepText),
             ),
-            const SizedBox(width: AppCustomTokens.spaceSm),
-            StatusPill(
-              text: isCurrent ? '当前设备' : device.displayStatus,
+            Text(
+              '设备号：${device.id}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
+            ),
+            DeviceStatusLabel(
+              label: isCurrent
+                  ? '当前设备'
+                  : compactDeviceStatus(device.displayStatus),
+              details:
+                  '${device.name}\n设备号：${device.id}\n状态：${device.displayStatus}',
               color: pillColor,
-              filled: isCurrent || device.displayStatus == '使用中',
             ),
           ],
         ),

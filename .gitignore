@@ -73,3 +73,8 @@ AGENTS.md
 # IDE (uncomment .vscode/ if you don't want to commit workspace settings)
 #.vscode/
 P_PLAN/
+
+# Reproducible Python/test output (keep test sources and golden baselines)
+__pycache__/
+*.py[cod]
+test/failures/

@@ -2,9 +2,11 @@
   <img src="ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png" alt="FlandreSY App Icon" width="120">
 </p>
 
-# 芙兰水衣 FlandreSY 2.1.4
+# 芙兰水衣 FlandreSY
 
-`芙兰水衣`（FlandreSY）是一款面向校园与公寓生活场景的 Flutter 应用，统一管理洗衣、饮水、热水与慧生活 798 服务。2.1 版本重点重构了页面动效、账号入口、订单状态恢复和在线更新链路。
+芙兰水衣是一款面向校园与公寓生活场景的应用，将洗衣、饮水、住理热水与慧生活 798 的常用操作集中在一起。
+
+当前公开版本为 **2.1.4**，**2.2.0 尚未发布**。下方下一版更新介绍与当前安装包分开列出。
 
 ## 项目截图
 
@@ -14,125 +16,57 @@
   <img src="docx/s3.jpg" alt="FlandreSY Screenshot 3" width="30%">
 </p>
 
+## 主要功能
 
-## 项目状态
+- **洗衣**：选择或扫码添加设备，查看洗衣程序，创建订单、支付，并查看订单状态和历史。
+- **饮水**：扫码进入设备、创建接水订单，刷新状态并保留历史记录。
+- **住理热水**：管理账号与设备，手动开启、关闭热水，查看会话状态和历史。
+- **慧生活 798**：登录账号、选择设备，手动进行洗浴控制并恢复本地会话。
+- **账号与设备管理**：本地登出、账号检测、设备重命名，以及设备列表导入和导出。
+- **使用辅助**：检查更新、查看诊断日志、按需申请权限，并查看旧数据保全进度。
 
-- 应用显示名：`芙兰水衣`
-- 英文品牌名：`FlandreSY`
-- Android 包名：`com.flandresy`
-- iOS Bundle ID：`com.flandresy`
-- 正式版营销版本：`2.1.4`
-- Flutter 构建版本：见 `pubspec.yaml`
-- 默认运行模式：真实后端
+## 下一版功能更新 · 2.2.0
 
-## 2.1.4 更新
+### 页面与操作体验
 
-- 修复旧洗衣、饮水订单归属恢复，已有账号归属不覆盖。
-- 首页进行中卡片固定三等分、紧凑间距，不足三项靠左。
-- 住理、U净、798 新增本地登出与账号可用性检测，保留订单和设备配置。
-- 区分热水待确认、历史加载失败与无记录；优化详情窄屏和大字号排版。
+- 设备运行提示改用“运行中”等短文字，避免挤掉设备名称和编号；点击状态可查看完整说明。
+- 热水状态标题与提示保持紧凑，较长异常可点开查看，减少文字切换造成的页面跳动。
+- 首页洗衣、热水和饮水的进行中卡片更扁平，任务出现时不再撑开原有区域。
 
-正式安装包：[FlandreSY 2.1.4 Release](https://github.com/amamiyakazuki/FlandreSY/releases/tag/v2.1.4)。请沿用原安装包类型覆盖升级，不要卸载以免丢失本地记录。
+### 设备与订单
 
-### 2.1.3 历史更新
+- 修复设备刷新与重命名、排序等操作相互覆盖的问题，导入错误和刷新结果有更明确的提示。
+- 改善洗衣订单跨页面、切回应用后的状态同步，减少页面状态与可用操作不一致的情况。
+- 热水历史按账号区分，加载失败与暂无记录分别显示，并提供重试入口。
+- 798 设备未查询时不再显示为待机，登录、列表加载与保存失败的提示更准确。
 
-- 修复热水双击重复启动，保留原会话时间和关水凭据；开关按钮保持可点击。
-- 重启／回前台时，距开水超过 40 分钟恢复待开水并更新可用订单，未超过则保持已开水；该规则不代表设备自动关水。
-- 加强账号切换与过期响应隔离，避免饮水、洗衣活动订单被覆盖或丢失。
-- 完善订单持久化、损坏数据保留、网络超时和 BLE 连接处理。
-- Debug 与正式版可共存；新增 Android CI，自动分析、测试和构建 Debug APK。
+### 旧数据与使用反馈
 
-正式安装包：[FlandreSY 2.1.3 Release](https://github.com/amamiyakazuki/FlandreSY/releases/tag/v2.1.3)。优先下载 `app-release.apk`（ARM64 与 x86_64，不含 32 位 ARM）。
+- 移除模拟模式，保留旧设备、设置和业务记录；各服务首次使用需重新登录。
+- 来源不明的旧活动保留待核对，核对前不据此控制设备，可在“更多选项 → 旧数据保全”查看进度。
+- 改善网络超时、更新检查与权限提示，避免将未确认结果显示为成功。
+- 修复诊断日志清空后旧内容重新出现的问题，并减少诊断内容中的敏感信息。
 
-已有用户升级请沿用上版的文件类型；架构专用包改装主 APK 可能被系统判为降级，请从 Release 页面选择相同架构的专用包，不要卸载后重装。
+完整更新内容见 [2.2.0 更新说明草稿](docs/releases/2.2.0.md)。
 
-## 2.1 系列能力
+## 下载与升级
 
-- 统一页面、弹窗、列表和操作反馈的动效节奏
-- 增加统一账号中心，并明确住理生活、慧生活 798 与 U净的状态
-- 持久化热水会话和饮水订单，恢复应用后继续核对状态
-- 在“更多选项”中按平台检查更新；Android 构建兼容信息不足时查看发布说明，iOS 暂无下载渠道
+当前下载入口：[FlandreSY 2.1.4](https://github.com/amamiyakazuki/FlandreSY/releases/tag/v2.1.4)。
 
-## 主要能力
+2.1.4 提供通用、ARM64 与 x86_64 安装包，不包含 32 位 ARM。已有用户安装 **2.1.4** 时请沿用原来的包型，不要通过卸载旧应用来绕过安装失败，以免丢失本地记录。历史安装说明见 [2.1.4 更新记录](docs/releases/2.1.4.md)。
 
-- 洗衣流程：设备识别、下单、支付、订单状态与历史
-- 饮水流程：扫码、创建订单、刷新状态、历史保留
-- 热水流程：账号、设备、手动开关、40 分钟恢复规则、历史与真实 BLE 接入
-- 798 流程：账号、设备选择、手动洗浴控制与会话恢复
-- 更多选项：在线更新、诊断日志、权限检查与设备列表导入导出
+## 使用说明
 
-## 仓库结构
+- 应用连接真实服务，付款与设备操作会产生实际效果。
+- 页面显示的热水恢复状态不代表实体设备已经自动关水；请结合现场情况核对。
+- 下一版 iOS 住理蓝牙热水控制会明确提示暂不可用；目前没有 iOS 安装包下载渠道。
+- 本项目不是服务提供方的官方客户端。
 
-- `lib/`：Flutter 2.0 主代码
-- `android/`：Android 工程与发布签名配置
-- `ios/`：iOS 工程、Podfile 与发布配置
-- `assets/legacy/`：从旧版整理出来并继续复用的图片/字体资源
-- `assets/public/`：应用内置及远程读取的版本清单
-- `tools/release/`：发布辅助脚本
-- `P_PLAN/`：规划、审查记录、发布清单与设计约束
-- `docx/`：README 展示用截图资源
+## 历史更新
 
-## 本地开发
+- [2.1.4](docs/releases/2.1.4.md)：旧订单归属恢复、账号检测与登出、首页卡片及热水详情优化。
+- [2.1.3](docs/releases/2.1.3.md)：热水重复启动防护、会话恢复与账号切换隔离。
 
-```bash
-flutter pub get
-flutter analyze
-flutter test
-flutter run
-```
+## 项目资料
 
-应用仅使用真实后端，模拟模式及其运行参数已移除。离线测试使用 `test/support` 中显式注入的替身，不连接真实账号、支付或设备。
-
-升级时先保全旧数据，各服务首次使用需重新登录。来源不明的活动记录核对前不会自动删除或控制设备；在“更多选项 → 旧数据保全”查看进度并重试。详见 [C1 计划与验收](docs/engineering/README.md)。
-
-## 持续集成（CI）
-
-`.github/workflows/flutter-android-ci.yml` 在分支 push、PR 和手动触发时顺序执行：
-
-1. 使用 Flutter 3.44.4、JDK 17 和已提交的 `pubspec.lock` 安装依赖。
-2. `flutter analyze --no-pub` 与全量 `flutter test --no-pub --reporter expanded`。
-3. 构建 Android ARM64 Debug APK；前面的检查失败则不构建、不上传。
-4. 将 APK 保存为 `flandresy-debug-arm64-<run_id>-<run_attempt>`，保留 7 天。
-
-推送后在 GitHub 仓库 **Actions → Flutter Android CI → 对应运行 → Artifacts** 下载并解压 APK。手动运行入口需工作流先存在于默认分支。本配置不发布 GitHub Release、不读取正式签名密钥、不执行真实支付或 BLE 操作；现有 iOS 工作流保持独立、不在本轮修改。
-
-APK 包名为 `com.flandresy.debug`，可与正式版共存，但托管 runner 的临时 Debug 签名不保证与本机或其它次构建相同；不能保证覆盖现有 Debug 安装。不要为安装测试包贸然卸载仍有活动订单的旧版本，卸载会丢失其本地数据。默认真实后端，安装后控制设备或付款仍会产生真实效果。
-
-本工作流提供检查结果，但尚未配置分支保护的强制合并门禁。失败先看对应步骤日志；无需为重试 CI 再次操作真实设备。Action 版本锁定到 commit SHA；升级时同时核对 Flutter、Android SDK/NDK 与 AGP 的兼容要求。
-
-参考：[Flutter Action](https://github.com/subosito/flutter-action)、[AGP 9.0 兼容表](https://developer.android.com/build/releases/agp-9-0-0-release-notes)、[GitHub Artifacts](https://github.com/actions/upload-artifact)。
-
-## 版本与更新链路
-
-- 内置版本清单：`assets/public/version.json`
-- 远端版本清单：`https://raw.githubusercontent.com/amamiyakazuki/FlandreSY/main/assets/public/version.json`
-- GitHub Releases 下载页：
-  - `https://github.com/amamiyakazuki/FlandreSY/releases/latest`
-
-候选构建版本与已公开稳定版清单分开：构建候选时不提前修改在线清单。正式资产公开并核验后，再同步两份稳定清单；旧客户端字段/路径保留。C6a 未发布新版本，当前在线仍为 2.1.4。
-
-## Android 发布
-
-以后面向用户统一提供 ARM64+x86_64 通用 APK，旧 Release/专用包保留。下一正式包需核验并跨过所选旧包的最高内部版本码，才能支持旧专用包迁移；**当前尚未执行该候选构建或真机覆盖验收**。历史 2.1.4 的安装建议仍以其发布说明为准。
-
-正式发布继续在本地进行。工具先核验历史真实 APK、候选版本与签名配置，使用锁定依赖运行分析/测试，再检查实际产物的包名、版本、签名、架构及校验和。默认只构建通用 APK，AAB 可按需构建；不上传或自动发布。
-
-完整参数与流程见 [发布工具说明](tools/release/README.md)。缺少正式签名时 release 构建失败，不再回退 Debug 签名；本地普通验证使用独立 Debug 包。保持正式 applicationId `com.flandresy` 和原有签名身份，不能靠卸载解决覆盖升级问题。
-
-## iOS 发布
-
-- 仓库已包含 iOS 工程、Alipay 通道与 Podfile 配置
-- 正式发布仍需在 macOS + Xcode + Apple Developer 环境完成签名、Archive 与 TestFlight / App Store 流程
-- 若需验证当前 iOS 构建链路，请在 macOS 上执行：
-
-```bash
-flutter clean
-flutter pub get
-cd ios && pod install --repo-update
-cd ..
-flutter build ios --no-codesign --release
-```
-
-## 开源许可
-
-This project is licensed under the GNU Affero General Public License v3.0. See `LICENSE` for details.
+[开发与维护说明](docs/development.md) · [安全说明](SECURITY.md) · [AGPL-3.0 许可](LICENSE)

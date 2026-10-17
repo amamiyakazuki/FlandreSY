@@ -8,9 +8,10 @@ import '../runtime/models/local_device.dart';
 import '../theme/shui_assets.dart';
 import '../theme/shui_motion.dart';
 import '../widgets/shui_components.dart';
+import '../widgets/device_status_label.dart';
 
 /// 单台本地设备列表项。对齐 legacy `DeviceListItem`：
-/// 左侧设备图（58dp）+ 中间名称/设备号/类型 + 右侧 StatusPill + 操作圆点。
+/// 左侧设备图 + 中间名称/设备号/短状态/类型 + 右侧操作圆点。
 class DeviceListItem extends StatelessWidget {
   const DeviceListItem({
     required this.device,
@@ -40,12 +41,13 @@ class DeviceListItem extends StatelessWidget {
     if (device.deviceType == LocalDeviceType.drinkingWater) {
       return AppColors.serviceBlue;
     }
+    if (device.statusQueryFailed) return AppColors.serviceOrange;
     if (!device.statusConfirmed) return AppColors.mutedText;
-    final status = device.lastStatus;
+    final status = compactDeviceStatus(device.lastStatus);
     if (status == '可下单') {
       return AppColors.serviceGreen;
     }
-    if (status != null && status.contains('运行')) {
+    if (status == '运行中' || status == '使用中') {
       return AppColors.serviceBlue;
     }
     return AppColors.serviceOrange;
@@ -77,7 +79,7 @@ class DeviceListItem extends StatelessWidget {
               children: [
                 Text(
                   displayName,
-                  // P2：设备名允许两行，避免与 icon + StatusPill + 菜单抢宽被裁。
+                  // 状态位于下方，名称不再与长状态争夺横向空间。
                   maxLines: 2,
                   softWrap: true,
                   overflow: TextOverflow.ellipsis,
@@ -95,15 +97,17 @@ class DeviceListItem extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: AppCustomTokens.deviceListLineGap),
-                Text(
-                  device.statusQueryFailed
-                      ? '本次查询失败；上次结果：${device.lastStatus ?? '未知'}'
+                DeviceStatusLabel(
+                  label: device.statusQueryFailed
+                      ? '查询失败'
                       : device.statusConfirmed
-                          ? '${device.lastStatus ?? '未知'}（查询于 ${device.statusCheckedAt}）'
+                          ? compactDeviceStatus(device.lastStatus)
                           : device.lastStatus == null
-                              ? '状态未查询'
-                              : '上次结果：${device.lastStatus}（未核对）',
-                  style: textTheme.bodySmall?.copyWith(color: _statusColor),
+                              ? '未查询'
+                              : '待核对',
+                  details:
+                      '$displayName\n设备号：${device.deviceNo ?? device.id}\n${device.statusQueryFailed ? '本次查询失败；上次结果：${device.lastStatus ?? '未知'}' : device.statusConfirmed ? '${device.lastStatus ?? '未知'}（查询于 ${device.statusCheckedAt}）' : device.lastStatus == null ? '状态未查询' : '上次结果：${device.lastStatus}（未核对）'}',
+                  color: _statusColor,
                 ),
                 Text(
                   _typeLabel,

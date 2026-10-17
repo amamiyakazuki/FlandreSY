@@ -2,7 +2,7 @@
 
 请确认这些文件不会进入 Git：
 
-- `keystore.properties`
+- `android/key.properties`、`keystore.properties`
 - `release-key.jks`
 - `local.properties`
 - 抓包文件，例如 `tmp_ujing_flows.jsonl`
@@ -12,12 +12,13 @@
 
 ```powershell
 git status --short
+```
 
 如果不确定某个文件能不能公开，就先不要提交。
 
 ## 日志
 
-App 会写一些本地运行日志用于排查问题。日志里不应该保存完整支付返回串或 token。分享日志前仍建议手动看一眼，确认没有个人信息。
+App 诊断只保留必要的服务、操作阶段和错误类别等摘要，未知格式会省略；应用内查看和复制均经过过滤。此规则不覆盖独立抓包工具和系统日志。分享任何诊断资料前仍应核对内容，不附带账号、支付信息或原始抓包文件。
 
 ## 签名密钥
 

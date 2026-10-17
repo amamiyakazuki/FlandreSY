@@ -114,6 +114,9 @@ void main() {
             onMenu: (_) {}),
         scale: 1.8));
     await tester.pumpAndSettle();
+    expect(find.text('查询失败'), findsOneWidget);
+    await tester.tap(find.text('查询失败'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('本次查询失败；上次结果'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
