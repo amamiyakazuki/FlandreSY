@@ -69,6 +69,14 @@ android/key.properties
 *.apk
 *.aab
 AGENTS.md
+CLAUDE.md
+.claude/
+.agents/
+.codex/
+bug.md
+memory/
+openspec/
+refer/
 
 # IDE (uncomment .vscode/ if you don't want to commit workspace settings)
 #.vscode/
