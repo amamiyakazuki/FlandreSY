@@ -8,7 +8,7 @@ import '../runtime/models/washer_order.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
 
-/// 洗衣机信息卡：机器图 + 名称/设备号/门店 + StatusPill（可下单绿/不可橙）。
+/// 洗衣机信息卡：芙兰 + 洗衣机图 + 名称/设备号/门店 + StatusPill（可下单绿/不可橙）。
 class WasherRuntimeInfoCard extends StatelessWidget {
   const WasherRuntimeInfoCard({required this.program, super.key});
 
@@ -21,9 +21,11 @@ class WasherRuntimeInfoCard extends StatelessWidget {
     return SectionCard(
       child: Row(
         children: [
+          // 芙兰 + 洗衣机（与首页洗衣设备卡同一张图），原图 869×652 横向，按高度给宽。
           DecorativeImage(
-            ShuiAssets.washerMachine,
-            size: AppCustomTokens.washerMachineInfoSize,
+            ShuiAssets.washerCharacter,
+            width: AppCustomTokens.washerMachineInfoSize * 869 / 652,
+            height: AppCustomTokens.washerMachineInfoSize,
           ),
           const SizedBox(width: AppCustomTokens.spaceMd),
           Expanded(
