@@ -379,7 +379,6 @@ class AppCustomTokens {
       104.0; // legacy profile_top_character 104dp
   static const double profileBottomDecorSize =
       258.0; // legacy shui_wode_bottom 258dp
-  static const double profileBottomDecorHeight = 86.0; // legacy 底部装饰容器高度 86dp
   static const double accountLogoSize = 42.0; // legacy 账号 logo / 浴室系统 logo 42dp
   static const double accountEntryDiameter = 96.0;
   static const double accountEntryImageSize = 60.0;

@@ -7,6 +7,68 @@ import '../../design_tokens.dart';
 import '../theme/shui_motion.dart';
 import '../widgets/shui_components.dart';
 
+/// 「我的」页入口卡：方块图标 + 标题/副标题 + ›。账号中心与更多选项共用，
+/// 保证图标大小、字号、内边距和箭头位置一致。
+class ProfileEntryCard extends StatelessWidget {
+  const ProfileEntryCard({
+    required this.leading,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    super.key,
+  });
+
+  /// 方块图标，放在 [AppCustomTokens.accountLogoSize] 见方的位置里。
+  final Widget leading;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = AppTypography.textTheme;
+    return SectionCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppCustomTokens.spaceMd),
+      child: Row(
+        children: [
+          SizedBox.square(
+            dimension: AppCustomTokens.accountLogoSize,
+            child: leading,
+          ),
+          const SizedBox(
+              width: AppCustomTokens.spaceSm + AppCustomTokens.spaceXs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: textTheme.titleMedium
+                      ?.copyWith(color: AppColors.deepText),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  softWrap: true,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppCustomTokens.spaceSm),
+          Text(
+            '›',
+            style: textTheme.titleLarge?.copyWith(color: AppColors.primary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// 账号服务行（bordered row：图标 + 文案 + ›）。对齐 legacy `AccountServiceRow`。
 class ProfileServiceRow extends StatelessWidget {
   const ProfileServiceRow({

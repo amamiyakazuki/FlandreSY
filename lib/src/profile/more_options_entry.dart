@@ -1,5 +1,4 @@
-// Design tokens used: AppColors (primary/deepText/mutedText), AppTypography.textTheme,
-// AppCustomTokens space/radius/navIcon sizing.
+// Design tokens used: AppColors (primary/primaryLight/onPrimary), AppCustomTokens radius/navIcon/account logo sizing.
 // Reference: legacy ShuiScreens.kt MoreOptionsEntry (1660-1681) + §4.7.
 
 import 'package:flutter/material.dart';
@@ -7,9 +6,10 @@ import 'package:flutter/material.dart';
 import '../../design_tokens.dart';
 import '../theme/shui_assets.dart';
 import '../widgets/shui_components.dart';
+import 'profile_widgets.dart';
 
-/// 更多选项入口（P1 骨架）。点击走 [onOpen] 占位（MoreOptionsScreen 后置）。
-/// 对齐 legacy `MoreOptionsEntry`：红 1 图标 + 标题/副标题 + ›。
+/// 更多选项入口。对齐 legacy `MoreOptionsEntry`：盾牌图标 + 标题/副标题 + ›。
+/// 盾牌放进与账号中心 logo 同大小的红色圆角方块，两张卡同为实心方块图标。
 class MoreOptionsEntry extends StatelessWidget {
   const MoreOptionsEntry({required this.onOpen, super.key});
 
@@ -17,46 +17,26 @@ class MoreOptionsEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = AppTypography.textTheme;
-    return SectionCard(
+    return ProfileEntryCard(
       onTap: onOpen,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppCustomTokens.radiusMedium,
-        vertical: AppCustomTokens.radiusMedium,
-      ),
-      child: Row(
-        children: [
-          DecorativeImage(ShuiAssets.shuiRed1,
-              size: AppCustomTokens.navIconSize),
-          const SizedBox(width: AppCustomTokens.radiusCompact),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '更多选项',
-                  style: textTheme.titleSmall?.copyWith(
-                    color: AppColors.deepText,
-                  ),
-                ),
-                Text(
-                  '权限检测、日志与诊断、导入导出',
-                  // P2：固定长副标题允许两行，避免被裁成「…导入导…」。
-                  maxLines: 2,
-                  softWrap: true,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: AppColors.mutedText,
-                  ),
-                ),
-              ],
-            ),
+      title: '更多选项',
+      subtitle: '权限检测、日志与诊断、导入导出',
+      leading: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.primaryLight, AppColors.primary],
           ),
-          Text(
-            '›',
-            style: textTheme.titleLarge?.copyWith(color: AppColors.primary),
+          borderRadius: BorderRadius.circular(AppCustomTokens.radiusSmall),
+        ),
+        child: Center(
+          child: DecorativeImage(
+            ShuiAssets.shuiRed1,
+            size: AppCustomTokens.navIconSize,
+            color: AppColors.onPrimary,
           ),
-        ],
+        ),
       ),
     );
   }
