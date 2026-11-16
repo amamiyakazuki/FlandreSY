@@ -28,32 +28,22 @@ class WasherDeviceSummaryCard extends StatelessWidget {
         children: [
           SectionTitle(icon: ShuiAssets.shuiYifu, title: '洗衣设备'),
           const SizedBox(height: AppCustomTokens.spaceSm),
+          // 左边是数字和操作（上下排列），右边是人物，两边高度相近、垂直居中。
           Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: ShuiPressable(
-                  onTap: onWasherSummary,
-                  soft: true,
-                  child: _WasherMetricsPanel(
-                    washerCount: washerCount,
-                    availableCount: availableCount,
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppCustomTokens.spaceSm),
-              SizedBox(
-                width: AppCustomTokens.washerCharacterSizeLarge +
-                    AppCustomTokens.spaceLg,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // 问题5：删掉左下多余的小洗衣机图标（legacy 本无此图），
-                    // 人物放大到 legacy 112dp 并居中，填满右侧空间。
-                    DecorativeImage(
-                      ShuiAssets.washerCharacter,
-                      size: AppCustomTokens.washerCharacterSize,
+                    ShuiPressable(
+                      onTap: onWasherSummary,
+                      soft: true,
+                      child: _WasherMetricsPanel(
+                        washerCount: washerCount,
+                        availableCount: availableCount,
+                      ),
                     ),
-                    const SizedBox(height: AppCustomTokens.spaceXs),
+                    const SizedBox(height: AppCustomTokens.spaceSm),
                     PrimaryGradientButton(
                       label: '选择设备 ›',
                       compact: true,
@@ -61,6 +51,17 @@ class WasherDeviceSummaryCard extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: AppCustomTokens.spaceSm),
+              // 原图是横向的（人物 + 洗衣机），按宽度给尺寸，不留上下空白。
+              DecorativeImage(
+                ShuiAssets.washerCharacter,
+                width: AppCustomTokens.washerCharacterSizeLarge +
+                    AppCustomTokens.spaceSm,
+                height: (AppCustomTokens.washerCharacterSizeLarge +
+                        AppCustomTokens.spaceSm) *
+                    652 /
+                    869,
               ),
             ],
           ),
