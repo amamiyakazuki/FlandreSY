@@ -1,23 +1,23 @@
 {
-  "version": "2.2.0",
-  "release_date": "2026-10-17",
+  "version": "2.2.1",
+  "release_date": "2026-11-16",
   "changelog": [
-    "优化设备状态、热水提示和进行中卡片布局，长说明可点击查看",
-    "修复设备刷新与编辑冲突，完善导入检查和保存失败反馈",
-    "改善洗衣订单同步、热水历史账号隔离与798设备状态反馈",
-    "移除模拟模式，保全旧数据并引导各服务重新登录",
-    "完善权限、更新检查与网络超时提示，修复日志清空并减少敏感内容"
+    "修复付款后订单卡在待刷新的问题，熄屏或停在支付宝也会确认到账并自动启动洗衣机",
+    "新增洗衣结束前 5 分钟与结束时提醒，以及洗衣中的常驻倒计时通知",
+    "首页进行中任务可点击查看，洗衣剩余时间实时更新",
+    "新增消费统计，可查看本月及近 6 个月各服务消费",
+    "订单列表与热水记录去掉无意义信息，多账号订单分开保存"
   ],
   "downloads": {
-    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.2.0/app-release.apk"
+    "github": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.2.1/app-release.apk"
   },
   "schemaVersion": 2,
   "platforms": {
     "android": {
       "status": "available",
-      "version": "2.2.0",
-      "buildNumber": 5000,
-      "downloadUrl": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.2.0/app-release.apk"
+      "version": "2.2.1",
+      "buildNumber": 5004,
+      "downloadUrl": "https://github.com/amamiyakazuki/FlandreSY/releases/download/v2.2.1/app-release.apk"
     },
     "ios": {
       "status": "unavailable"
