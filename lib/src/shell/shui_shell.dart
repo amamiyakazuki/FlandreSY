@@ -24,6 +24,7 @@ import '../profile/profile_screen.dart';
 import '../runtime/shui_runtime.dart';
 import '../runtime/models/local_device.dart';
 import '../runtime/scan_routing.dart';
+import '../stats/spending_screen.dart';
 import '../theme/shui_motion.dart';
 import '../washer/washer_order_screen.dart';
 import '../widgets/qr_scanner_screen.dart';
@@ -447,6 +448,11 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           log: runtime.diagnosticLog,
           onBack: _handlePop,
         ),
+      SpendingRoute() => SpendingScreen(
+          state: runtime.state,
+          nowMillis: runtime.clock.nowMillis(),
+          onBack: _handlePop,
+        ),
     };
     return KeyedSubtree(key: ValueKey(_routeKey(route)), child: body);
   }
@@ -462,6 +468,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
       HotwaterDetailRoute() => 'hotwater-detail',
       MoreOptionsRoute() => 'more-options',
       DiagnosticLogRoute() => 'diagnostic-log',
+      SpendingRoute() => 'spending',
     };
   }
 
@@ -512,6 +519,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onBack: () => _selectTab(MainTab.home),
           onOpenWasherOrder: () => _openTask(runtime, HomeTaskTarget.washer),
           onOpenDrinking: () => _openTask(runtime, HomeTaskTarget.drinking),
+          onOpenStats: () => _setRoute(const SpendingRoute()),
         ),
       MainTab.devices => DevicesScreen(
           state: runtime.state,

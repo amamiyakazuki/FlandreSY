@@ -11,6 +11,9 @@ import '../hotwater_state.dart';
 import '../shui_runtime_base.dart';
 
 mixin HotwaterActions on ShuiRuntimeBase {
+  /// 住理历史接口返回的时间范围（见 RealZhuliAdapter.loadHistory）。
+  static const Duration hotwaterHistoryWindow = Duration(days: 30);
+
   @override
   bool get hotwaterOperationInFlight => _sessionOperation;
   bool _sessionOperation = false;
@@ -673,9 +676,22 @@ mixin HotwaterActions on ShuiRuntimeBase {
       String account, List<HotwaterHistoryUi> orders, bool Function() current) {
     final save = _historySaveTail.then((_) async {
       if (!current()) return;
+      // 服务端只返回近 30 天：窗口内以服务端为准，更早的本地记录保留，
+      // 消费统计才能覆盖更长时间。
+      final windowStart =
+          clock.nowMillis() - hotwaterHistoryWindow.inMilliseconds;
+      final fresh = orders.map((h) => h.ownedBy(account)).toList();
+      final freshIds = fresh.map((h) => h.orderId).toSet();
       final next = [
         ...state.hotwater.history.where((h) => h.ownerAccount != account),
-        ...orders.map((h) => h.ownedBy(account)),
+        ...fresh,
+        ...state.hotwater.history.where((h) {
+          final at = h.timeMillis;
+          return h.ownerAccount == account &&
+              at != null &&
+              at < windowStart &&
+              !freshIds.contains(h.orderId);
+        }),
       ];
       await history.saveHistory(next);
       // 已开始的磁盘写入不能撤销。同步完整档案供后续合并，页面仍按当前账号筛选。

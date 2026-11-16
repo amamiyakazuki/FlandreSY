@@ -28,8 +28,25 @@ class HotwaterHistoryUi {
       );
 
   final String time;
+
+  /// [time] 对应的时间戳（毫秒）；无法解析时为 null。
+  /// 住理返回「yyyy-MM-dd HH:mm:ss」，也兼容秒 / 毫秒时间戳。
+  int? get timeMillis => parseRecordTime(time);
   final String deviceId;
   final String amount;
   final String status;
   final String orderId;
+}
+
+/// 解析订单记录里的时间文本；无法解析返回 null。
+int? parseRecordTime(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+  final number = int.tryParse(text);
+  if (number != null) {
+    if (number > 100000000000) return number; // 毫秒
+    if (number > 1000000000) return number * 1000; // 秒
+    return null;
+  }
+  return DateTime.tryParse(text)?.millisecondsSinceEpoch;
 }

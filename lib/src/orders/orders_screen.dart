@@ -14,6 +14,7 @@ import '../theme/shui_assets.dart';
 import '../theme/shui_motion.dart';
 import '../widgets/order_list_item.dart';
 import '../widgets/shui_animated_list.dart';
+import '../stats/spending_stats.dart';
 import '../washer/washer_payment_card.dart' show formatOrderTime;
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
@@ -29,6 +30,7 @@ class OrdersScreen extends StatefulWidget {
     required this.onOpenDrinking,
     this.active = true,
     this.onRefreshHotwater,
+    this.onOpenStats,
     super.key,
   });
 
@@ -39,6 +41,7 @@ class OrdersScreen extends StatefulWidget {
   final VoidCallback onOpenDrinking;
   final bool active;
   final VoidCallback? onRefreshHotwater;
+  final VoidCallback? onOpenStats;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -125,6 +128,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
               child: Column(
                 children: [
+                  if (widget.onOpenStats != null) ...[
+                    _MonthSpendingEntry(
+                      state: widget.state,
+                      nowMillis: widget.clock.nowMillis(),
+                      onTap: widget.onOpenStats!,
+                    ),
+                    const SizedBox(height: AppCustomTokens.spaceSm),
+                  ],
                   _buildChipRow(),
                   const SizedBox(height: AppCustomTokens.spaceSm),
                   if (_category != OrderCategory.hotwater &&
@@ -351,6 +362,52 @@ class _OtherAccountHint extends StatelessWidget {
       status: RuntimeActionStatus(
         state: RuntimeTaskState.idle,
         message: '其他 U净 账号还有 $count 笔进行中的订单，切换回对应账号后可查看和操作',
+      ),
+    );
+  }
+}
+
+/// 订单页顶部的本月消费入口（一行）。
+class _MonthSpendingEntry extends StatelessWidget {
+  const _MonthSpendingEntry({
+    required this.state,
+    required this.nowMillis,
+    required this.onTap,
+  });
+
+  final ShuiHomeState state;
+  final int nowMillis;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = AppTypography.textTheme;
+    final month =
+        SpendingStats.compute(state).month(MonthKey.fromMillis(nowMillis));
+    return ShuiPressable(
+      soft: true,
+      onTap: onTap,
+      child: SectionCard(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppCustomTokens.spaceMd,
+          vertical: AppCustomTokens.spaceSm,
+        ),
+        child: Row(
+          children: [
+            Text('本月消费',
+                style:
+                    textTheme.bodyMedium?.copyWith(color: AppColors.mutedText)),
+            const SizedBox(width: AppCustomTokens.spaceSm),
+            Expanded(
+              child: Text(formatFen(month.totalFen),
+                  style: textTheme.titleMedium
+                      ?.copyWith(color: AppColors.deepText)),
+            ),
+            Text('统计 ›',
+                style:
+                    textTheme.bodyMedium?.copyWith(color: AppColors.primary)),
+          ],
+        ),
       ),
     );
   }

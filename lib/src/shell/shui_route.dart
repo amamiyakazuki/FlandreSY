@@ -65,6 +65,11 @@ class DiagnosticLogRoute extends ShuiRoute {
   const DiagnosticLogRoute();
 }
 
+/// 消费统计页。归属订单 tab。
+class SpendingRoute extends ShuiRoute {
+  const SpendingRoute();
+}
+
 /// 每个非 Tab 路由在底栏上「归属」哪个 Tab（用于高亮 + 返回落点）。
 extension ShuiRouteParent on ShuiRoute {
   MainTab get parentTab {
@@ -78,6 +83,7 @@ extension ShuiRouteParent on ShuiRoute {
       HotwaterDetailRoute() => MainTab.home,
       MoreOptionsRoute() => MainTab.profile,
       DiagnosticLogRoute() => MainTab.profile,
+      SpendingRoute() => MainTab.orders,
     };
   }
 
