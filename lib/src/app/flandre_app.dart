@@ -8,7 +8,6 @@ import '../data/adapters/hotwater_adapter.dart';
 import '../data/adapters/shower798_adapter.dart';
 import '../data/adapters/ujing_adapter.dart';
 import '../data/app_bootstrap.dart';
-import '../data/legacy_data_migration.dart';
 import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
@@ -29,7 +28,6 @@ class FlandreApp extends StatelessWidget {
     this.water,
     this.washerHistory,
     required this.secure,
-    required this.migration,
     this.clock,
     required this.ujing,
     required this.hotwater,
@@ -59,7 +57,6 @@ class FlandreApp extends StatelessWidget {
 
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
   final SecureSessionRepository secure;
-  final LegacyDataMigration migration;
 
   /// 可选注入的时间源（测试传 FixedLiveClock）。
   final LiveClock? clock;
@@ -109,7 +106,6 @@ class FlandreApp extends StatelessWidget {
         diagnosticLog: diagnosticLog,
         appVersion: appVersion,
         initial: initial,
-        migration: migration,
         child: const ShuiShell(),
       ),
     );

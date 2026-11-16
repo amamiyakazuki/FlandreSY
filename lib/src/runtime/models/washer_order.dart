@@ -1,5 +1,5 @@
 // Washer order models (no visual constants). Field names align 1:1 with legacy
-// ShuiRuntime.kt WasherProgramUi/WasherModelUi/WasherOrderUi/WasherPaymentUi (101-160).
+// ShuiRuntime.kt WasherProgramUi/WasherModelUi/WasherOrderUi (101-160).
 
 import 'package:flutter/foundation.dart';
 
@@ -75,7 +75,46 @@ class WasherAdditionOptionUi {
   final int priceFen;
 }
 
-/// 当前洗衣订单（对齐 legacy WasherOrderUi）。refreshedAtMillis 用于 W2 live 倒计时。
+/// 洗衣订单状态码的统一解释。服务端只确认过以下几种；其余一律视为「未知」，
+/// 页面提供刷新与「移除本地记录」出口，避免订单卡在无法操作的状态。
+class WasherStatus {
+  const WasherStatus._();
+
+  /// 本地创建后尚未查询到服务端状态。
+  static const String pending = 'pending';
+  static const String unpaid = '10';
+  static const String reserved = '20';
+  static const String starting = '21';
+  static const String running = '40';
+  static const String finished = '50';
+
+  /// 本地取消成功或用户手动移除时写入。
+  static const String cancelled = 'cancelled';
+  static const String removed = 'removed';
+
+  static const Set<String> active = {
+    pending,
+    unpaid,
+    reserved,
+    starting,
+    running
+  };
+  static const Set<String> terminal = {finished, cancelled, removed};
+
+  static String label(String status) => switch (status) {
+        pending => '待查询',
+        unpaid => '待支付',
+        reserved => '已支付待启动',
+        starting => '启动中',
+        running => '洗衣中',
+        finished => '已完成',
+        cancelled => '已取消',
+        removed => '已移除',
+        _ => '状态未知',
+      };
+}
+
+/// 当前洗衣订单。refreshedAtMillis 用于实时倒计时。
 @immutable
 class WasherOrderUi {
   const WasherOrderUi({
@@ -88,54 +127,125 @@ class WasherOrderUi {
     this.countDownSeconds = 0,
     this.refreshedAtMillis = 0,
     this.ownerAccountKey = '',
+    this.createdAtMillis = 0,
+    this.autoStart = false,
+    this.endsAtMillis = 0,
   });
 
   final String orderId;
   final String deviceNo;
+
+  /// 服务端返回的状态说明，仅用于展示。
   final String statusText;
   final String payPrice;
 
-  /// 状态码：10 待支付 / 20 已预约 / 21 启动中 / 40 运行 / 50 完成。
+  /// 状态码，见 [WasherStatus]。
   final String status;
   final int remainTimeSeconds;
   final int countDownSeconds;
 
-  /// 该订单快照的刷新时刻（毫秒）。W2 结合当前时钟算 live 剩余；0 = 未打戳。
+  /// 该订单快照的刷新时刻（毫秒）。结合当前时钟算实时剩余；0 = 未打戳。
   final int refreshedAtMillis;
+
+  /// 下单时登录的 U净 账号（手机号）。订单按账号分开保存。
   final String ownerAccountKey;
 
-  /// 仅已知完成码或成功取消操作生成的本地 cancelled；不猜测文案。
-  bool get isTerminal => status == '50' || status == 'cancelled';
+  /// 本机创建订单的时刻（毫秒）；旧数据为 0。
+  final int createdAtMillis;
 
-  /// 页面和运行时共同使用已支持的操作条件；未知状态只允许查询。
-  bool get canPay => status == '10';
-  bool get canStart => status == '20';
-  bool get canStop => status == '40';
-  bool get canCancel => status == '10' || status == '20';
+  /// 付款确认后需要自动启动。持久化保存，App 被杀或支付宝迟迟不返回时，
+  /// 下次查询到「已支付待启动」仍会补发启动；发送一次后清除，避免重复启动。
+  final bool autoStart;
+
+  /// 预计结束时刻（毫秒），由服务端剩余时间推算；不在洗衣中时为 0。
+  /// 服务端剩余归零但仍在洗时保留上一次的值。
+  final int endsAtMillis;
+
+  /// 洗衣中的实时剩余秒数；不在洗衣中或没有剩余时间时为 0。
+  int liveRemainSeconds(int nowMillis) {
+    if (status != WasherStatus.running || endsAtMillis <= 0) return 0;
+    final ms = endsAtMillis - nowMillis;
+    return ms <= 0 ? 0 : (ms + 999) ~/ 1000;
+  }
+
+  /// 根据服务端剩余秒数计算预计结束时刻；没有剩余时间时沿用 [previous]。
+  static int expectedEndsAt(
+      String status, int remainSeconds, int atMillis, int previous) {
+    if (status != WasherStatus.running) return 0;
+    if (remainSeconds <= 0 || atMillis <= 0) return previous;
+    return atMillis + remainSeconds * 1000;
+  }
+
+  bool get isTerminal => WasherStatus.terminal.contains(status);
+  bool get isUnknown => !isTerminal && !WasherStatus.active.contains(status);
+
+  bool get canPay => status == WasherStatus.unpaid;
+  bool get canStart => status == WasherStatus.reserved;
+  bool get canStop => status == WasherStatus.running;
+  bool get canCancel =>
+      status == WasherStatus.unpaid || status == WasherStatus.reserved;
+
+  /// 页面展示用的状态名：已知状态用固定中文，未知状态附带服务端说明。
+  String get statusLabel {
+    if (!isUnknown) return WasherStatus.label(status);
+    final detail = statusText.trim();
+    return detail.isEmpty || detail == status ? '状态未知（$status）' : detail;
+  }
 
   WasherOrderUi copyWith({
     String? statusText,
     String? status,
+    String? payPrice,
+    String? deviceNo,
     int? remainTimeSeconds,
     int? countDownSeconds,
     int? refreshedAtMillis,
     String? ownerAccountKey,
+    int? createdAtMillis,
+    bool? autoStart,
+    int? endsAtMillis,
   }) {
     return WasherOrderUi(
       orderId: orderId,
-      deviceNo: deviceNo,
-      payPrice: payPrice,
+      deviceNo: deviceNo ?? this.deviceNo,
+      payPrice: payPrice ?? this.payPrice,
       statusText: statusText ?? this.statusText,
       status: status ?? this.status,
       remainTimeSeconds: remainTimeSeconds ?? this.remainTimeSeconds,
       countDownSeconds: countDownSeconds ?? this.countDownSeconds,
       refreshedAtMillis: refreshedAtMillis ?? this.refreshedAtMillis,
       ownerAccountKey: ownerAccountKey ?? this.ownerAccountKey,
+      createdAtMillis: createdAtMillis ?? this.createdAtMillis,
+      autoStart: autoStart ?? this.autoStart,
+      endsAtMillis: endsAtMillis ?? this.endsAtMillis,
     );
   }
+
+  /// 用服务端查询结果更新本订单；保留本地才知道的字段。
+  WasherOrderUi mergeRemote(WasherOrderUi remote, int nowMillis) => copyWith(
+        status: remote.status,
+        statusText: remote.statusText,
+        payPrice: remote.payPrice.isEmpty ? null : remote.payPrice,
+        deviceNo: remote.deviceNo.isEmpty ? null : remote.deviceNo,
+        remainTimeSeconds: remote.remainTimeSeconds,
+        countDownSeconds: remote.countDownSeconds,
+        refreshedAtMillis: nowMillis,
+        endsAtMillis: expectedEndsAt(
+            remote.status, remote.remainTimeSeconds, nowMillis, endsAtMillis),
+      );
+
+  WasherOrderHistoryUi toHistory() => WasherOrderHistoryUi(
+        orderId: orderId,
+        deviceNo: deviceNo,
+        status: status,
+        statusText: statusLabel,
+        payPrice: payPrice,
+        ownerAccountKey: ownerAccountKey,
+        createdAtMillis: createdAtMillis,
+      );
 }
 
-/// 洗衣订单历史项（对齐 legacy WasherOrderHistoryUi 精简）。
+/// 洗衣订单历史项。
 @immutable
 class WasherOrderHistoryUi {
   const WasherOrderHistoryUi({
@@ -145,7 +255,7 @@ class WasherOrderHistoryUi {
     required this.statusText,
     required this.payPrice,
     this.ownerAccountKey = '',
-    this.needsRecovery = false,
+    this.createdAtMillis = 0,
   });
 
   final String orderId;
@@ -154,19 +264,7 @@ class WasherOrderHistoryUi {
   final String statusText;
   final String payPrice;
   final String ownerAccountKey;
-  final bool needsRecovery;
-}
-
-/// 支付结果（对齐 legacy WasherPaymentUi）。
-@immutable
-class WasherPaymentUi {
-  const WasherPaymentUi({
-    required this.orderId,
-    required this.paymentSucceeded,
-  });
-
-  final String orderId;
-  final bool paymentSucceeded;
+  final int createdAtMillis;
 }
 
 /// 洗衣水温档位固定价表（分）。key = washTemperatureId，value = 价格分。
@@ -184,18 +282,6 @@ const Map<int, int> kWasherTemperaturePriceFen = <int, int>{
 /// 分 → ¥x.xx（对齐 legacy formatFenAmount）。
 String formatFenAmount(int priceFen) {
   return '¥${(priceFen / 100.0).toStringAsFixed(2)}';
-}
-
-/// 基于刷新时刻计算 live 剩余秒数（对齐 legacy liveRemainSeconds）。
-/// rawSeconds<=0 或未打戳（refreshedAtMillis<=0）时返回 rawSeconds 原值。
-int liveRemainSeconds(int rawSeconds, int refreshedAtMillis, int nowMillis) {
-  if (rawSeconds <= 0 || refreshedAtMillis <= 0) {
-    return rawSeconds < 0 ? 0 : rawSeconds;
-  }
-  final elapsedMs = nowMillis - refreshedAtMillis;
-  final elapsed = (elapsedMs < 0 ? 0 : elapsedMs) ~/ 1000;
-  final remain = rawSeconds - elapsed;
-  return remain < 0 ? 0 : remain;
 }
 
 /// 秒 → mm:ss。

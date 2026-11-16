@@ -1,6 +1,3 @@
-// DrinkingWater actions (Module B2; refactored in P4 A1 to orchestrate IUjingAdapter).
-// The adapter supplies data + IO latency; this mixin does validation + emit + poll bookkeeping.
-
 import 'dart:async';
 
 import '../../data/adapters/ujing_adapter.dart';
@@ -10,516 +7,308 @@ import '../models/water_order.dart';
 import '../runtime_status.dart';
 import '../shui_runtime_base.dart';
 
+/// 饮水：扫码一步建单，出水 / 停水由饮水机按钮完成，App 轮询扣费结果。
+/// 订单按账号保存，与洗衣相同；任何订单都可以移除本地记录。
 mixin WaterActions on ShuiRuntimeBase {
-  int _waterGeneration = 0;
-  bool _showWaterResult = true;
-  bool _waterScanInFlight = false;
-  bool _waterCreationPending = false;
-  Future<void>? _legacyMigration;
+  static const Duration _pollInterval = Duration(seconds: 10);
+  static const int _historyLimit = 100;
 
-  @override
-  Future<void> migrateLegacyUjingOrders() {
-    if (migration.hasLegacy || legacyStorageBlocked) return Future.value();
-    if (_legacyMigration != null) return _legacyMigration!;
-    late final Future<void> request;
-    request = _migrateLegacyUjingOrders().whenComplete(() {
-      if (identical(_legacyMigration, request)) _legacyMigration = null;
-    });
-    _legacyMigration = request;
-    return request;
+  bool _waterScanBusy = false;
+  final Map<String, Future<void>> _waterRefreshes = {};
+  Timer? _waterPollTimer;
+
+  /// 接水页打开时才把完成结果展示在页面上。
+  bool _showWaterResult = false;
+
+  void _waterNotice(String message,
+      {RuntimeTaskState status = RuntimeTaskState.success}) {
+    emit(state.copyWith(
+        waterOrder: RuntimeActionStatus(state: status, message: message)));
   }
 
-  Future<void> _migrateLegacyUjingOrders() async {
-    if (isDisposed || ujingAuthChanging || !_waterStorageReady()) return;
-    if (_waterScanInFlight || _waterCreationPending) return;
-    if (_waterRefreshInFlight != null && _waterRefreshEpoch == ujingAuthEpoch) {
+  Future<void> _saveWater() async {
+    try {
+      await water.save(WaterOrderSnapshot(
+          orders: state.waterOrders, history: state.waterHistory));
+    } catch (error) {
+      diagnosticLog.log('water', '饮水订单保存失败 type=${error.runtimeType}');
+      _waterNotice('订单已更新，但保存到本机失败；请勿清除数据', status: RuntimeTaskState.failure);
+    }
+  }
+
+  WaterOrderUi? _waterById(String orderId) {
+    for (final o in state.waterOrders) {
+      if (o.orderId == orderId) return o;
+    }
+    return null;
+  }
+
+  void _putWater(WaterOrderUi order) {
+    emit(state.copyWith(waterOrders: [
+      for (final o in state.waterOrders)
+        if (o.orderId != order.orderId &&
+            o.ownerAccountKey != order.ownerAccountKey)
+          o,
+      order,
+    ]));
+  }
+
+  void _finishWater(WaterOrderUi order, {required String status}) {
+    final history = [
+      WaterOrderHistoryUi(
+        orderId: order.orderId,
+        ownerAccountKey: order.ownerAccountKey,
+        deviceNo: order.deviceNo,
+        status: status,
+        payment: order.payment,
+        warmWaterMl: order.warmWaterMl,
+        waterSeconds: order.waterSeconds,
+        completedAt: formatClockTime(clock.nowMillis()),
+        completedAtMillis: clock.nowMillis(),
+      ),
+      ...state.waterHistory.where((h) => h.orderId != order.orderId),
+    ].take(_historyLimit).toList();
+    emit(state.copyWith(
+      waterOrders:
+          state.waterOrders.where((o) => o.orderId != order.orderId).toList(),
+      waterHistory: history,
+    ));
+  }
+
+  Future<void> _handleWaterError(Object error) async {
+    if (error is UjingException && error.authInvalid) {
+      await handleAuthInvalidation(AuthService.ujing);
       return;
     }
-    final loggedOwner = state.ujingAccount?.mobile.trim() ?? '';
-    if (loggedOwner.isNotEmpty) ujingLegacyOwnerKey = loggedOwner;
-    final owner = ujingLegacyOwnerKey;
+    diagnosticLog.log('water', '饮水操作失败 type=${error.runtimeType}');
+    _waterNotice(error is UjingException ? error.message : '接水订单处理失败，请稍后重试',
+        status: RuntimeTaskState.failure);
+  }
+
+  // ===== 生命周期钩子 =====
+
+  @override
+  Future<void> adoptUnownedOrders() async {
+    await super.adoptUnownedOrders();
+    final owner = ujingAccountKey;
     if (owner.isEmpty) return;
-    final epoch = ujingAuthEpoch;
-    ujingMutationCount++;
-    try {
-      final current = state.currentWaterOrder;
-      final unknownHistory =
-          state.waterHistory.any((h) => h.ownerAccountKey.isEmpty);
-      if (current?.ownerAccountKey.isEmpty == true || unknownHistory) {
-        final owned = current?.ownerAccountKey.isEmpty == true
-            ? current!.copyWith(ownerAccountKey: owner)
-            : current;
-        final history = state.waterHistory
-            .map((h) => h.ownerAccountKey.isNotEmpty
-                ? h
-                : WaterOrderHistoryUi(
-                    orderId: h.orderId,
-                    deviceNo: h.deviceNo,
-                    status: h.status,
-                    payment: h.payment,
-                    warmWaterMl: h.warmWaterMl,
-                    waterSeconds: h.waterSeconds,
-                    completedAt: h.completedAt,
-                    ownerAccountKey: owner))
-            .toList();
-        await water
-            .save(WaterOrderSnapshot(currentOrder: owned, history: history));
-        if (!canRetainUjingMutationResult(epoch, owner) ||
-            !identical(state.currentWaterOrder, current)) {
-          return;
-        }
-        emit(state.copyWith(currentWaterOrder: owned, waterHistory: history));
+    final unownedOrders =
+        state.waterOrders.where((o) => o.ownerAccountKey.isEmpty).toList();
+    final unownedHistory =
+        state.waterHistory.any((h) => h.ownerAccountKey.isEmpty);
+    if (unownedOrders.isEmpty && !unownedHistory) return;
+    final orders = [
+      for (final o in state.waterOrders)
+        if (o.ownerAccountKey.isNotEmpty) o,
+    ];
+    for (final o in unownedOrders) {
+      if (!orders.any((x) => x.ownerAccountKey == owner)) {
+        orders.add(o.copyWith(ownerAccountKey: owner));
       }
-      await migrateLegacyWasherOrders(owner, epoch);
-    } catch (error) {
-      diagnosticLog.log('water', '旧订单自动归属保存失败 type=${error.runtimeType}');
-      if (isUjingRequestCurrent(epoch)) {
-        emit(state.copyWith(
-            waterOrder: const RuntimeActionStatus(
-                state: RuntimeTaskState.failure,
-                message: '旧订单归属保存失败，原记录已保留，请刷新重试')));
-      }
-    } finally {
-      ujingMutationCount--;
     }
-  }
-
-  bool _waterStorageReady() {
-    if (!ujingOrderStorageBlocked && !legacyStorageBlocked) return true;
-    emit(state.copyWith(
-        waterOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: '本地订单恢复失败，请先处理存储问题，未创建新订单')));
-    return false;
+    emit(state.copyWith(waterOrders: orders, waterHistory: [
+      for (final h in state.waterHistory)
+        h.ownerAccountKey.isNotEmpty
+            ? h
+            : WaterOrderHistoryUi(
+                orderId: h.orderId,
+                ownerAccountKey: owner,
+                deviceNo: h.deviceNo,
+                status: h.status,
+                payment: h.payment,
+                warmWaterMl: h.warmWaterMl,
+                waterSeconds: h.waterSeconds,
+                completedAt: h.completedAt,
+                completedAtMillis: h.completedAtMillis),
+    ]));
+    await _saveWater();
   }
 
   @override
-  Future<void> resumeUjingOrders() async {
-    if (isDisposed || ujingAuthChanging) return;
-    if (!_waterStorageReady()) return;
-    if (!legacyServiceReady('ujing')) return;
-    await migrateLegacyUjingOrders();
-    if (isDisposed || ujingAuthChanging) return;
-    final order = state.currentWaterOrder;
-    if (order != null && canAccessUjingOrder(order.ownerAccountKey)) {
-      startWaterPolling();
-      await pollWaterOrderOnce();
-    } else {
-      stopWaterPolling();
+  Future<void> refreshActiveOrders() async {
+    await super.refreshActiveOrders();
+    if (state.currentWaterOrder != null) {
+      await refreshCurrentDrinkingWaterOrder(quiet: true);
     }
-    await resumeWasherOrders();
   }
 
-  bool _canUseWaterOrder(WaterOrderUi order) {
-    if (pendingLegacy('water', order.orderId)) {
-      emit(state.copyWith(
-          waterOrder: const RuntimeActionStatus(
-              state: RuntimeTaskState.unavailable,
-              message: '旧接水记录待核对，请登录后重试核对')));
-      return false;
-    }
-    if (canAccessUjingOrder(order.ownerAccountKey)) return true;
-    stopWaterPolling();
-    emit(state.copyWith(
-        waterOrder: RuntimeActionStatus(
-      state: RuntimeTaskState.unavailable,
-      message: order.ownerAccountKey.isEmpty
-          ? '旧订单等待最近登录账号恢复，请登录后刷新重试'
-          : '该订单属于其他账号，请切回原账号后查询',
-    )));
-    return false;
-  }
-
-  Future<void> confirmWaterOrderOwner(
-      {required String orderId,
-      required String accountKey,
-      required int epoch}) async {
-    if (!_waterStorageReady()) return;
-    if (migration.hasLegacy) {
-      await verifyLegacyWater();
+  @override
+  void syncOrderPolling() {
+    super.syncOrderPolling();
+    final active =
+        ordersReady && !pollingPaused && state.currentWaterOrder != null;
+    if (!active) {
+      _waterPollTimer?.cancel();
+      _waterPollTimer = null;
       return;
     }
-    final order = state.currentWaterOrder;
-    if (order == null ||
-        order.orderId != orderId ||
-        order.ownerAccountKey.isNotEmpty ||
-        accountKey.isEmpty ||
-        accountKey != ujingAccountKey ||
-        !isUjingRequestCurrent(epoch) ||
-        _waterScanInFlight ||
-        _waterRefreshInFlight != null) {
-      return;
-    }
-    _waterScanInFlight = true;
-    ujingMutationCount++;
-    var saved = false;
-    try {
-      final owned = order.copyWith(ownerAccountKey: accountKey);
-      await water.save(
-          WaterOrderSnapshot(currentOrder: owned, history: state.waterHistory));
-      if (!isUjingRequestCurrent(epoch) ||
-          state.currentWaterOrder?.orderId != orderId) {
-        return;
-      }
-      emit(state.copyWith(currentWaterOrder: owned));
-      saved = true;
-    } catch (error) {
-      if (isUjingRequestCurrent(epoch)) {
-        emit(state.copyWith(
-            waterOrder: const RuntimeActionStatus(
-                state: RuntimeTaskState.failure,
-                message: '归属保存失败，旧订单已保留，请重试')));
-      }
-    } finally {
-      _waterScanInFlight = false;
-      ujingMutationCount--;
-    }
-    if (saved) {
-      startWaterPolling();
-      await refreshCurrentDrinkingWaterOrder();
-    }
+    _waterPollTimer ??= Timer.periodic(_pollInterval, (_) {
+      unawaited(refreshCurrentDrinkingWaterOrder(quiet: true));
+    });
   }
 
-  /// 扫码识别饮水机 → 确认校区/余额 → 创建接水订单（一步式，对齐 legacy
-  /// `scanDrinkingWaterAndCreateOrder`）。余额不足时中止并提示充值。
+  @override
+  void dispose() {
+    _waterPollTimer?.cancel();
+    super.dispose();
+  }
+
+  // ===== 扫码建单 =====
+
+  /// 扫码识别饮水机 → 确认校区 / 余额 → 创建接水订单（一步式）。
   Future<void> scanDrinkingWaterAndCreateOrder(String cd) async {
-    if (_waterScanInFlight || isDisposed) return;
-    _waterScanInFlight = true;
-    final epoch = ujingAuthEpoch;
-    ujingMutationCount++;
+    await ready;
+    _showWaterResult = true;
+    final owner = ujingAccountKey;
+    if (owner.isEmpty) {
+      _waterNotice('请先登录 U净账号', status: RuntimeTaskState.loginRequired);
+      return;
+    }
+    if (_waterScanBusy) {
+      _waterNotice('正在处理上一次扫码，请稍候', status: RuntimeTaskState.loading);
+      return;
+    }
+    _waterScanBusy = true;
     try {
-      await ready;
-      if (!_waterStorageReady()) return;
-      if (!isUjingRequestCurrent(epoch)) return;
-      if (ujingAccountKey.isEmpty) {
-        emit(state.copyWith(
-            waterOrder: const RuntimeActionStatus(
-                state: RuntimeTaskState.failure, message: '请先登录 U净账号')));
-        return;
-      }
-      _showWaterResult = true;
       if (state.currentWaterOrder != null) {
-        if (!_canUseWaterOrder(state.currentWaterOrder!)) return;
-        await refreshCurrentDrinkingWaterOrder();
-        if (!isUjingRequestCurrent(epoch)) return;
-        if (isDisposed || state.currentWaterOrder != null) {
-          if (!isDisposed &&
-              state.waterOrder.state != RuntimeTaskState.failure) {
-            emit(state.copyWith(
-              waterOrder: const RuntimeActionStatus(
-                state: RuntimeTaskState.unavailable,
-                message: '已有接水订单尚未结束，请先在饮水机上结束接水后重试',
-              ),
-            ));
+        await refreshCurrentDrinkingWaterOrder(quiet: true);
+        if (ujingAccountKey != owner) return; // 查询时登录失效
+        if (state.currentWaterOrder != null) {
+          // 查询失败时保留失败原因，否则说明为什么没有新建订单。
+          if (state.waterOrder.state != RuntimeTaskState.failure) {
+            _waterNotice('你还有一笔接水订单未结束：请在饮水机上结束接水后刷新，或移除本机记录',
+                status: RuntimeTaskState.unavailable);
           }
           return;
         }
       }
-      await _createWaterOrder(cd);
-    } catch (error) {
-      diagnosticLog.log('water', '订单创建或保存失败 type=${error.runtimeType}');
-      if (isUjingRequestCurrent(epoch)) {
-        emit(state.copyWith(
-          waterScan: const RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: '接水订单处理失败',
-          ),
-          waterOrder: RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: state.currentWaterOrder == null
-                ? '接水订单处理失败，请稍后重试'
-                : '订单已保留，处理或保存失败，请刷新重试；暂勿关闭 App',
-          ),
-        ));
-      }
-    } finally {
-      _waterCreationPending = false;
-      _waterScanInFlight = false;
-      ujingMutationCount--;
-    }
-  }
-
-  Future<void> _createWaterOrder(String cd) async {
-    _waterCreationPending = true;
-    final generation = ++_waterGeneration;
-    final epoch = ujingAuthEpoch;
-    final owner = ujingAccountKey;
-    _showWaterResult = true;
-    emit(
-      state.copyWith(
+      emit(state.copyWith(
         clearWaterResult: true,
         waterScan: const RuntimeActionStatus(
-          state: RuntimeTaskState.loading,
-          message: '正在识别饮水机',
-        ),
+            state: RuntimeTaskState.loading, message: '正在识别饮水机'),
         waterOrder: const RuntimeActionStatus(
-          state: RuntimeTaskState.loading,
-          message: '正在创建接水订单',
-        ),
-      ),
-    );
-
-    final WaterPrepareResult result;
-    try {
-      result = await ujing.scanAndCreateWaterOrder(cd.trim());
-    } on UjingException catch (e) {
-      if (generation != _waterGeneration || !isUjingRequestCurrent(epoch)) {
-        return;
-      }
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing, expectedEpoch: epoch);
-        return;
-      }
-      emit(
-        state.copyWith(
-          waterScan: RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: e.message,
-          ),
-          waterOrder: RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: e.message,
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (generation != _waterGeneration ||
-        !canRetainUjingMutationResult(epoch, owner)) {
-      return;
-    }
-    final ready = result.ready;
-    if (result.order == null) {
-      if (!isUjingRequestCurrent(epoch)) return;
-      emit(
-        state.copyWith(
-          waterReady: ready,
-          clearWaterResult: true,
-          waterScan: RuntimeActionStatus(
-            state: RuntimeTaskState.success,
-            message: '饮水机已识别：${ready.serviceSubjectName}',
-          ),
-          waterOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.unavailable,
-            message: '余额不足，请先在官方 App 充值',
-          ),
-        ),
-      );
-      return;
-    }
-
-    emit(
-      state.copyWith(
-        waterReady: ready,
-        clearWaterResult: true,
-        currentWaterOrder: result.order!.copyWith(ownerAccountKey: owner),
-        waterScan: !isUjingRequestCurrent(epoch)
-            ? null
-            : RuntimeActionStatus(
-                state: RuntimeTaskState.success,
-                message: '饮水机已识别：${ready.serviceSubjectName}',
-              ),
-        waterOrder: !isUjingRequestCurrent(epoch)
-            ? null
-            : const RuntimeActionStatus(
-                state: RuntimeTaskState.success,
-                message: '接水订单已创建，请在饮水机上按按钮开始/停止接水',
-              ),
-      ),
-    );
-    try {
-      await persistWaterOrders();
-    } catch (error) {
-      if (!isUjingRequestCurrent(epoch) &&
-          canRetainUjingMutationResult(epoch, owner)) {
-        diagnosticLog.log('water', '失效后订单保全保存失败 type=${error.runtimeType}');
-        emit(state.copyWith(
-            waterOrder: const RuntimeActionStatus(
-                state: RuntimeTaskState.loginRequired,
-                message: '登录已失效；订单仅保留在内存，保存失败，请勿关闭 App，重新登录后刷新重试')));
-      }
-      rethrow;
-    }
-    if (!isUjingRequestCurrent(epoch)) return;
-    _waterCreationPending = false;
-    startWaterPolling();
-    if (result.needsDetailRefresh) {
-      await refreshCurrentDrinkingWaterOrder();
-    }
-  }
-
-  /// 刷新当前接水订单状态（对齐 legacy `refreshCurrentDrinkingWaterOrder`）。
-  /// fake：第一次刷新视为用户已在机器上完成接水 → status=50 + 上报扣费，
-  /// 写入历史并清空当前订单（终态）。
-  Future<void> refreshCurrentDrinkingWaterOrder() async {
-    await ready;
-    if (!await verifyLegacyWater()) return;
-    await _refreshCurrentDrinkingWaterOrder(showLoading: true);
-  }
-
-  @override
-  Future<void> pollWaterOrderOnce() async {
-    await _refreshCurrentDrinkingWaterOrder(showLoading: false);
-  }
-
-  Future<void>? _waterRefreshInFlight;
-  int _waterRefreshEpoch = -1;
-
-  Future<void> _refreshCurrentDrinkingWaterOrder({required bool showLoading}) {
-    if (!_waterStorageReady()) return Future.value();
-    final pending = _waterRefreshInFlight;
-    if (pending != null && _waterRefreshEpoch == ujingAuthEpoch) return pending;
-    if (isDisposed ||
-        !isUjingRequestCurrent(ujingAuthEpoch) ||
-        _waterCreationPending ||
-        state.currentWaterOrder == null) {
-      return Future.value();
-    }
-    if (!_canUseWaterOrder(state.currentWaterOrder!)) return Future.value();
-    final epoch = ujingAuthEpoch;
-    final orderId = state.currentWaterOrder!.orderId;
-    late final Future<void> request;
-    request = _refreshCurrentDrinkingWaterOrderImpl(showLoading: showLoading)
-        .catchError((Object error) {
-      diagnosticLog.log('water', '订单查询或保存失败 type=${error.runtimeType}');
-      if (isUjingRequestCurrent(epoch) &&
-          state.currentWaterOrder?.orderId == orderId) {
-        emit(state.copyWith(
-          waterOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: '订单查询或保存失败，已有订单已保留，请刷新重试',
-          ),
-        ));
-      }
-    }).whenComplete(() {
-      if (identical(_waterRefreshInFlight, request)) {
-        _waterRefreshInFlight = null;
-      }
-    });
-    _waterRefreshEpoch = epoch;
-    _waterRefreshInFlight = request;
-    return request;
-  }
-
-  Future<void> _refreshCurrentDrinkingWaterOrderImpl(
-      {required bool showLoading}) async {
-    final generation = _waterGeneration;
-    final epoch = ujingAuthEpoch;
-    if (showLoading) {
-      emit(
-        state.copyWith(
-          waterOrder: const RuntimeActionStatus(
-            state: RuntimeTaskState.loading,
-            message: '正在刷新接水订单',
-          ),
-        ),
-      );
-    }
-
-    final current = state.currentWaterOrder!;
-    late WaterOrderUi refreshed;
-    try {
-      refreshed = await ujing.refreshWaterOrder(current);
-      if (refreshed.orderId != current.orderId) throw StateError('订单响应不匹配');
-      refreshed = refreshed.copyWith(ownerAccountKey: current.ownerAccountKey);
-    } on UjingException catch (e) {
-      if (!isUjingRequestCurrent(epoch) ||
-          generation != _waterGeneration ||
-          state.currentWaterOrder?.orderId != current.orderId) {
-        return;
-      }
-      if (e.authInvalid) {
-        await handleAuthInvalidation(AuthService.ujing, expectedEpoch: epoch);
-        return;
-      }
-      emit(
-        state.copyWith(
-          waterOrder: RuntimeActionStatus(
-            state: RuntimeTaskState.failure,
-            message: e.message,
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (!isUjingRequestCurrent(epoch) ||
-        generation != _waterGeneration ||
-        state.currentWaterOrder?.orderId != current.orderId) {
-      return;
-    }
-
-    if (refreshed.isTerminal) {
-      final history = [
-        ...state.waterHistory.where((h) => h.orderId != refreshed.orderId),
-        WaterOrderHistoryUi(
-          orderId: refreshed.orderId,
-          ownerAccountKey: current.ownerAccountKey,
-          deviceNo: refreshed.deviceNo,
-          status: refreshed.statusRemark,
-          payment: refreshed.payment,
-          warmWaterMl: refreshed.warmWaterMl,
-          waterSeconds: refreshed.waterSeconds,
-          // P1-FIX：真实完成时刻（注入 clock），取代硬编码假「刚刚」。
-          completedAt: formatClockTime(clock.nowMillis()),
-        ),
-      ];
-      // 先保存完成记录，再释放单活动订单槽位，避免保存失败后继续下新单。
-      ujingMutationCount++;
-      try {
-        await water.save(WaterOrderSnapshot(history: history));
-      } finally {
-        ujingMutationCount--;
-      }
-      if (!isUjingRequestCurrent(epoch) ||
-          state.currentWaterOrder?.orderId != current.orderId) {
-        return;
-      }
-      emit(
-        state.copyWith(
-          clearCurrentWaterOrder: true,
-          waterResult: _showWaterResult ? refreshed : null,
-          clearWaterResult: !_showWaterResult,
-          waterHistory: history,
-          waterOrder: RuntimeActionStatus(
-            state: RuntimeTaskState.success,
-            message:
-                '${refreshed.statusRemark.isEmpty ? refreshed.orderStatusName : refreshed.statusRemark}，已加入订单统计',
-          ),
-        ),
-      );
-      stopWaterPolling();
-      return;
-    }
-
-    // 尚未完成（保留分支以便未来多次轮询场景）。
-    emit(
-      state.copyWith(
-        currentWaterOrder: refreshed,
-        waterOrder: RuntimeActionStatus(
+            state: RuntimeTaskState.loading, message: '正在创建接水订单'),
+      ));
+      final result = await ujing.scanAndCreateWaterOrder(cd.trim());
+      final ready = result.ready;
+      final scanned = RuntimeActionStatus(
           state: RuntimeTaskState.success,
-          message: '接水订单已刷新：${refreshed.statusRemark}',
-        ),
-      ),
-    );
-    await persistWaterOrders();
-    startWaterPolling();
+          message: '饮水机已识别：${ready.serviceSubjectName}');
+      final order = result.order;
+      if (order == null) {
+        emit(state.copyWith(
+          waterReady: ready,
+          waterScan: scanned,
+          waterOrder: const RuntimeActionStatus(
+              state: RuntimeTaskState.unavailable,
+              message: '余额不足，请先在官方 App 充值'),
+        ));
+        return;
+      }
+      _putWater(order.copyWith(
+          ownerAccountKey: owner, createdAtMillis: clock.nowMillis()));
+      emit(state.copyWith(
+        waterReady: ready,
+        waterScan: scanned,
+        waterOrder: const RuntimeActionStatus(
+            state: RuntimeTaskState.success,
+            message: '接水订单已创建，请在饮水机上按按钮开始/停止接水'),
+      ));
+      await _saveWater();
+      if (result.needsDetailRefresh) {
+        await _refreshWater(order.orderId, quiet: true);
+      }
+    } catch (error) {
+      emit(state.copyWith(
+          waterScan: const RuntimeActionStatus(
+              state: RuntimeTaskState.failure, message: '接水订单处理失败')));
+      await _handleWaterError(error);
+    } finally {
+      _waterScanBusy = false;
+    }
   }
 
-  /// 离开饮水页时清理 ready/banner（不删历史）。
+  // ===== 刷新 / 移除 =====
+
+  Future<void> refreshCurrentDrinkingWaterOrder({bool quiet = false}) async {
+    await ready;
+    final order = state.currentWaterOrder;
+    if (order == null) {
+      if (!quiet) _waterNotice('当前没有进行中的接水订单');
+      return;
+    }
+    await _refreshWater(order.orderId, quiet: quiet);
+  }
+
+  Future<void> _refreshWater(String orderId, {required bool quiet}) {
+    final pending = _waterRefreshes[orderId];
+    if (pending != null) return pending;
+    final local = _waterById(orderId);
+    if (local == null) return Future.value();
+    final request = () async {
+      if (!quiet) {
+        _waterNotice('正在刷新接水订单', status: RuntimeTaskState.loading);
+      }
+      try {
+        final remote = await ujing.refreshWaterOrder(local);
+        final latest = _waterById(orderId);
+        if (latest == null) return;
+        final merged = remote.copyWith(
+            ownerAccountKey: latest.ownerAccountKey,
+            createdAtMillis: latest.createdAtMillis);
+        if (merged.orderStatus != latest.orderStatus) {
+          diagnosticLog.log('water',
+              '订单状态 ${latest.orderStatus} → ${merged.orderStatus}（${merged.statusLabel}）');
+        }
+        if (merged.isTerminal) {
+          _finishWater(merged, status: merged.statusLabel);
+          emit(state.copyWith(
+            waterResult: _showWaterResult ? merged : null,
+            clearWaterResult: !_showWaterResult,
+          ));
+          _waterNotice('${merged.statusLabel}，已加入订单记录');
+        } else {
+          _putWater(merged);
+          if (!quiet) _waterNotice('已刷新：${merged.statusLabel}');
+        }
+        await _saveWater();
+      } catch (error) {
+        await _handleWaterError(error);
+      }
+    }();
+    _waterRefreshes[orderId] = request;
+    return request.whenComplete(() => _waterRefreshes.remove(orderId));
+  }
+
+  /// 仅移除本机记录，不影响饮水机或服务端订单。
+  Future<void> removeCurrentWaterOrderLocally() async {
+    await ready;
+    final order = state.currentWaterOrder;
+    if (order == null) return;
+    _finishWater(order, status: '已移除本机记录');
+    await _saveWater();
+    _waterNotice('已移除本机接水订单记录');
+  }
+
+  /// 离开饮水页时清理 ready / 结果提示（不删订单与历史）。
   void resetDrinkingWaterTransient() {
     _showWaterResult = false;
-    emit(
-      state.copyWith(
-        clearWaterReady: true,
-        clearWaterResult: true,
-        waterScan: const RuntimeActionStatus(
-          state: RuntimeTaskState.idle,
-          message: '扫描饮水机或洗衣机二维码',
-        ),
-        waterOrder: const RuntimeActionStatus(),
+    emit(state.copyWith(
+      clearWaterReady: true,
+      clearWaterResult: true,
+      waterScan: const RuntimeActionStatus(
+        state: RuntimeTaskState.idle,
+        message: '扫描饮水机或洗衣机二维码',
       ),
-    );
+      waterOrder: const RuntimeActionStatus(),
+    ));
+  }
+
+  /// 进入饮水页（不扫码，查看已有订单）时调用。
+  void enterDrinkingWater() {
+    _showWaterResult = true;
+    if (state.currentWaterOrder != null) {
+      unawaited(refreshCurrentDrinkingWaterOrder(quiet: true));
+    }
   }
 }

@@ -109,7 +109,6 @@ void main() {
       await runtime.stopActiveHotwater();
       expect(runtime.state.hotwaterStart.state, RuntimeTaskState.unavailable);
       expect(runtime.state.hotwaterStop.state, RuntimeTaskState.unavailable);
-      expect(await runtime.verifyLegacyHotwater(), isFalse);
       expect(await settings.loadHotwaterSession(), same(session));
       expect(api.starts + api.stops, 0);
       runtime.setPollingPaused(true);

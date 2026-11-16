@@ -8,6 +8,7 @@ import '../runtime/shui_runtime.dart';
 import '../runtime/models/water_order.dart';
 import '../theme/shui_motion.dart';
 import '../theme/shui_assets.dart';
+import '../widgets/remove_local_record.dart';
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
 
@@ -19,6 +20,7 @@ class DrinkingWaterScreen extends StatelessWidget {
     required this.state,
     required this.onBack,
     required this.onRefresh,
+    required this.onRemoveLocal,
     this.onReturnHome,
     super.key,
   });
@@ -27,6 +29,7 @@ class DrinkingWaterScreen extends StatelessWidget {
   final ShuiHomeState state;
   final VoidCallback onBack;
   final VoidCallback onRefresh;
+  final VoidCallback onRemoveLocal;
   final VoidCallback? onReturnHome;
 
   @override
@@ -35,6 +38,14 @@ class DrinkingWaterScreen extends StatelessWidget {
     final order = state.currentWaterOrder;
     final result = state.waterResult;
     final busy = state.waterOrder.isBusy;
+    final account = state.ujingAccountKey;
+    final recent = state.waterHistory
+        .where((h) =>
+            account.isEmpty ||
+            h.ownerAccountKey.isEmpty ||
+            h.ownerAccountKey == account)
+        .take(5)
+        .toList();
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final bottomPadding = bottomInset + AppCustomTokens.spaceLg;
 
@@ -62,8 +73,6 @@ class DrinkingWaterScreen extends StatelessWidget {
                     const SizedBox(height: AppCustomTokens.drinkingCardGap),
                   ],
                   _InfoCard(cd: cd, ready: ready),
-                  if (order != null && order.ownerAccountKey.isEmpty)
-                    const Text('旧订单等待登录账号恢复；登录后刷新即可'),
                   const SizedBox(height: AppCustomTokens.drinkingCardGap),
                   AnimatedSwitcher(
                     duration: ShuiMotion.duration(context, ShuiMotion.local),
@@ -80,11 +89,12 @@ class DrinkingWaterScreen extends StatelessWidget {
                             order: order,
                             busy: busy,
                             onRefresh: onRefresh,
+                            onRemoveLocal: onRemoveLocal,
                           ),
                   ),
-                  if (state.waterHistory.isNotEmpty) ...[
+                  if (recent.isNotEmpty) ...[
                     const SizedBox(height: AppCustomTokens.drinkingCardGap),
-                    _HistoryCard(records: state.waterHistory),
+                    _HistoryCard(records: recent),
                   ],
                 ],
               ),
@@ -117,8 +127,8 @@ class _CompletedCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppCustomTokens.spaceSm),
-          InfoLine(label: '订单号', value: order.orderId),
-          InfoLine(label: '设备', value: order.deviceNo),
+          if (order.deviceNo.isNotEmpty)
+            InfoLine(label: '设备', value: order.deviceNo),
           InfoLine(label: '用水量', value: '${order.warmWaterMl} ml'),
           InfoLine(label: '扣费', value: formatYuanAmount(order.payment)),
           const SizedBox(height: AppCustomTokens.spaceMd),
@@ -210,12 +220,14 @@ class _StatusCard extends StatelessWidget {
     required this.order,
     required this.busy,
     required this.onRefresh,
+    required this.onRemoveLocal,
     super.key,
   });
 
   final WaterOrderUi? order;
   final bool busy;
   final VoidCallback onRefresh;
+  final VoidCallback onRemoveLocal;
 
   @override
   Widget build(BuildContext context) {
@@ -236,14 +248,7 @@ class _StatusCard extends StatelessWidget {
               style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
             )
           else ...[
-            InfoLine(label: '订单号', value: order!.orderId),
-            const SizedBox(height: AppCustomTokens.spaceXs),
-            InfoLine(
-              label: '状态',
-              value: order!.statusRemark.isEmpty
-                  ? order!.orderStatusName
-                  : order!.statusRemark,
-            ),
+            InfoLine(label: '状态', value: order!.statusLabel),
             const SizedBox(height: AppCustomTokens.spaceXs),
             InfoLine(
               label: '设备',
@@ -272,6 +277,22 @@ class _StatusCard extends StatelessWidget {
             enabled: !busy && order != null,
             onTap: onRefresh,
           ),
+          if (order != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () async {
+                  if (await confirmRemoveLocalRecord(context,
+                      detail: '只会从本 App 中移除这笔接水订单，不会影响饮水机或扣费。'
+                          '适用于已在机器上结束、但这里一直没有更新的情况。')) {
+                    onRemoveLocal();
+                  }
+                },
+                child: Text('移除本机记录',
+                    style: textTheme.bodySmall
+                        ?.copyWith(color: AppColors.mutedText)),
+              ),
+            ),
         ],
       ),
     );
@@ -292,11 +313,11 @@ class _HistoryCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '本机接水记录',
+            '最近接水',
             style: textTheme.titleMedium?.copyWith(color: AppColors.deepText),
           ),
           const SizedBox(height: AppCustomTokens.spaceSm),
-          ...records.reversed.map(
+          ...records.map(
             (record) => Padding(
               padding: const EdgeInsets.only(bottom: AppCustomTokens.spaceXs),
               child: Row(

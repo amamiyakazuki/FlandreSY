@@ -122,12 +122,6 @@ class IoUjingTransport implements UjingTransport {
       throw const UjingException('响应格式异常（顶层非对象），结果未确认');
     }
 
-    if (request.requireVerifiedEnvelope &&
-        (decoded['code'] != 0 ||
-            decoded['data'] is! Map<String, dynamic> ||
-            (decoded['data'] as Map).isEmpty)) {
-      throw const UjingException('旧订单核对响应不完整，保留原记录');
-    }
     final code = decoded['code'];
     if (code is! num) {
       throw const UjingException('响应缺少有效成功码，结果未确认，请查询状态后再操作');

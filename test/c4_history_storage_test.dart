@@ -6,8 +6,6 @@ import 'package:shared_preferences_platform_interface/shared_preferences_platfor
 import 'package:shared_preferences_platform_interface/method_channel_shared_preferences.dart';
 import 'package:flandresy/src/data/history_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_history_repository.dart';
-import 'package:flandresy/src/data/legacy_data_migration.dart';
-import 'support/memory_migration_store.dart';
 import 'support/test_runtime.dart';
 import 'c4_history_ownership_test.dart' show old, record, HistoryAdapter, login;
 
@@ -109,27 +107,4 @@ void main() {
     await repo.saveHistory([old, record('a').ownedBy('A')]);
     expect((await repo.loadHistory())!.last.ownerAccount, 'A');
   });
-
-  for (final blocked in [false, true]) {
-    test(
-        'C1 pending login / failed preservation forbids query, blocked=$blocked',
-        () async {
-      final store = MemoryMigrationStore({
-        'zhuli_phone': 'A',
-        'hotwater_history_json': HotwaterHistoryCodec.encode([old])
-      });
-      if (blocked) store.failKey = LegacyDataMigration.backupKey;
-      final api = HistoryAdapter();
-      final r = TestRuntime(
-          migration: LegacyDataMigration(store),
-          hotwater: api,
-          history: InMemoryHistoryRepository(history: [old]));
-      addTearDown(r.dispose);
-      await r.loadHotwaterHistory();
-      expect(api.calls, 0);
-      expect(r.state.unassignedHotwaterHistory.single.orderId, 'old');
-      expect(r.state.hotwater.historyStatus.state,
-          blocked ? RuntimeTaskState.failure : RuntimeTaskState.loginRequired);
-    });
-  }
 }

@@ -14,7 +14,6 @@ import '../data/adapters/shower798_adapter.dart';
 import '../data/adapters/ujing_adapter.dart';
 import '../data/adapters/ujing_http_adapter.dart';
 import '../data/app_bootstrap.dart';
-import '../data/legacy_data_migration.dart';
 import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/device_import.dart';
@@ -47,7 +46,6 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     WaterOrderRepository? water,
     WasherHistoryRepository? washerHistory,
     required this.secure,
-    required this.migration,
     LiveClock? clock,
     required this.ujing,
     required this.hotwater,
@@ -71,40 +69,29 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     deviceSeq = _maxDeviceSeq(_state.localDevices);
     hotwaterOrderSeq = _maxOrderSeq(_state.hotwater.history);
     ready = Future<void>.microtask(() async {
-      await migration.prepare();
       if (initial == null) {
         await _restorePersisted();
       } else {
-        applyRecoveryWarnings(initial);
+        _logRecoveryWarnings(initial);
       }
       reconcileRestoredAuth();
-      await prepareLegacyRecords();
       await resumeHotwaterSession();
-      await migrateLegacyUjingOrders();
-      _washerPollingReady = true;
-      syncWasherPolling();
-      unawaited(resumeUjingOrders());
+      await adoptUnownedOrders();
+      _ordersReady = true;
+      syncOrderPolling();
+      unawaited(refreshActiveOrders());
     });
   }
-
-  final LegacyDataMigration migration;
-  bool get legacyStorageBlocked =>
-      migration.blocked || recoveryWarnings.isNotEmpty;
-  Future<void> prepareLegacyRecords();
-  Future<void> retryLegacyRecovery();
-  Future<bool> verifyLegacyWater();
-  Future<bool> verifyLegacyWasher();
-  Future<bool> verifyLegacyHotwater();
-  bool pendingLegacy(String kind, String id) =>
-      legacyStorageBlocked || migration.isPending(kind, id);
-  bool legacyServiceReady(String service) =>
-      !legacyStorageBlocked && !migration.needsLogin(service);
 
   late final Future<void> ready;
   bool isDisposed = false;
   int hotwaterAuthEpoch = 0;
+
+  /// U净 登录代次：仅用于丢弃设备列表等页面级查询的过期结果。
+  /// 订单按账号保存，结果总是写回所属账号，不依赖代次。
   int ujingAuthEpoch = 0;
-  int ujingMutationCount = 0;
+  bool ujingAuthChanging = false;
+  bool hotwaterAuthChanging = false;
   int hotwaterAccountWriteCount = 0;
   Future<void> _shower798StorageTail = Future<void>.value();
 
@@ -118,51 +105,39 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   }
 
   Future<void> recordShower798StopConfirmation(String deviceId, String owner);
-  int? _invalidatedUjingEpoch;
-  String? _invalidatedUjingOwner;
+
   void beginUjingLoginEpoch() {
-    _invalidatedUjingEpoch = null;
-    _invalidatedUjingOwner = null;
     ujingAuthEpoch++;
     invalidateDeviceStatus();
   }
 
-  bool canRetainUjingMutationResult(int epoch, String owner) =>
-      isUjingRequestCurrent(epoch) ||
-      (!isDisposed &&
-          ujingMutationCount > 0 &&
-          _invalidatedUjingEpoch == epoch &&
-          _invalidatedUjingOwner == owner);
-  bool ujingAuthChanging = false;
-  bool hotwaterAuthChanging = false;
-  bool ujingOrderStorageBlocked = false;
-  String ujingLegacyOwnerKey = '';
-  List<String> recoveryWarnings = [];
+  bool isUjingRequestCurrent(int epoch) =>
+      !isDisposed && epoch == ujingAuthEpoch && !ujingAuthChanging;
 
-  void applyRecoveryWarnings(PersistedSnapshot snapshot) {
-    recoveryWarnings = List.of(snapshot.recoveryWarnings);
-    ujingOrderStorageBlocked = snapshot.ujingOrderStorageBlocked;
-    if (recoveryWarnings.isNotEmpty) {
-      diagnosticLog.log('storage', '本地数据恢复存在异常');
+  void _logRecoveryWarnings(PersistedSnapshot snapshot) {
+    for (final warning in snapshot.recoveryWarnings) {
+      diagnosticLog.log('storage', warning);
     }
   }
 
-  String get ujingAccountKey => legacyServiceReady('ujing')
-      ? state.ujingAccount?.mobile.trim() ?? ''
-      : '';
-  bool isUjingRequestCurrent(int epoch) =>
-      !isDisposed && epoch == ujingAuthEpoch && !ujingAuthChanging;
-  bool canAccessUjingOrder(String owner) =>
-      !isDisposed &&
-      !ujingAuthChanging &&
-      legacyServiceReady('ujing') &&
-      ujingAccountKey.isNotEmpty &&
-      owner == ujingAccountKey;
-  Future<void> resumeUjingOrders();
-  Future<void> migrateLegacyUjingOrders();
-  Future<void> migrateLegacyWasherOrders(String owner, int epoch);
-  Future<void> resumeWasherOrders();
-  Future<void> refreshCurrentWasherOrder();
+  /// 当前 U净 账号（手机号）；未登录为空。
+  String get ujingAccountKey => state.ujingAccountKey;
+
+  // ===== 订单（由洗衣 / 饮水 mixin 实现）=====
+  bool _ordersReady = false;
+
+  /// 启动完成前不轮询，避免与恢复流程交错。
+  bool get ordersReady => _ordersReady && !isDisposed;
+
+  /// 旧版本没有归属的订单，交给当前登录账号。
+  Future<void> adoptUnownedOrders() async {}
+
+  /// 立即查询当前账号进行中的订单（启动、回到前台、登录后调用）。
+  Future<void> refreshActiveOrders() async {}
+
+  /// 按当前订单状态启停轮询；每次状态变化后调用。
+  void syncOrderPolling() {}
+
   Future<void> checkAccountStatus(AccountKind kind);
   Future<void> logoutAccount(AccountKind kind);
   void resetAccountAvailability(AccountKind kind);
@@ -170,30 +145,25 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
 
   /// 普通账号资料不能代替真实凭据；两种启动路径共同使用。
   void reconcileRestoredAuth() {
-    final previous = state.ujingAccount?.mobile.trim() ?? '';
-    if (previous.isNotEmpty) ujingLegacyOwnerKey = previous;
     const required = RuntimeActionStatus(
       state: RuntimeTaskState.loginRequired,
       message: '请重新登录',
     );
     if (ujing is UjingHttpAdapter &&
-        (migration.needsLogin('ujing') ||
-            (ujing as UjingHttpAdapter).lastToken?.isNotEmpty != true ||
+        ((ujing as UjingHttpAdapter).lastToken?.isNotEmpty != true ||
             state.ujingAccount == null)) {
       (ujing as UjingHttpAdapter).invalidateAuth();
       emit(state.copyWith(clearUjingAccount: true, washerLogin: required));
     }
     if (hotwater is RealZhuliAdapter &&
-        (migration.needsLogin('zhuli') ||
-            !(hotwater as RealZhuliAdapter).hasCredentials ||
+        (!(hotwater as RealZhuliAdapter).hasCredentials ||
             !state.zhuli.isLoggedIn)) {
       (hotwater as RealZhuliAdapter).invalidateAuth();
       emit(state.copyWith(
           zhuli: state.zhuli.copyWith(phone: ''), hotwaterLogin: required));
     }
     if (shower798 is RealShower798Adapter &&
-        (migration.needsLogin('shower798') ||
-            (shower798 as RealShower798Adapter).lastToken?.isNotEmpty != true ||
+        ((shower798 as RealShower798Adapter).lastToken?.isNotEmpty != true ||
             state.shower798Account == null)) {
       (shower798 as RealShower798Adapter).invalidateAuth();
       emit(state.copyWith(
@@ -212,11 +182,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     RuntimeActionStatus? stopStatus,
   }) async {
     final session = state.hotwater.session;
-    if (isDisposed ||
-        session == null ||
-        pendingLegacy('hotwater', session.id)) {
-      return false;
-    }
+    if (isDisposed || session == null) return false;
     if (expected != null && expected.id != session.id) return false;
 
     try {
@@ -285,6 +251,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   final IShower798Adapter shower798;
 
   final DiagnosticLog diagnosticLog;
+
   final String appVersion;
 
   ShuiHomeState _state;
@@ -309,7 +276,7 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       next = next.copyWith(hotwaterHistoryStatus: const RuntimeActionStatus());
     }
     _state = next;
-    syncWasherPolling();
+    syncOrderPolling();
     notifyListeners();
   }
 
@@ -327,8 +294,6 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
         return;
       }
       ujingAuthChanging = true;
-      _invalidatedUjingEpoch = ujingAuthEpoch;
-      _invalidatedUjingOwner = ujingAccountKey;
       ujingAuthEpoch++;
       invalidateDeviceStatus();
     } else {
@@ -354,7 +319,6 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     try {
       switch (service) {
         case AuthService.ujing:
-          stopWaterPolling();
           final adapter = ujing;
           if (adapter is UjingHttpAdapter) {
             adapter.invalidateAuth();
@@ -490,10 +454,10 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
                     : '正在恢复上次启动状态',
               ),
             ),
-      currentWaterOrder: snap.currentWaterOrder,
+      waterOrders: snap.waterOrders,
       waterHistory: snap.waterHistory ?? const <WaterOrderHistoryUi>[],
-      washer: base.washer.copyWith(
-          history: snap.washerHistory, currentOrder: snap.currentWasherOrder),
+      washer: base.washer
+          .copyWith(history: snap.washerHistory, orders: snap.washerOrders),
     );
   }
 
@@ -506,10 +470,9 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
       history,
       water,
       washerHistoryRepository,
-      migration: migration,
     );
     final restored = _applySnapshot(snap);
-    applyRecoveryWarnings(snap);
+    _logRecoveryWarnings(snap);
     deviceSeq = _maxDeviceSeq(restored.localDevices);
     hotwaterOrderSeq = _maxOrderSeq(restored.hotwater.history);
     emit(restored);
@@ -632,97 +595,23 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   /// Home banner 清理计时器（waterScan/washerScan）。
   Timer? _homeBannerTimer;
 
-  /// Devices/Water 提示清理计时器。两个计时器独立，行为与拆分前一致。
+  /// Devices/Water 提示清理计时器。两个计时器独立。
   Timer? _deviceNoticeTimer;
   Timer? _hotwaterErrorTimer;
-  Timer? _waterPollingTimer;
   bool _pollingPaused = false;
+
+  /// App 在后台时为 true；后台不发起轮询。
   bool get pollingPaused => _pollingPaused;
 
-  Future<void> pollWaterOrderOnce();
-
   Future<void> pollHotwaterStatusOnce();
-
-  Timer? _washerPollingTimer;
-  bool _washerPollingReady = false;
-
-  bool get _canPollWasher {
-    final order = state.currentWasherOrder;
-    return _washerPollingReady &&
-        !isDisposed &&
-        !pollingPaused &&
-        !ujingOrderStorageBlocked &&
-        legacyServiceReady('ujing') &&
-        order != null &&
-        !order.isTerminal &&
-        !pendingLegacy('washer', order.orderId) &&
-        canAccessUjingOrder(order.ownerAccountKey);
-  }
-
-  /// 页面无关的单一查询时钟，沿用既有 30 秒间隔；控制与手动查询共用运行时互斥。
-  void syncWasherPolling() {
-    if (!_canPollWasher) {
-      _washerPollingTimer?.cancel();
-      _washerPollingTimer = null;
-      return;
-    }
-    _washerPollingTimer ??= Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_canPollWasher) {
-        unawaited(refreshCurrentWasherOrder());
-      } else {
-        syncWasherPolling();
-      }
-    });
-  }
-
-  Future<void> resumeWasherPolling() async {
-    await ready;
-    syncWasherPolling();
-    if (_canPollWasher) await resumeWasherOrders();
-  }
-
-  void startWaterPolling() {
-    if (isDisposed ||
-        _pollingPaused ||
-        state.currentWaterOrder == null ||
-        pendingLegacy('water', state.currentWaterOrder!.orderId) ||
-        !legacyServiceReady('ujing')) {
-      return;
-    }
-    stopWaterPolling();
-    _waterPollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!_pollingPaused) {
-        unawaited(pollWaterOrderOnce());
-      }
-    });
-  }
-
-  /// 恢复有活动订单的饮水轮询：先立即补查，再保持 5 秒周期。
-  void resumeWaterPolling() {
-    final order = state.currentWaterOrder;
-    if (isDisposed || _pollingPaused || order == null || order.isTerminal) {
-      if (order == null || order.isTerminal) stopWaterPolling();
-      return;
-    }
-    if (_waterPollingTimer == null) {
-      startWaterPolling();
-    }
-    unawaited(pollWaterOrderOnce());
-  }
-
-  void stopWaterPolling() {
-    _waterPollingTimer?.cancel();
-    _waterPollingTimer = null;
-  }
 
   void setPollingPaused(bool paused) {
     final wasPaused = _pollingPaused;
     _pollingPaused = paused;
-    syncWasherPolling();
+    syncOrderPolling();
     if (wasPaused && !paused) {
       unawaited(resumeHotwaterSession());
-      resumeWaterPolling();
-      unawaited(resumeWasherPolling());
+      unawaited(refreshActiveOrders());
     }
   }
 
@@ -743,18 +632,6 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     _hotwaterErrorTimer = Timer(const Duration(seconds: 3), onClear);
   }
 
-  Future<void> persistWaterOrders() async {
-    ujingMutationCount++;
-    try {
-      await water.save(WaterOrderSnapshot(
-        currentOrder: state.currentWaterOrder,
-        history: state.waterHistory,
-      ));
-    } finally {
-      ujingMutationCount--;
-    }
-  }
-
   /// 记录首次权限引导已确认，避免下次启动重复弹出。
   void markPermissionIntroSeen() {
     if (state.permissionIntroSeen) {
@@ -770,11 +647,10 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
   @override
   void dispose() {
     isDisposed = true;
-    syncWasherPolling();
+    syncOrderPolling();
     _homeBannerTimer?.cancel();
     _deviceNoticeTimer?.cancel();
     _hotwaterErrorTimer?.cancel();
-    stopWaterPolling();
     super.dispose();
   }
 

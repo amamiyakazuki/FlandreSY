@@ -266,20 +266,6 @@ void main() {
     expect(restored.state.currentShower798DeviceId, 'd');
     expect(await sessions.loadUjing(), isNull);
   });
-
-  test(
-      'actual mutation guard does not clear account or order while command is in flight',
-      () async {
-    final runtime = await _runtime(_Probe());
-    runtime.ujingMutationCount++;
-    await runtime.logoutAccount(AccountKind.ujing);
-    expect(runtime.state.ujingAccount, isNotNull);
-    expect(runtime.state.account.availability[AccountKind.ujing]?.state,
-        RuntimeTaskState.unavailable);
-    runtime.ujingMutationCount--;
-    await runtime.logoutAccount(AccountKind.ujing);
-    expect(runtime.state.ujingAccount, isNull);
-  });
 }
 
 class _GateHot extends _Hot {

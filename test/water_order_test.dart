@@ -39,26 +39,23 @@ void main() {
       'leaving page keeps polling; background pauses and foreground resumes',
       (tester) async {
     final transport = _Transport();
-    late ShuiRuntime runtime;
-    await tester.runAsync(() async {
-      runtime = await _runtime(transport);
-      await runtime.scanDrinkingWaterAndCreateOrder('device-a');
-    });
-    // Install timer in fake time, then leave the page.
-    runtime.startWaterPolling();
+    // 整个运行时都在 fake 时间里创建，轮询计时器才受 pump 控制。
+    final runtime = await _runtime(transport);
+    await runtime.scanDrinkingWaterAndCreateOrder('device-a');
+    await tester.pump();
     runtime.resetDrinkingWaterTransient();
     final initial = transport.details;
-    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 10));
     expect(transport.details, initial + 1);
     runtime.setPollingPaused(true);
-    await tester.pump(const Duration(seconds: 15));
+    await tester.pump(const Duration(seconds: 30));
     expect(transport.details, initial + 1);
     runtime.setPollingPaused(false);
     await tester.pump();
     expect(transport.details, initial + 2);
-    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 10));
     expect(transport.details, initial + 3);
-    runtime.stopWaterPolling();
+    runtime.setPollingPaused(true);
   });
 
   test('only confirmed status 50 is terminal, never display text', () {
@@ -82,9 +79,9 @@ void main() {
     expect(result.needsDetailRefresh, isTrue);
     expect(transport.details, 0);
     final restored = WaterOrderCodec.decode(WaterOrderCodec.encode(
-      WaterOrderSnapshot(currentOrder: result.order),
+      WaterOrderSnapshot(orders: [result.order!]),
     ));
-    expect(restored.currentOrder?.orderId, '1');
+    expect(restored.orders.single.orderId, '1');
   });
 
   test('detail failure retains persisted ID; retry queries it without creating',
@@ -95,7 +92,7 @@ void main() {
     final runtime = await _runtime(transport, repo);
     await runtime.scanDrinkingWaterAndCreateOrder('device-a');
     expect(runtime.state.currentWaterOrder?.orderId, '1');
-    expect((await repo.load())?.currentOrder?.orderId, '1');
+    expect((await repo.load())?.orders.single.orderId, '1');
     expect(runtime.state.waterOrder.state, RuntimeTaskState.failure);
     transport.detailError = null;
     await runtime.refreshCurrentDrinkingWaterOrder();
@@ -138,7 +135,7 @@ void main() {
     transport.status = '50';
     transport.beforeCreate = () async {
       expect((await repo.load())?.history.single.orderId, '1');
-      expect((await repo.load())?.currentOrder, isNull);
+      expect((await repo.load())?.orders, isEmpty);
       transport.status = '0';
     };
     await runtime.scanDrinkingWaterAndCreateOrder('device-b');
@@ -154,7 +151,7 @@ void main() {
     await runtime.scanDrinkingWaterAndCreateOrder('device-a');
     final gate = Completer<Map<String, dynamic>>();
     transport.detailGate = gate;
-    final automatic = runtime.pollWaterOrderOnce();
+    final automatic = runtime.refreshCurrentDrinkingWaterOrder(quiet: true);
     final manual = runtime.refreshCurrentDrinkingWaterOrder();
     final scan = runtime.scanDrinkingWaterAndCreateOrder('device-b');
     await runtime.scanDrinkingWaterAndCreateOrder('device-c');
@@ -167,19 +164,6 @@ void main() {
     expect(runtime.state.currentWaterOrder?.orderId, '1');
   });
 
-  test('created order is saved before detail query is allowed', () async {
-    final transport = _Transport();
-    final repo = _Repository()..saveGate = Completer<void>();
-    final runtime = await _runtime(transport, repo);
-    final scan = runtime.scanDrinkingWaterAndCreateOrder('device-a');
-    await repo.saveStarted.future;
-    await runtime.refreshCurrentDrinkingWaterOrder();
-    expect(transport.details, 0);
-    repo.saveGate!.complete();
-    await scan;
-    expect(transport.details, 1);
-  });
-
   test('creation save failure keeps ID in memory and releases loading',
       () async {
     final transport = _Transport();
@@ -188,14 +172,14 @@ void main() {
     await runtime.scanDrinkingWaterAndCreateOrder('device-a');
     expect(runtime.state.currentWaterOrder?.orderId, '1');
     expect(runtime.state.waterOrder.state, RuntimeTaskState.failure);
-    expect(transport.details, 0);
+    expect(runtime.state.waterOrder.isBusy, isFalse);
     repo.failSave = false;
     await runtime.refreshCurrentDrinkingWaterOrder();
-    expect((await repo.load())?.currentOrder?.orderId, '1');
+    expect((await repo.load())?.orders.single.orderId, '1');
     expect(transport.creates, 1);
   });
 
-  test('completion save failure retains old order and prohibits new creation',
+  test('completion save failure is reported but does not block the next order',
       () async {
     final transport = _Transport();
     final repo = _Repository();
@@ -203,15 +187,17 @@ void main() {
     await runtime.scanDrinkingWaterAndCreateOrder('device-a');
     transport.status = '50';
     repo.failSave = true;
-    await runtime.scanDrinkingWaterAndCreateOrder('device-b');
-    expect(transport.creates, 1);
-    expect(runtime.state.currentWaterOrder?.orderId, '1');
-    expect(runtime.state.waterHistory, isEmpty);
-    expect(runtime.state.waterOrder.state, RuntimeTaskState.failure);
-    repo.failSave = false;
     await runtime.refreshCurrentDrinkingWaterOrder();
     expect(runtime.state.currentWaterOrder, isNull);
     expect(runtime.state.waterHistory.single.orderId, '1');
+    expect(runtime.state.waterOrder.state, RuntimeTaskState.failure);
+    repo.failSave = false;
+    transport.status = '0';
+    await runtime.scanDrinkingWaterAndCreateOrder('device-b');
+    expect(transport.creates, 2);
+    final saved = await repo.load();
+    expect(saved?.orders.single.orderId, '2');
+    expect(saved?.history.single.orderId, '1');
   });
 
   test('auth failure retains order and never leaves loading or creates again',
@@ -222,7 +208,9 @@ void main() {
     transport.detailError = const UjingException('请重新登录', authInvalid: true);
     await runtime.scanDrinkingWaterAndCreateOrder('device-b');
     expect(transport.creates, 1);
-    expect(runtime.state.currentWaterOrder?.orderId, '1');
+    // 登录失效后订单仍按原账号保存，重新登录即可继续查看。
+    expect(runtime.state.currentWaterOrder, isNull);
+    expect(runtime.state.waterOrders.single.orderId, '1');
     expect(runtime.state.waterOrder.state, RuntimeTaskState.loginRequired);
   });
 }

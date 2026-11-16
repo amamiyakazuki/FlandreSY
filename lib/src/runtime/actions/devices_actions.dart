@@ -131,13 +131,6 @@ mixin DevicesActions on ShuiRuntimeBase {
   Future<void> refreshLocalDevices() async {
     await ready;
     if (isDisposed || state.devicesRefreshing || ujingAuthChanging) return;
-    if (!legacyServiceReady('ujing')) {
-      emit(state.copyWith(
-          devicesRefresh: const RuntimeActionStatus(
-              state: RuntimeTaskState.loginRequired,
-              message: '请先重新登录 U 净，再刷新设备')));
-      return;
-    }
     final epoch = ujingAuthEpoch;
     final targets = List<LocalDeviceShortcut>.of(state.localDevices);
     final replies = <Object, ({String status, String at})>{};

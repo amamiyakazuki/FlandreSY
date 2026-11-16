@@ -5,8 +5,6 @@ import 'package:flandresy/src/data/account_session_repository.dart';
 import 'package:flandresy/src/data/adapters/shower798_adapter.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/data/secure_session_repository.dart';
-import 'package:flandresy/src/data/legacy_data_migration.dart';
-import 'support/memory_migration_store.dart';
 import 'package:flandresy/src/runtime/shui_runtime_base.dart';
 import 'support/fake_shower798_adapter.dart';
 import 'support/test_runtime.dart';
@@ -377,25 +375,6 @@ void main() {
       expect(r.hotwaterAuthChanging, isFalse);
     });
   }
-  test('migration confirmation failure retains re-login gate and old records',
-      () async {
-    final store = MemoryMigrationStore({'shower798_mobile': 'legacy'});
-    final migration = LegacyDataMigration(store);
-    final repo = Repo();
-    final secure = InMemorySecureSessionRepository();
-    final r = TestRuntime(
-        shower798: Api(), migration: migration, sessions: repo, secure: secure);
-    addTearDown(r.dispose);
-    await r.ready;
-    final backup = store.values[LegacyDataMigration.backupKey];
-    store.failKey = LegacyDataMigration.journalKey;
-    await r.loginShower798('new-account', 'code');
-    expect(r.state.shower798Account, isNull);
-    expect(migration.needsLogin('shower798'), isTrue);
-    expect(r.state.shower798Login.message, contains('旧数据登录确认保存'));
-    expect(store.values[LegacyDataMigration.backupKey], backup);
-    expect(await secure.loadShower798Token(), isNull);
-  });
   test('login and logout do not bypass a pending list operation', () async {
     final gate = Completer<List<Shower798DeviceUi>>();
     final api = Api()..loadGate = gate;

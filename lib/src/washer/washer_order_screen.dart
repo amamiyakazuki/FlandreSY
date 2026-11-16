@@ -1,6 +1,8 @@
 // Design tokens used: AppColors service palette, AppTypography.textTheme, AppCustomTokens space.
 // Reference: P_PLAN/...Reference.md §4.5 + legacy ShuiScreens.kt WasherOrderScreen (1171).
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
@@ -24,9 +26,13 @@ class WasherOrderScreen extends StatefulWidget {
     required this.onStart,
     required this.onStop,
     required this.onCancel,
-    this.onRefresh,
+    required this.onRefresh,
+    required this.onRemoveLocal,
+    this.nowMillis = _systemNow,
     super.key,
   });
+
+  static int _systemNow() => DateTime.now().millisecondsSinceEpoch;
 
   final ShuiHomeState state;
   final VoidCallback onBack;
@@ -40,7 +46,9 @@ class WasherOrderScreen extends StatefulWidget {
   final VoidCallback onStart;
   final VoidCallback onStop;
   final VoidCallback onCancel;
-  final VoidCallback? onRefresh;
+  final VoidCallback onRefresh;
+  final VoidCallback onRemoveLocal;
+  final int Function() nowMillis;
 
   @override
   State<WasherOrderScreen> createState() => _WasherOrderScreenState();
@@ -52,6 +60,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
   int? _selectedDetergentGearId;
   int? _selectedDisinfectantGearId;
   bool _autoStart = true;
+  Timer? _ticker;
 
   static final _modelColors = <Color>[
     AppColors.primary,
@@ -80,6 +89,27 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
     // program 首次到达时初始化默认套餐。
     if (_selectedModelId == 0 && _program != null) {
       _selectedModelId = _program!.defaultWashModelId;
+    }
+    _syncTicker();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  /// 洗衣中每秒刷新剩余时间；网络查询由运行时负责。
+  void _syncTicker() {
+    final running =
+        widget.state.currentWasherOrder?.status == WasherStatus.running;
+    if (running) {
+      _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      _ticker?.cancel();
+      _ticker = null;
     }
   }
 
@@ -117,17 +147,19 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _syncTicker();
     final s = widget.state;
-    final program = _program;
-    final models = program?.models.take(4).toList() ?? const [];
-    final orderBusy = s.washerOrder.isBusy;
+    final order = s.currentWasherOrder;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     final bottomPadding = bottomInset + AppCustomTokens.spaceLg;
 
     return Scaffold(
       body: Column(
         children: [
-          TopHeader(title: '洗衣下单', showBack: true, onBack: widget.onBack),
+          TopHeader(
+              title: order == null ? '洗衣下单' : '洗衣订单',
+              showBack: true,
+              onBack: widget.onBack),
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
@@ -137,66 +169,76 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
                 bottomPadding,
               ),
               child: Column(
-                children: [
-                  WasherRuntimeInfoCard(program: program),
-                  const SizedBox(height: AppCustomTokens.spaceSm),
-                  RuntimeStatusBanner(status: s.washer.washerScan),
-                  const SizedBox(height: AppCustomTokens.spaceSm),
-                  _buildModelSection(models),
-                  const SizedBox(height: AppCustomTokens.spaceSm),
-                  _buildTemperatureSection(),
-                  ..._buildAdditionSections(),
-                  const SizedBox(height: AppCustomTokens.spaceSm),
-                  AutoStartNoticeCard(
-                    enabled: _autoStart,
-                    onChanged: (v) => setState(() => _autoStart = v),
-                  ),
-                  if (s.washerOrder.message != null) ...[
-                    const SizedBox(height: AppCustomTokens.spaceSm),
-                    RuntimeStatusBanner(status: s.washerOrder),
-                  ],
-                  if (s.currentWasherOrder != null) ...[
-                    if (s.currentWasherOrder!.ownerAccountKey.isEmpty)
-                      const Text('旧订单等待登录账号恢复；登录后刷新即可'),
-                    TextButton(
-                        onPressed: widget.onRefresh,
-                        child: const Text('刷新洗衣订单')),
-                    const SizedBox(height: AppCustomTokens.spaceSm),
-                    CurrentWasherOrderPaymentCard(
-                      order: s.currentWasherOrder!,
-                      paying: s.washerPayment.isBusy,
-                      orderBusy: orderBusy,
-                      paymentMessage: s.washerPayment.message,
-                      paymentState: s.washerPayment,
-                      onPay: () => widget.onPay(_autoStart),
-                      onStart: widget.onStart,
-                      onStop: widget.onStop,
-                      onCancel: widget.onCancel,
-                    ),
-                  ],
-                  const SizedBox(height: AppCustomTokens.spaceSm),
-                  PriceBar(
-                    amount: formatFenAmount(_totalFen),
-                    enabled: program != null &&
-                        _selectedModelId != 0 &&
-                        !orderBusy &&
-                        !s.washerPayment.isBusy &&
-                        s.currentWasherOrder == null,
-                    buttonText: orderBusy ? '创建中' : '创建订单',
-                    onCreate: () => widget.onCreateOrder(
-                      _selectedModelId,
-                      _selectedTemperatureId,
-                      _selectedDetergentGearId,
-                      _selectedDisinfectantGearId,
-                    ),
-                  ),
-                ],
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: order == null
+                    ? _buildOrderForm(s)
+                    : _buildCurrentOrder(s, order),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// 已有订单：只展示订单本身，不再显示下单表单。
+  List<Widget> _buildCurrentOrder(ShuiHomeState s, WasherOrderUi order) {
+    return [
+      if (s.washerOrder.message != null) ...[
+        RuntimeStatusBanner(status: s.washerOrder),
+        const SizedBox(height: AppCustomTokens.spaceSm),
+      ],
+      if (s.washerPayment.message != null) ...[
+        RuntimeStatusBanner(status: s.washerPayment),
+        const SizedBox(height: AppCustomTokens.spaceSm),
+      ],
+      CurrentWasherOrderPaymentCard(
+        order: order,
+        nowMillis: widget.nowMillis(),
+        paying: s.washerPayment.isBusy,
+        orderBusy: s.washerOrder.isBusy,
+        autoStart: _autoStart,
+        onAutoStartChanged: (v) => setState(() => _autoStart = v),
+        onPay: () => widget.onPay(_autoStart),
+        onStart: widget.onStart,
+        onStop: widget.onStop,
+        onCancel: widget.onCancel,
+        onRefresh: widget.onRefresh,
+        onRemoveLocal: widget.onRemoveLocal,
+      ),
+    ];
+  }
+
+  List<Widget> _buildOrderForm(ShuiHomeState s) {
+    final program = _program;
+    final models = program?.models.take(4).toList() ?? const <WasherModelUi>[];
+    final orderBusy = s.washerOrder.isBusy;
+    return [
+      WasherRuntimeInfoCard(program: program),
+      const SizedBox(height: AppCustomTokens.spaceSm),
+      RuntimeStatusBanner(status: s.washer.washerScan),
+      const SizedBox(height: AppCustomTokens.spaceSm),
+      _buildModelSection(models),
+      const SizedBox(height: AppCustomTokens.spaceSm),
+      _buildTemperatureSection(),
+      ..._buildAdditionSections(),
+      if (s.washerOrder.message != null) ...[
+        const SizedBox(height: AppCustomTokens.spaceSm),
+        RuntimeStatusBanner(status: s.washerOrder),
+      ],
+      const SizedBox(height: AppCustomTokens.spaceSm),
+      PriceBar(
+        amount: formatFenAmount(_totalFen),
+        enabled: program != null && _selectedModelId != 0 && !orderBusy,
+        buttonText: orderBusy ? '创建中' : '创建订单',
+        onCreate: () => widget.onCreateOrder(
+          _selectedModelId,
+          _selectedTemperatureId,
+          _selectedDetergentGearId,
+          _selectedDisinfectantGearId,
+        ),
+      ),
+    ];
   }
 
   Widget _buildModelSection(List<WasherModelUi> models) {

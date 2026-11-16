@@ -1,53 +1,18 @@
-import 'support/fake_payment_launcher.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/material.dart';
 import 'support/test_runtime.dart';
-import 'package:flandresy/src/orders/orders_screen.dart';
-import 'package:flandresy/src/shell/shui_shell.dart';
-import 'package:flandresy/src/shell/shui_shell_chrome.dart';
 import 'package:flandresy/src/data/account_session_repository.dart';
 import 'package:flandresy/src/data/adapters/real_shower798_adapter.dart';
 import 'package:flandresy/src/data/adapters/shower798_adapter.dart';
 import 'package:flandresy/src/data/adapters/shower798_transport.dart';
-import 'package:flandresy/src/data/adapters/ujing_adapter.dart';
-import 'package:flandresy/src/data/adapters/ujing_http_adapter.dart';
-import 'package:flandresy/src/data/adapters/ujing_transport.dart';
 import 'package:flandresy/src/data/secure_session_repository.dart';
-import 'package:flandresy/src/data/water_order_repository.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
-import 'package:flandresy/src/runtime/models/water_order.dart';
 
 const _a = '13800000001';
 const _b = '13800000002';
 
 void main() {
-  test('login cannot race a read-result persistence commit', () async {
-    final transport = _UjingTransport();
-    final repo = _DelayedOrderSave(_order(owner: _a));
-    final runtime = TestRuntime(
-        sessions: _sessions(),
-        water: repo,
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(),
-            transport: transport,
-            token: 'token-a'));
-    addTearDown(runtime.dispose);
-    await runtime.ready;
-    await transport.detailStarted.future;
-    final pending = runtime.refreshCurrentDrinkingWaterOrder();
-    transport.detail.complete({'orderStatus': '0'});
-    await repo.started.future;
-    await runtime.loginUjing(_b, '1234');
-    expect(runtime.state.ujingAccount?.mobile, _a);
-    expect(transport.paths.where((p) => p == 'login'), isEmpty);
-    repo.release.complete();
-    await pending;
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    await runtime.loginUjing(_b, '1234');
-    expect(runtime.state.ujingAccount?.mobile, _b);
-  });
   test('late 798 device auth failure cannot clear new adapter token', () async {
     final transport = _ShowerTransport()
       ..deviceGate = Completer<Map<String, dynamic>>();
@@ -60,195 +25,6 @@ void main() {
     await failure;
     expect(adapter.lastToken, 'new-token');
   });
-  testWidgets(
-      'legacy order binds restored A without consent UI and only queries',
-      (tester) async {
-    final transport = _UjingTransport()..detail.complete({'orderStatus': '0'});
-    final repo = InMemoryWaterOrderRepository(
-        snapshot: WaterOrderSnapshot(currentOrder: _order()));
-    transport.beforeDetail = () async {
-      expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    };
-    await tester.pumpWidget(TestApp(
-        sessions: _sessions(),
-        water: repo,
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(),
-            transport: transport,
-            token: 'token-a')));
-    await tester.pumpAndSettle();
-    final permission = find.text('知道了，继续');
-    if (permission.evaluate().isNotEmpty) {
-      await tester.tap(permission);
-      await tester.pumpAndSettle();
-    }
-    tester
-        .widget<WavyBottomBar>(find.byType(WavyBottomBar))
-        .onTabSelected(MainTab.orders);
-    await tester.pumpAndSettle();
-    tester.widget<OrdersScreen>(find.byType(OrdersScreen)).onOpenDrinking();
-    await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsNothing);
-    expect(find.text('确认旧订单所属账号'), findsNothing);
-    expect(find.text('绑定并查询'), findsNothing);
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    expect(transport.paths, isNotEmpty);
-    expect(transport.paths.every((p) => p == 'water/waterOrderDetail'), isTrue);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-  });
-  test('late order A 401 cannot invalidate logged-in B or discard A order',
-      () async {
-    final transport = _UjingTransport();
-    final secure = InMemorySecureSessionRepository(ujingToken: 'token-a');
-    final repo = InMemoryWaterOrderRepository(
-        snapshot: WaterOrderSnapshot(currentOrder: _order(owner: _a)));
-    final runtime = TestRuntime(
-        sessions: _sessions(),
-        secure: secure,
-        water: repo,
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(),
-            transport: transport,
-            token: 'token-a'));
-    addTearDown(runtime.dispose);
-    await runtime.ready;
-    await transport.detailStarted.future;
-    final pending = runtime.refreshCurrentDrinkingWaterOrder();
-    await runtime.loginUjing(_b, '1234');
-    transport.detail.completeError(
-        const UjingException('old A unauthorized', authInvalid: true));
-    await pending;
-    expect(runtime.state.ujingAccount?.mobile, _b);
-    expect(await secure.loadUjingToken(), 'token-$_b');
-    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    expect(runtime.state.waterOrder.isBusy, isFalse);
-  });
-
-  test('switching to B after migration never reassigns A order', () async {
-    final transport = _UjingTransport()..detail.complete({'orderStatus': '0'});
-    final repo = InMemoryWaterOrderRepository(
-        snapshot: WaterOrderSnapshot(currentOrder: _order()));
-    final runtime = TestRuntime(
-        sessions: _sessions(),
-        water: repo,
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(),
-            transport: transport,
-            token: 'token-a'));
-    addTearDown(runtime.dispose);
-    await runtime.ready;
-    await runtime.resumeUjingOrders();
-    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
-    final detailsBeforeSwitch = transport.paths.length;
-    await runtime.loginUjing(_b, '1234');
-    await runtime.resumeUjingOrders();
-    await runtime.refreshCurrentDrinkingWaterOrder();
-    expect(runtime.state.ujingAccount?.mobile, _b);
-    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    expect(transport.paths.skip(detailsBeforeSwitch), ['login']);
-  });
-
-  test('without a recent account legacy owner remains empty until login',
-      () async {
-    final transport = _UjingTransport()..detail.complete({'orderStatus': '0'});
-    final repo = InMemoryWaterOrderRepository(
-        snapshot: WaterOrderSnapshot(currentOrder: _order()));
-    final runtime = TestRuntime(
-        sessions: InMemoryAccountSessionRepository(),
-        water: repo,
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(), transport: transport));
-    addTearDown(runtime.dispose);
-    await runtime.ready;
-    await runtime.pollWaterOrderOnce();
-    await runtime.refreshCurrentDrinkingWaterOrder();
-    await runtime.scanDrinkingWaterAndCreateOrder('new-device');
-    expect(transport.paths, isEmpty);
-    expect(runtime.state.currentWaterOrder?.orderId, 'legacy');
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, '');
-    transport.beforeDetail = () async {
-      expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    };
-    await runtime.loginUjing(_a, '1234');
-    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    expect(transport.paths.first, 'login');
-    expect(transport.paths.skip(1), isNotEmpty);
-    expect(transport.paths.skip(1).every((p) => p == 'water/waterOrderDetail'),
-        isTrue);
-  });
-
-  test('legacy owner must finish persistence before first query', () async {
-    final transport = _UjingTransport();
-    final repo = _DelayedOrderSave(_order());
-    final runtime = TestRuntime(
-        sessions: _sessions(),
-        water: repo,
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(),
-            transport: transport,
-            token: 'token-a'));
-    addTearDown(runtime.dispose);
-    await repo.started.future;
-    expect(runtime.state.currentWaterOrder?.ownerAccountKey, '');
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, '');
-    expect(transport.paths, isEmpty);
-    repo.release.complete();
-    await runtime.ready;
-    await transport.detailStarted.future;
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    expect(transport.paths, ['water/waterOrderDetail']);
-    transport.detail.complete({'orderStatus': '0'});
-    await runtime.refreshCurrentDrinkingWaterOrder();
-  });
-
-  test('recent A metadata without token binds locally but never queries as B',
-      () async {
-    final transport = _UjingTransport();
-    final repo = InMemoryWaterOrderRepository(
-        snapshot: WaterOrderSnapshot(currentOrder: _order()));
-    final runtime = TestRuntime(
-        sessions: _sessions(),
-        water: repo,
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(), transport: transport));
-    addTearDown(runtime.dispose);
-    await runtime.ready;
-    expect(runtime.state.ujingAccount, isNull);
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    expect(transport.paths, isEmpty);
-    await runtime.loginUjing(_b, '1234');
-    expect(runtime.state.ujingAccount?.mobile, _b);
-    expect(runtime.state.currentWaterOrder?.ownerAccountKey, _a);
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, _a);
-    expect(transport.paths, ['login']);
-  });
-
-  test('failed auto-owner persistence leaves original order and sends no query',
-      () async {
-    final transport = _UjingTransport();
-    final repo = _FailOrderSave(_order());
-    final runtime = TestRuntime(
-        sessions: _sessions(),
-        water: repo,
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(),
-            transport: transport,
-            token: 'token-a'));
-    addTearDown(runtime.dispose);
-    await runtime.ready;
-    await runtime.resumeUjingOrders();
-    expect(runtime.state.currentWaterOrder?.ownerAccountKey, '');
-    expect((await repo.load())?.currentOrder?.ownerAccountKey, '');
-    expect(runtime.state.currentWaterOrder?.orderId, 'legacy');
-    expect(transport.paths, isEmpty);
-    expect(runtime.state.waterOrder.isBusy, isFalse);
-  });
-
   test('798 login succeeds but device load fails: no mixed identity remains',
       () async {
     final transport = _ShowerTransport()..deviceFailure = true;
@@ -303,72 +79,6 @@ void main() {
     await login;
     expect(transport.paths, ['acc/login', 'ui/app/master']);
   });
-}
-
-InMemoryAccountSessionRepository _sessions() =>
-    InMemoryAccountSessionRepository(
-        ujing: const UjingAccountUi(
-            mobile: _a, userId: 'a', serviceSubjectId: 's'));
-
-WaterOrderUi _order({String owner = ''}) => WaterOrderUi(
-    orderId: 'legacy',
-    orderNo: 'old',
-    serviceSubjectName: '',
-    storeName: '',
-    deviceNo: 'device-a',
-    orderStatus: '0',
-    orderStatusName: '',
-    statusRemark: '',
-    warmWaterMl: 0,
-    waterSeconds: 0,
-    payment: 0,
-    ownerAccountKey: owner);
-
-class _UjingTransport implements UjingTransport {
-  final paths = <String>[];
-  final detailStarted = Completer<void>();
-  final detail = Completer<Map<String, dynamic>>();
-  Future<void> Function()? beforeDetail;
-  @override
-  Future<Map<String, dynamic>> send(UjingRequest request) async {
-    paths.add(request.path);
-    if (request.path == 'login') {
-      final mobile = request.body!['mobile'];
-      return {
-        'token': 'token-$mobile',
-        'mobile': mobile,
-        'userId': mobile,
-        'serviceSubjectId': 's'
-      };
-    }
-    if (request.path == 'water/waterOrderDetail') {
-      await beforeDetail?.call();
-      if (!detailStarted.isCompleted) detailStarted.complete();
-      return detail.future;
-    }
-    throw StateError('Unexpected endpoint ${request.path}');
-  }
-}
-
-class _DelayedOrderSave extends InMemoryWaterOrderRepository {
-  _DelayedOrderSave(WaterOrderUi order)
-      : super(snapshot: WaterOrderSnapshot(currentOrder: order));
-  final started = Completer<void>();
-  final release = Completer<void>();
-  @override
-  Future<void> save(WaterOrderSnapshot snapshot) async {
-    if (!started.isCompleted) started.complete();
-    await release.future;
-    await super.save(snapshot);
-  }
-}
-
-class _FailOrderSave extends InMemoryWaterOrderRepository {
-  _FailOrderSave(WaterOrderUi order)
-      : super(snapshot: WaterOrderSnapshot(currentOrder: order));
-  @override
-  Future<void> save(WaterOrderSnapshot snapshot) async =>
-      throw StateError('storage failed');
 }
 
 class _ShowerTransport implements Shower798Transport {

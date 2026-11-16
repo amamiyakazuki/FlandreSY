@@ -1,6 +1,5 @@
 import 'package:flandresy/src/app/flandre_app.dart';
 import 'package:flandresy/src/runtime/shui_runtime.dart';
-import 'package:flandresy/src/data/legacy_data_migration.dart';
 import 'package:flandresy/src/data/account_session_repository.dart';
 import 'package:flandresy/src/data/history_repository.dart';
 import 'package:flandresy/src/data/local_device_repository.dart';
@@ -14,7 +13,6 @@ import 'package:flandresy/src/data/adapters/shower798_adapter.dart';
 import 'fake_ujing_adapter.dart';
 import 'fake_hotwater_adapter.dart';
 import 'fake_shower798_adapter.dart';
-import 'memory_migration_store.dart';
 export 'package:flandresy/src/runtime/shui_runtime.dart';
 
 class TestRuntime extends ShuiRuntime {
@@ -26,7 +24,6 @@ class TestRuntime extends ShuiRuntime {
     WaterOrderRepository? water,
     WasherHistoryRepository? washerHistory,
     SecureSessionRepository? secure,
-    LegacyDataMigration? migration,
     IUjingAdapter? ujing,
     IHotwaterAdapter? hotwater,
     IShower798Adapter? shower798,
@@ -42,8 +39,7 @@ class TestRuntime extends ShuiRuntime {
           water: water ?? InMemoryWaterOrderRepository(),
           washerHistory: washerHistory ?? InMemoryWasherHistoryRepository(),
           secure: secure ?? InMemorySecureSessionRepository(),
-          migration: migration ?? LegacyDataMigration(MemoryMigrationStore()),
-          ujing: ujing ?? const FakeUjingAdapter(),
+          ujing: ujing ?? FakeUjingAdapter(),
           hotwater: hotwater ?? FakeHotwaterAdapter(),
           shower798: shower798 ?? FakeShower798Adapter(),
         );
@@ -58,7 +54,6 @@ class TestApp extends FlandreApp {
     WaterOrderRepository? water,
     WasherHistoryRepository? washerHistory,
     SecureSessionRepository? secure,
-    LegacyDataMigration? migration,
     IUjingAdapter? ujing,
     IHotwaterAdapter? hotwater,
     IShower798Adapter? shower798,
@@ -75,8 +70,7 @@ class TestApp extends FlandreApp {
           water: water ?? InMemoryWaterOrderRepository(),
           washerHistory: washerHistory ?? InMemoryWasherHistoryRepository(),
           secure: secure ?? InMemorySecureSessionRepository(),
-          migration: migration ?? LegacyDataMigration(MemoryMigrationStore()),
-          ujing: ujing ?? const FakeUjingAdapter(),
+          ujing: ujing ?? FakeUjingAdapter(),
           hotwater: hotwater ?? FakeHotwaterAdapter(),
           shower798: shower798 ?? FakeShower798Adapter(),
         );
@@ -92,7 +86,6 @@ class TestRuntimeScope extends ShuiRuntimeScope {
     WaterOrderRepository? water,
     WasherHistoryRepository? washerHistory,
     SecureSessionRepository? secure,
-    LegacyDataMigration? migration,
     IUjingAdapter? ujing,
     IHotwaterAdapter? hotwater,
     IShower798Adapter? shower798,
@@ -109,8 +102,7 @@ class TestRuntimeScope extends ShuiRuntimeScope {
           water: water ?? InMemoryWaterOrderRepository(),
           washerHistory: washerHistory ?? InMemoryWasherHistoryRepository(),
           secure: secure ?? InMemorySecureSessionRepository(),
-          migration: migration ?? LegacyDataMigration(MemoryMigrationStore()),
-          ujing: ujing ?? const FakeUjingAdapter(),
+          ujing: ujing ?? FakeUjingAdapter(),
           hotwater: hotwater ?? FakeHotwaterAdapter(),
           shower798: shower798 ?? FakeShower798Adapter(),
         );

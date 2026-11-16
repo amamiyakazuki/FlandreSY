@@ -16,7 +16,7 @@ const old = HotwaterHistoryUi(
     status: '完成',
     orderId: 'old');
 HotwaterHistoryUi record(String id) => HotwaterHistoryUi(
-    time: 'today', deviceId: id, amount: '2', status: '完成', orderId: id);
+    time: 'today-$id', deviceId: id, amount: '2', status: '完成', orderId: id);
 
 class HistoryAdapter extends FakeHotwaterAdapter {
   Future<List<HotwaterHistoryUi>> Function() loader = () async => [];

@@ -81,22 +81,6 @@ void main() {
     expect(await secure.loadUjingToken(), 'token-13800000002');
   });
 
-  test('account switching rejected during a mutating order action', () async {
-    final transport = _Transport();
-    final runtime = TestRuntime(
-        ujing: UjingHttpAdapter(
-            launcher: const FakePaymentLauncher(), transport: transport));
-    addTearDown(runtime.dispose);
-    await runtime.ready;
-    runtime.ujingMutationCount++;
-    await runtime.loginUjing('13800000002', '1234');
-    expect(transport.logins, 0);
-    expect(runtime.state.washerLogin.message, contains('订单操作正在处理'));
-    runtime.ujingMutationCount--;
-    await runtime.loginUjing('13800000002', '1234');
-    expect(transport.logins, 1);
-  });
-
   test('credential cleanup in flight cannot erase a later login', () async {
     final secure = _SlowSecure();
     final transport = _Transport();

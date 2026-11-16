@@ -16,19 +16,47 @@ class FakeUjingAdapter implements IUjingAdapter {
   @override
   Future<void> checkAccountValidity() async {}
 
-  const FakeUjingAdapter();
+  FakeUjingAdapter({
+    this.netDelay = const Duration(milliseconds: 620),
+    this.payDelay = const Duration(milliseconds: 800),
+  });
 
-  static const Duration _netDelay = Duration(milliseconds: 620);
-  static const Duration _payDelay = Duration(milliseconds: 800);
+  final Duration netDelay;
+  final Duration payDelay;
+
+  /// 模拟服务端订单表：支付、启动等操作改变这里，刷新时返回这里的状态。
+  final Map<String, WasherOrderUi> serverWasherOrders = {};
+  int _orderSeq = 0;
+
+  /// 模拟支付宝返回的 resultStatus；为 null 时支付「永不返回」（停在支付宝页面）。
+  String? alipayResult = '9000';
+
+  /// 模拟服务端在支付宝回到 App 前就已确认到账。
+  bool payMarksOrderPaid = true;
+  Completer<String>? pendingAlipay;
+  int startCalls = 0;
+  Object? startError;
+
+  /// 设置后刷新请求会停在这里，直到测试完成它。
+  Completer<void>? refreshGate;
+
+  /// 测试辅助：直接改服务端订单状态（例如超时退款、洗衣完成）。
+  void setServerStatus(String orderId, String status, {String text = ''}) {
+    final order = serverWasherOrders[orderId];
+    if (order != null) {
+      serverWasherOrders[orderId] = order.copyWith(
+          status: status, statusText: text.isEmpty ? status : text);
+    }
+  }
 
   @override
   Future<void> requestCaptcha(String mobile) async {
-    await Future<void>.delayed(_netDelay);
+    await Future<void>.delayed(netDelay);
   }
 
   @override
   Future<UjingAccountUi> login(String mobile, String captcha) async {
-    await Future<void>.delayed(_netDelay);
+    await Future<void>.delayed(netDelay);
     // fake 派生账号字段（真实由接口返回）；末 4 位派生 userId，服务主体固定。
     return UjingAccountUi(
       mobile: mobile,
@@ -40,7 +68,7 @@ class FakeUjingAdapter implements IUjingAdapter {
 
   @override
   Future<WaterPrepareResult> scanAndCreateWaterOrder(String cd) async {
-    await Future<void>.delayed(_netDelay);
+    await Future<void>.delayed(netDelay);
     // ready：抓包真值（马房山校区，10 元小票余额 1000 分）。
     final ready = WaterReadyUi(
       cd: cd.isEmpty ? '0011202108055265' : cd,
@@ -70,7 +98,7 @@ class FakeUjingAdapter implements IUjingAdapter {
 
   @override
   Future<WaterOrderUi> refreshWaterOrder(WaterOrderUi current) async {
-    await Future<void>.delayed(_netDelay);
+    await Future<void>.delayed(netDelay);
     // 完成：机器已接水并停止，上报最终用量与扣费（抓包真值 133ml/2s/¥0.02）。
     return WaterOrderUi(
       orderId: current.orderId,
@@ -90,7 +118,7 @@ class FakeUjingAdapter implements IUjingAdapter {
 
   @override
   Future<WasherProgramUi> scanWasher(String qrCode) async {
-    await Future<void>.delayed(_netDelay);
+    await Future<void>.delayed(netDelay);
     return _fakeProgram(qrCode);
   }
 
@@ -101,9 +129,8 @@ class FakeUjingAdapter implements IUjingAdapter {
     required int temperatureId,
     int? detergentGearId,
     int? disinfectantGearId,
-    required int orderSeq,
   }) async {
-    await Future<void>.delayed(_netDelay);
+    await Future<void>.delayed(netDelay);
     final model = program.models.firstWhere(
       (m) => m.id == washModelId,
       orElse: () => program.models.first,
@@ -112,60 +139,62 @@ class FakeUjingAdapter implements IUjingAdapter {
         _findAddition(model, 'wp_detergentGearId', detergentGearId);
     final disinfect =
         _findAddition(model, 'wp_disinfectantGearId', disinfectantGearId);
-    // 水温档价纳入 fake payPrice（同 UI _totalFen 共用 kWasherTemperaturePriceFen）→
-    // fake 下单金额 == UI 预估，否则模拟模式支付卡金额与预估不一致。
     final tempFen = kWasherTemperaturePriceFen[temperatureId] ?? 0;
     final totalFen = model.priceFen +
         tempFen +
         (detergent?.priceFen ?? 0) +
         (disinfect?.priceFen ?? 0);
-    return WasherOrderUi(
-      orderId: '11028${76060 + orderSeq}',
+    final order = WasherOrderUi(
+      orderId: '11028${76060 + ++_orderSeq}',
       deviceNo: program.deviceNo,
       statusText: '待支付',
       payPrice: formatFenAmount(totalFen),
       status: '10',
+      remainTimeSeconds: model.timeMinutes * 60,
     );
+    serverWasherOrders[order.orderId] = order;
+    return order.copyWith(status: WasherStatus.pending, statusText: '');
   }
 
   @override
-  Future<WasherOrderUi> payWasherOrder(WasherOrderUi order) async {
-    await Future<void>.delayed(_payDelay);
-    return order.copyWith(status: '20', statusText: '已预约');
+  Future<String> payWasherOrder(WasherOrderUi order) async {
+    await Future<void>.delayed(payDelay);
+    if (payMarksOrderPaid) setServerStatus(order.orderId, '20', text: '已预约');
+    final result = alipayResult;
+    if (result == null) {
+      pendingAlipay = Completer<String>();
+      return pendingAlipay!.future;
+    }
+    return result;
   }
 
   @override
-  Future<WasherOrderUi> startWasherOrder(
-    WasherOrderUi order,
-    int remainSeconds,
-  ) async {
-    await Future<void>.delayed(_netDelay);
-    return order.copyWith(
-      status: '40',
-      statusText: '运行中',
-      remainTimeSeconds: remainSeconds,
-    );
+  Future<WasherOrderUi> startWasherOrder(WasherOrderUi order) async {
+    await Future<void>.delayed(netDelay);
+    startCalls++;
+    if (startError != null) throw startError!;
+    setServerStatus(order.orderId, '40', text: '运行中');
+    return serverWasherOrders[order.orderId] ?? order;
   }
 
   @override
   Future<WasherOrderUi> stopWasherOrder(WasherOrderUi order) async {
-    await Future<void>.delayed(_netDelay);
-    return order.copyWith(status: '50', statusText: '已结束');
+    await Future<void>.delayed(netDelay);
+    setServerStatus(order.orderId, '50', text: '已结束');
+    return serverWasherOrders[order.orderId] ?? order;
   }
 
   @override
   Future<void> cancelWasherOrder(WasherOrderUi order) async {
-    // 本地 no-op（对齐 legacy fake cancelCurrentOrder = Unit）；仅承载 IO 延迟。
-    await Future<void>.delayed(_netDelay);
+    await Future<void>.delayed(netDelay);
+    serverWasherOrders.remove(order.orderId);
   }
 
   @override
   Future<WasherOrderUi> refreshWasherOrder(WasherOrderUi order) async {
-    await Future<void>.delayed(_netDelay);
-    if (order.status == '40') {
-      return order.copyWith(status: '50', statusText: '已完成');
-    }
-    return order;
+    await Future<void>.delayed(netDelay);
+    await refreshGate?.future;
+    return serverWasherOrders[order.orderId] ?? order;
   }
 
   WasherAdditionOptionUi? _findAddition(

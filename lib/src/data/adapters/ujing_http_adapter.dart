@@ -118,37 +118,6 @@ class UjingHttpAdapter implements IUjingAdapter {
     );
   }
 
-  /// 迁移核对不能把请求参数回填成响应证据；必须有返回 ID、状态及账号关系。
-  Future<WaterOrderUi> verifyLegacyWaterOrder(
-          WaterOrderUi order, UjingAccountUi account) =>
-      _fetchWaterOrderDetail(order.orderId, _requireToken(),
-          legacyAccount: account);
-  Future<WasherOrderUi> verifyLegacyWasherOrder(
-          WasherOrderUi order, UjingAccountUi account) =>
-      _fetchWasherOrderDetail(order.orderId, _requireToken(),
-          legacyAccount: account);
-
-  void _validateLegacyDetail(Map<String, dynamic> data, String id,
-      UjingAccountUi account, String statusField) {
-    final mobile = _str(data, 'mobile');
-    final userId = _str(data, 'userId');
-    final matchingIdentity = (mobile.isNotEmpty && mobile == account.mobile) ||
-        (userId.isNotEmpty &&
-            account.userId.isNotEmpty &&
-            userId == account.userId);
-    final conflictingIdentity =
-        (mobile.isNotEmpty && mobile != account.mobile) ||
-            (userId.isNotEmpty &&
-                account.userId.isNotEmpty &&
-                userId != account.userId);
-    if (_str(data, 'orderId') != id ||
-        _str(data, statusField).isEmpty ||
-        !matchingIdentity ||
-        conflictingIdentity) {
-      throw const UjingException('旧订单响应不足以确认标识和归属，原记录已保留');
-    }
-  }
-
   // ===== 饮水 =====
 
   @override
@@ -253,8 +222,8 @@ class UjingHttpAdapter implements IUjingAdapter {
     return _fetchWaterOrderDetail(current.orderId, token);
   }
 
-  Future<WaterOrderUi> _fetchWaterOrderDetail(String orderId, String token,
-      {UjingAccountUi? legacyAccount}) async {
+  Future<WaterOrderUi> _fetchWaterOrderDetail(
+      String orderId, String token) async {
     // POST water/waterOrderDetail {orderId: <int>}（对齐 legacy，body 用数值）。
     final detail = await _transport.send(UjingRequest(
       method: 'POST',
@@ -262,13 +231,9 @@ class UjingHttpAdapter implements IUjingAdapter {
       appCode: 'CA',
       weex: '1.0.102',
       authToken: token,
-      requireVerifiedEnvelope: legacyAccount != null,
       body: <String, Object?>{'orderId': int.tryParse(orderId) ?? orderId},
     ));
     _validateOrderDetail(detail, orderId, 'orderStatus');
-    if (legacyAccount != null) {
-      _validateLegacyDetail(detail, orderId, legacyAccount, 'orderStatus');
-    }
     return WaterOrderUi(
       orderId: orderId,
       orderNo: _str(detail, 'orderNo'),
@@ -381,7 +346,6 @@ class UjingHttpAdapter implements IUjingAdapter {
     required int temperatureId,
     int? detergentGearId,
     int? disinfectantGearId,
-    required int orderSeq, // 真实后端分配 orderId，orderSeq 仅 fake 用，这里忽略。
   }) async {
     final token = _requireToken();
     final scanned = _programs[program.deviceId];
@@ -421,7 +385,7 @@ class UjingHttpAdapter implements IUjingAdapter {
         deviceNo: program.deviceNo,
         statusText: '订单已创建，待查询状态',
         payPrice: '',
-        status: 'pending');
+        status: WasherStatus.pending);
   }
 
   @override
@@ -430,8 +394,8 @@ class UjingHttpAdapter implements IUjingAdapter {
     return _fetchWasherOrderDetail(order.orderId, token);
   }
 
-  Future<WasherOrderUi> _fetchWasherOrderDetail(String orderId, String token,
-      {UjingAccountUi? legacyAccount}) async {
+  Future<WasherOrderUi> _fetchWasherOrderDetail(
+      String orderId, String token) async {
     // GET orders/{orderId}/detail（对齐 legacy loadOrderDetail）。
     final detail = await _transport.send(UjingRequest(
       method: 'GET',
@@ -439,12 +403,8 @@ class UjingHttpAdapter implements IUjingAdapter {
       appCode: 'BA',
       weex: '1.1.68',
       authToken: token,
-      requireVerifiedEnvelope: legacyAccount != null,
     ));
     _validateOrderDetail(detail, orderId, 'status');
-    if (legacyAccount != null) {
-      _validateLegacyDetail(detail, orderId, legacyAccount, 'status');
-    }
     return WasherOrderUi(
       orderId: orderId,
       deviceNo: _str(detail, 'deviceNo'),
@@ -460,7 +420,7 @@ class UjingHttpAdapter implements IUjingAdapter {
   // ===== 支付 / 启停（A3 真实 HTTP + PaymentLauncher seam）=====
 
   @override
-  Future<WasherOrderUi> payWasherOrder(WasherOrderUi order) async {
+  Future<String> payWasherOrder(WasherOrderUi order) async {
     final token = _requireToken();
     // 支付参数：GET payment/arguments(channel=alipay)（对齐 legacy paymentArguments）。
     final args = await _transport.send(UjingRequest(
@@ -494,30 +454,15 @@ class UjingHttpAdapter implements IUjingAdapter {
       throw const UjingException('支付宝支付参数缺少 orderInfo');
     }
 
-    // SDK 那一跳经 launcher（Fake 返回 9000；真机 RealPaymentLauncher 接原生 PayTask）。
+    // 用户可能停在支付宝里很久才返回；调用方不会因此锁住其他操作。
     _log('启动支付宝支付');
     final resultStatus = await _launcher.payWithAlipay(orderInfo);
     _log('支付宝返回 resultStatus=${DiagnosticPrivacy.paymentStatus(resultStatus)}');
-
-    // 支付后必须刷新订单详情（对齐 legacy「不能只信 SDK 回调」）。
-    final refreshed = await _fetchWasherOrderDetail(order.orderId, token);
-    if (resultStatus != '9000') {
-      throw UjingException(
-        '支付未完成（resultStatus=$resultStatus），当前订单状态：${refreshed.statusText}',
-        code: resultStatus,
-      );
-    }
-    if (!const {'20', '21', '40', '50'}.contains(refreshed.status)) {
-      throw UjingException('支付结果待确认，请刷新订单状态：${refreshed.statusText}');
-    }
-    return refreshed;
+    return resultStatus;
   }
 
   @override
-  Future<WasherOrderUi> startWasherOrder(
-    WasherOrderUi order,
-    int remainSeconds,
-  ) async {
+  Future<WasherOrderUi> startWasherOrder(WasherOrderUi order) async {
     final token = _requireToken();
     // GET orders/{orderId}/control/start（对齐 legacy startOrder）→ 刷新详情。
     await _transport.send(UjingRequest(

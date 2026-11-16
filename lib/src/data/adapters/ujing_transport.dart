@@ -13,7 +13,6 @@ class UjingRequest {
     required this.appCode,
     this.weex,
     this.authToken,
-    this.requireVerifiedEnvelope = false,
   });
 
   /// HTTP 方法：'GET' / 'POST'。
@@ -38,9 +37,6 @@ class UjingRequest {
   /// null = 匿名请求（登录/验证码前）；非空 = 带 Bearer 头。
   /// adapter 对需登录接口先做 requireToken 守卫，再把 token 透传到这里。
   final String? authToken;
-
-  /// 旧记录核对要求明确成功码及非空 data；不改变普通业务响应规则。
-  final bool requireVerifiedEnvelope;
 }
 
 /// Ujing 传输层接口：发出请求，返回已校验（JSON 数值 code==0）的 `data` map。

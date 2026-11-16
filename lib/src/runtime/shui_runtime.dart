@@ -9,7 +9,6 @@ import '../data/adapters/hotwater_adapter.dart';
 import '../data/adapters/shower798_adapter.dart';
 import '../data/adapters/ujing_adapter.dart';
 import '../data/app_bootstrap.dart';
-import '../data/legacy_data_migration.dart';
 import '../data/history_repository.dart';
 import '../data/local_device_repository.dart';
 import '../data/secure_session_repository.dart';
@@ -23,7 +22,6 @@ import '../data/water_order_repository.dart';
 import '../data/washer_history_repository.dart';
 import '../data/shared_prefs_washer_history_repository.dart';
 import 'actions/account_actions.dart';
-import 'actions/legacy_recovery_actions.dart';
 import 'actions/account_availability_actions.dart';
 import 'actions/devices_actions.dart';
 import 'actions/home_actions.dart';
@@ -41,7 +39,6 @@ export 'shui_home_state.dart';
 /// 组装各服务操作与旧数据恢复流程；业务适配器和安全仓库必须显式注入。
 class ShuiRuntime extends ShuiRuntimeBase
     with
-        LegacyRecoveryActions,
         HomeActions,
         DevicesActions,
         WaterActions,
@@ -58,7 +55,6 @@ class ShuiRuntime extends ShuiRuntimeBase
     super.water,
     super.washerHistory,
     required super.secure,
-    required super.migration,
     super.clock,
     required super.ujing,
     required super.hotwater,
@@ -79,7 +75,6 @@ class ShuiRuntimeScope extends StatefulWidget {
     this.water,
     this.washerHistory,
     required this.secure,
-    required this.migration,
     this.clock,
     required this.ujing,
     required this.hotwater,
@@ -110,7 +105,6 @@ class ShuiRuntimeScope extends StatefulWidget {
 
   /// 可选注入的敏感凭证持久化（测试传内存实现）。默认生产用 flutter_secure_storage。
   final SecureSessionRepository secure;
-  final LegacyDataMigration migration;
 
   /// 可选注入的时间源（测试传 FixedLiveClock 保证 golden 确定性）。
   final LiveClock? clock;
@@ -166,7 +160,6 @@ class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
       diagnosticLog: widget.diagnosticLog,
       appVersion: widget.appVersion,
       initial: widget.initial,
-      migration: widget.migration,
     );
   }
 

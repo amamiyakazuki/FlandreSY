@@ -172,7 +172,7 @@ void main() {
     expect(transport.requests.last.params['staff_id'], 'new');
   });
   test('fake probes explicitly succeed without any real service', () async {
-    await const FakeUjingAdapter().checkAccountValidity();
+    await FakeUjingAdapter().checkAccountValidity();
     await FakeHotwaterAdapter().checkAccountValidity();
     await FakeShower798Adapter().checkAccountValidity();
   });

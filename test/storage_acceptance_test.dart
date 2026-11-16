@@ -10,8 +10,7 @@ import 'package:flandresy/src/data/shared_prefs_washer_history_repository.dart';
 import 'support/test_runtime.dart';
 
 void main() {
-  test(
-      'corrupt order domain preserves raw data and blocks creates while healthy account restores',
+  test('corrupt order domain is backed up and no longer blocks new orders',
       () async {
     SharedPreferences.setMockInitialValues({
       'water_order_snapshot_json': '{broken-order',
@@ -26,9 +25,9 @@ void main() {
     expect(snapshot.bathSystem, BathSystemPreference.shower798);
     expect(snapshot.permissionIntroSeen, isTrue);
     expect(snapshot.recoveryWarnings.length, 2);
-    expect(snapshot.ujingOrderStorageBlocked, isTrue);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('water_order_snapshot_json'), '{broken-order');
+    expect(prefs.getString('water_order_snapshot_json_recovery_backup'),
+        '{broken-order');
     expect(prefs.getString('local_devices_json'), '{broken-devices');
     expect(prefs.getString('local_devices_json_recovery_backup'),
         '{broken-devices');
@@ -39,9 +38,9 @@ void main() {
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.scanDrinkingWaterAndCreateOrder('device-b');
-    expect(runtime.state.currentWaterOrder, isNull);
-    expect(runtime.ujingOrderStorageBlocked, isTrue);
-    expect(prefs.getString('water_order_snapshot_json'), '{broken-order');
+    expect(runtime.state.currentWaterOrder, isNotNull);
+    expect(prefs.getString('water_order_snapshot_json_recovery_backup'),
+        '{broken-order');
     expect(runtime.state.waterOrder.isBusy, isFalse);
   });
 
@@ -71,28 +70,26 @@ void main() {
     });
     final snapshot = await _load();
     expect(snapshot.hotwaterSession, isNull);
-    expect(snapshot.currentWaterOrder?.orderId, 'old-order');
-    expect(snapshot.ujingOrderStorageBlocked, isFalse);
+    expect(snapshot.waterOrders.single.orderId, 'old-order');
     expect(snapshot.recoveryWarnings.single, contains('热水会话'));
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('hotwater_session'), '{}');
     expect(prefs.getString('hotwater_session_recovery_backup'), '{}');
   });
 
-  test(
-      'corrupt washer aggregate blocks mutation and keeps original legacy history',
-      () async {
+  test('corrupt washer snapshot is backed up and restores as empty', () async {
     SharedPreferences.setMockInitialValues({
       'washer_order_snapshot_json': '{broken-snapshot',
       'washer_history_json': '[{"orderId":"retained","status":"40"}]',
       'hotwater_history_json': '[]',
     });
     final snapshot = await _load();
-    expect(snapshot.ujingOrderStorageBlocked, isTrue);
+    expect(snapshot.washerOrders, isEmpty);
     expect(snapshot.hotwaterHistory, isEmpty);
-    expect(snapshot.recoveryWarnings.length, 2);
+    expect(snapshot.recoveryWarnings.single, contains('洗衣订单'));
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('washer_order_snapshot_json'), '{broken-snapshot');
+    expect(prefs.getString('washer_order_snapshot_json_recovery_backup'),
+        '{broken-snapshot');
     expect(prefs.getString('washer_history_json'), contains('retained'));
   });
 }

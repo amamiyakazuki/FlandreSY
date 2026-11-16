@@ -9,7 +9,6 @@ import '../runtime/models/washer_order.dart';
 import '../runtime/runtime_status.dart';
 import '../runtime/hotwater_state.dart';
 import 'account_session_repository.dart';
-import 'legacy_data_migration.dart';
 import 'history_repository.dart';
 import 'local_device_repository.dart';
 import 'settings_repository.dart';
@@ -28,12 +27,11 @@ class PersistedSnapshot {
     this.localDevices,
     this.hotwaterHistory,
     this.hotwaterSession,
-    this.currentWaterOrder,
+    this.waterOrders = const [],
     this.waterHistory,
     this.washerHistory,
-    this.currentWasherOrder,
+    this.washerOrders = const [],
     this.recoveryWarnings = const [],
-    this.ujingOrderStorageBlocked = false,
   });
 
   final BathSystemPreference bathSystem;
@@ -50,12 +48,13 @@ class PersistedSnapshot {
   /// 热水历史（PHIST）。null = 从未持久化过（首启走 adapter 拉取）；非 null = 写入 hotwater.history。
   final List<HotwaterHistoryUi>? hotwaterHistory;
   final HotwaterSession? hotwaterSession;
-  final WaterOrderUi? currentWaterOrder;
+  final List<WaterOrderUi> waterOrders;
   final List<WaterOrderHistoryUi>? waterHistory;
   final List<WasherOrderHistoryUi>? washerHistory;
-  final WasherOrderUi? currentWasherOrder;
+  final List<WasherOrderUi> washerOrders;
+
+  /// 读取失败的数据域（仅用于诊断日志；失败的域按空数据继续运行，不再锁住功能）。
   final List<String> recoveryWarnings;
-  final bool ujingOrderStorageBlocked;
 }
 
 /// 合并 SettingsRepository + AccountSessionRepository + LocalDeviceRepository +
@@ -69,19 +68,14 @@ class AppBootstrap {
     LocalDeviceRepository devices,
     HistoryRepository history,
     WaterOrderRepository water,
-    WasherHistoryRepository washerHistory, {
-    LegacyDataMigration? migration,
-  }) async {
-    await migration?.prepare();
+    WasherHistoryRepository washerHistory,
+  ) async {
     final warnings = <String>[];
-    bool orderBlocked = false;
-    Future<T?> recover<T>(String domain, Future<T> Function() load,
-        {bool orders = false}) async {
+    Future<T?> recover<T>(String domain, Future<T> Function() load) async {
       try {
         return await load();
       } catch (error) {
-        warnings.add('$domain 恢复失败（${error.runtimeType}），原数据已保留');
-        if (orders) orderBlocked = true;
+        warnings.add('$domain 读取失败（${error.runtimeType}），已按空数据继续');
         return null;
       }
     }
@@ -96,11 +90,8 @@ class AppBootstrap {
     final localDevices = await recover('本地设备', devices.loadDevices);
     final hotwaterHistory = await recover('热水历史', history.loadHistory);
     final hotwaterSession = await recover('热水会话', settings.loadHotwaterSession);
-    final waterSnapshot = await recover('饮水订单', water.load, orders: true);
-    final washerHistorySnapshot =
-        await recover('洗衣历史', washerHistory.loadHistory, orders: true);
-    final currentWasherOrder =
-        await recover('洗衣活动订单', washerHistory.loadCurrentOrder, orders: true);
+    final waterSnapshot = await recover('饮水订单', water.load);
+    final washerSnapshot = await recover('洗衣订单', washerHistory.load);
     return PersistedSnapshot(
       bathSystem: bathSystem,
       permissionIntroSeen: permissionIntroSeen,
@@ -110,12 +101,11 @@ class AppBootstrap {
       localDevices: localDevices,
       hotwaterHistory: hotwaterHistory,
       hotwaterSession: hotwaterSession,
-      currentWaterOrder: waterSnapshot?.currentOrder,
+      waterOrders: waterSnapshot?.orders ?? const [],
       waterHistory: waterSnapshot?.history,
-      washerHistory: washerHistorySnapshot,
-      currentWasherOrder: currentWasherOrder,
+      washerHistory: washerSnapshot?.history,
+      washerOrders: washerSnapshot?.orders ?? const [],
       recoveryWarnings: warnings,
-      ujingOrderStorageBlocked: orderBlocked,
     );
   }
 }

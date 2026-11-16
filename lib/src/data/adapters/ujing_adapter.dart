@@ -65,22 +65,21 @@ abstract class IUjingAdapter {
   /// 扫码识别洗衣机，返回下单 program。
   Future<WasherProgramUi> scanWasher(String qrCode);
 
-  /// 创建洗衣订单（status='10' 待支付）。orderSeq 由调用方维护（保证订单号稳定）。
+  /// 创建洗衣订单，返回只含订单号的最小订单（status='pending'），详情由运行时随后查询。
   Future<WasherOrderUi> createWasherOrder({
     required WasherProgramUi program,
     required int washModelId,
     required int temperatureId,
     int? detergentGearId,
     int? disinfectantGearId,
-    required int orderSeq,
   });
 
-  /// 支付宝支付（fake 成功 → status='20' 已预约）。
-  Future<WasherOrderUi> payWasherOrder(WasherOrderUi order);
+  /// 获取支付参数并拉起支付宝，返回支付宝 resultStatus（9000 = 支付成功）。
+  /// 支付是否到账以随后查询到的订单状态为准，不只相信这里的返回值。
+  Future<String> payWasherOrder(WasherOrderUi order);
 
-  /// 启动洗衣机（status → '40' 运行；remainSeconds 由调用方按套餐时长给定）。
-  Future<WasherOrderUi> startWasherOrder(
-      WasherOrderUi order, int remainSeconds);
+  /// 启动洗衣机，返回启动后的订单详情。
+  Future<WasherOrderUi> startWasherOrder(WasherOrderUi order);
 
   /// 提前停止（status → '50' 已结束）。
   Future<WasherOrderUi> stopWasherOrder(WasherOrderUi order);

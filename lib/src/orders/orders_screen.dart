@@ -14,6 +14,8 @@ import '../theme/shui_assets.dart';
 import '../theme/shui_motion.dart';
 import '../widgets/order_list_item.dart';
 import '../widgets/shui_animated_list.dart';
+import '../washer/washer_payment_card.dart' show formatOrderTime;
+import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
 import 'order_models.dart';
 
@@ -87,7 +89,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   /// 仅在可见洗衣分类且有活动订单时更新倒计时，不承担网络查询。
   void _syncTimers() {
-    final order = widget.state.washer.currentOrder;
+    final order = widget.state.currentWasherOrder;
     final needsLive = widget.active &&
         _category == OrderCategory.washer &&
         order != null &&
@@ -125,19 +127,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 children: [
                   _buildChipRow(),
                   const SizedBox(height: AppCustomTokens.spaceSm),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      switch (_category) {
-                        OrderCategory.hotwater => '住理热水记录与本地旧档案',
-                        OrderCategory.drinking => '仅显示本机完成的接水订单',
-                        OrderCategory.washer => '仅显示本机操作过的洗衣订单',
-                      },
-                      style: AppTypography.textTheme.bodySmall
-                          ?.copyWith(color: AppColors.mutedText),
-                    ),
-                  ),
-                  const SizedBox(height: AppCustomTokens.spaceSm),
+                  if (_category != OrderCategory.hotwater &&
+                      widget.state.otherAccountActiveOrders > 0) ...[
+                    _OtherAccountHint(
+                        count: widget.state.otherAccountActiveOrders),
+                    const SizedBox(height: AppCustomTokens.spaceSm),
+                  ],
                   AnimatedSwitcher(
                     duration: ShuiMotion.duration(context, ShuiMotion.local),
                     switchInCurve: ShuiMotion.easeOut,
@@ -237,8 +232,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
     };
   }
 
+  /// 已登录时只显示当前账号的记录；未登录时显示全部。
+  bool _visible(String owner) {
+    final key = widget.state.ujingAccountKey;
+    return key.isEmpty || owner.isEmpty || owner == key;
+  }
+
   List<OrderRowUi> _drinkingRows() {
     final s = widget.state;
+    final now = widget.clock.nowMillis();
     final rows = <OrderRowUi>[];
     final current = s.currentWaterOrder;
     if (current != null) {
@@ -246,13 +248,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
         OrderRowUi(
           id: 'water-${current.orderId}',
           type: '饮水',
-          time: '当前订单',
-          device:
-              '饮水机 ${current.deviceNo.isEmpty ? current.orderId : current.deviceNo}',
-          amount: formatFenAmount((current.payment * 100).round()),
-          status: current.statusRemark.isEmpty
-              ? current.orderStatusName
-              : current.statusRemark,
+          time: current.createdAtMillis > 0
+              ? formatOrderTime(current.createdAtMillis, now)
+              : '进行中',
+          device: current.deviceNo.isEmpty ? '饮水机' : '饮水机 ${current.deviceNo}',
+          amount: current.payment > 0
+              ? formatFenAmount((current.payment * 100).round())
+              : '',
+          status: current.statusLabel,
           statusColor: AppColors.serviceBlue,
           iconAsset: ShuiAssets.shuiJieshui,
           onTap: widget.onOpenDrinking,
@@ -260,12 +263,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
       );
     }
     for (final h in s.waterHistory) {
+      if (!_visible(h.ownerAccountKey)) continue;
       rows.add(
         OrderRowUi(
           id: 'water-${h.orderId}',
           type: '饮水',
-          time: h.completedAt,
-          device: '饮水机 ${h.deviceNo.isEmpty ? h.orderId : h.deviceNo}',
+          time: h.completedAtMillis > 0
+              ? formatOrderTime(h.completedAtMillis, now)
+              : h.completedAt,
+          device: h.deviceNo.isEmpty ? '饮水机' : '饮水机 ${h.deviceNo}',
           amount: formatFenAmount((h.payment * 100).round()),
           status: h.status,
           statusColor: AppColors.serviceGreen,
@@ -278,25 +284,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   List<OrderRowUi> _washerRows() {
     final s = widget.state;
+    final now = widget.clock.nowMillis();
     final rows = <OrderRowUi>[];
-    final current = s.washer.currentOrder;
+    final current = s.currentWasherOrder;
     if (current != null) {
-      final now = widget.clock.nowMillis();
-      final remain = liveRemainSeconds(
-        current.remainTimeSeconds,
-        current.refreshedAtMillis,
-        now,
-      );
-      final timeText =
-          remain > 0 ? '剩余 ${formatSeconds(remain)}' : current.statusText;
+      final remain = current.liveRemainSeconds(now);
       rows.add(
         OrderRowUi(
           id: 'washer-${current.orderId}',
           type: '洗衣',
-          time: timeText,
-          device: '洗衣机 ${current.deviceNo}',
+          time: remain > 0
+              ? '剩余 ${formatSeconds(remain)}'
+              : current.createdAtMillis > 0
+                  ? formatOrderTime(current.createdAtMillis, now)
+                  : '进行中',
+          device: current.deviceNo.isEmpty ? '洗衣机' : '洗衣机 ${current.deviceNo}',
           amount: current.payPrice,
-          status: current.statusText,
+          status: current.statusLabel,
           statusColor: _washerStatusColor(current.status),
           iconAsset: ShuiAssets.shuiYifu,
           onTap: widget.onOpenWasherOrder,
@@ -304,17 +308,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
       );
     }
     for (final h in s.washer.history) {
-      if (current != null && h.orderId == current.orderId) {
-        continue;
-      }
+      if (!_visible(h.ownerAccountKey)) continue;
       rows.add(
         OrderRowUi(
           id: 'washer-${h.orderId}',
           type: '洗衣',
-          time: h.orderId,
-          device: '洗衣机 ${h.deviceNo}',
+          time: h.createdAtMillis > 0
+              ? formatOrderTime(h.createdAtMillis, now)
+              : '',
+          device: h.deviceNo.isEmpty ? '洗衣机' : '洗衣机 ${h.deviceNo}',
           amount: h.payPrice,
-          status: h.statusText,
+          status: h.statusText.isEmpty
+              ? WasherStatus.label(h.status)
+              : h.statusText,
           statusColor: _washerStatusColor(h.status),
           iconAsset: ShuiAssets.shuiYifu,
         ),
@@ -325,9 +331,27 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   Color _washerStatusColor(String status) {
     return switch (status) {
-      '40' || '21' => AppColors.serviceBlue,
-      '50' => AppColors.serviceGreen,
+      WasherStatus.running || WasherStatus.starting => AppColors.serviceBlue,
+      WasherStatus.finished => AppColors.serviceGreen,
+      WasherStatus.cancelled || WasherStatus.removed => AppColors.mutedText,
       _ => AppColors.serviceOrange,
     };
+  }
+}
+
+/// 其他账号仍有进行中的订单时提示（订单按账号保存，切回原账号即可操作）。
+class _OtherAccountHint extends StatelessWidget {
+  const _OtherAccountHint({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return RuntimeStatusBanner(
+      status: RuntimeActionStatus(
+        state: RuntimeTaskState.idle,
+        message: '其他 U净 账号还有 $count 笔进行中的订单，切换回对应账号后可查看和操作',
+      ),
+    );
   }
 }

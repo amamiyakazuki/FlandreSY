@@ -73,11 +73,11 @@ void main() {
     final program = await adapter.scanWasher('test-qr');
     expect(program.createOrderEnabled, isTrue);
     final order = await adapter.createWasherOrder(
-        program: program, washModelId: 1, temperatureId: 0, orderSeq: 1);
+        program: program, washModelId: 1, temperatureId: 0);
     expect(order.orderId, 'washer-order');
-    expect((await adapter.payWasherOrder(order)).status, '20');
+    expect(await adapter.payWasherOrder(order), '9000');
     expect(launcher.calls, 1);
-    expect((await adapter.startWasherOrder(order, 2100)).status, '40');
+    expect((await adapter.startWasherOrder(order)).status, '40');
     expect((await adapter.stopWasherOrder(order)).status, '50');
     await adapter.cancelWasherOrder(order);
     expect(

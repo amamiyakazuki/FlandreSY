@@ -9,13 +9,10 @@ import 'package:flandresy/src/data/local_device_repository.dart';
 import 'package:flandresy/src/data/account_session_repository.dart';
 import 'package:flandresy/src/data/secure_session_repository.dart';
 import 'package:flandresy/src/data/settings_repository.dart';
-import 'package:flandresy/src/data/legacy_data_migration.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'support/fake_shower798_adapter.dart';
 import 'support/test_runtime.dart';
-import 'support/memory_migration_store.dart';
-import 'c2_devices_test.dart'
-    show ControlledDevices, QueryUjing, program, washer, hidden, tick;
+import 'c2_devices_test.dart' show ControlledDevices, washer, hidden, tick;
 
 class InstantShower extends FakeShower798Adapter {
   int stops = 0;
@@ -113,18 +110,4 @@ void main() {
       }
     });
   }
-  test('C1 relogin gate blocks network without removing legacy devices',
-      () async {
-    final api = QueryUjing((_) async => program);
-    final migration = LegacyDataMigration(
-        MemoryMigrationStore({'use_simulated_backend': false}));
-    final runtime = TestRuntime(
-        devices: ControlledDevices([washer]), ujing: api, migration: migration);
-    addTearDown(runtime.dispose);
-    await runtime.ready;
-    await runtime.refreshLocalDevices();
-    expect(api.calls, 0);
-    expect(runtime.state.devicesRefresh.state, RuntimeTaskState.loginRequired);
-    expect(runtime.state.localDevices.length, 1);
-  });
 }

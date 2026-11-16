@@ -19,12 +19,6 @@ mixin AccountActions on ShuiRuntimeBase {
   /// （startHotwater/stopHotwater 依赖 `_requireSession()`，否则「一点开水就显示未登录」）。
   Future<void> loginZhuli(String phone, String password) async {
     await ready;
-    if (legacyStorageBlocked) {
-      emit(state.copyWith(
-          hotwaterLogin: const RuntimeActionStatus(
-              state: RuntimeTaskState.failure, message: '旧数据保全未完成，请先重试保全')));
-      return;
-    }
     if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
       return;
     }
@@ -35,11 +29,7 @@ mixin AccountActions on ShuiRuntimeBase {
     } catch (error) {
       diagnosticLog.log('auth', '住理登录保存失败 type=${error.runtimeType}');
       hotwaterAuthChanging = false;
-      if (migration.needsLogin('zhuli')) {
-        reconcileRestoredAuth();
-      } else {
-        await handleAuthInvalidation(AuthService.zhuli);
-      }
+      await handleAuthInvalidation(AuthService.zhuli);
     } finally {
       hotwaterAuthChanging = false;
     }
@@ -89,16 +79,12 @@ mixin AccountActions on ShuiRuntimeBase {
       );
       return;
     }
-    if (migration.needsLogin('zhuli') && !sessionData.isValid) {
-      throw const HotwaterException('登录响应缺少有效身份，旧数据仍待核对');
-    }
     final session = state.zhuli.copyWith(phone: normalizedPhone);
     if (sessionData.isValid) {
       await sessions.clearZhuli();
       await secure.saveZhuliSession(sessionData);
     }
     await sessions.saveZhuli(session);
-    await migration.confirmLogin('zhuli');
     emit(
       state.copyWith(
         zhuli: session,
@@ -160,7 +146,6 @@ mixin AccountActions on ShuiRuntimeBase {
   /// 对齐 legacy requestUjingCaptcha。
   Future<void> requestUjingCaptcha(String phone) async {
     await ready;
-    if (legacyStorageBlocked) return;
     if (state.ujingCaptcha.isBusy) {
       return;
     }
@@ -211,21 +196,7 @@ mixin AccountActions on ShuiRuntimeBase {
   /// 对齐 legacy loginUjing。
   Future<void> loginUjing(String phone, String captcha) async {
     await ready;
-    if (legacyStorageBlocked) {
-      emit(state.copyWith(
-          washerLogin: const RuntimeActionStatus(
-              state: RuntimeTaskState.failure, message: '旧数据保全未完成，请先重试保全')));
-      return;
-    }
     if (isDisposed || ujingAuthChanging || state.washerLogin.isBusy) {
-      return;
-    }
-    if (ujingMutationCount > 0) {
-      emit(state.copyWith(
-          washerLogin: const RuntimeActionStatus(
-        state: RuntimeTaskState.unavailable,
-        message: '订单操作正在处理，请完成后再切换账号',
-      )));
       return;
     }
     final mobile = phone.trim();
@@ -243,7 +214,6 @@ mixin AccountActions on ShuiRuntimeBase {
     resetAccountAvailability(AccountKind.ujing);
     ujingAuthChanging = true;
     beginUjingLoginEpoch();
-    stopWaterPolling();
     emit(
       state.copyWith(
         clearWaterReady: true,
@@ -253,7 +223,6 @@ mixin AccountActions on ShuiRuntimeBase {
         waterOrder: const RuntimeActionStatus(),
         washer: state.washer.copyWith(
           clearProgram: true,
-          clearPayment: true,
           washerScan: const RuntimeActionStatus(),
           washerOrder: const RuntimeActionStatus(),
           washerPayment: const RuntimeActionStatus(),
@@ -277,7 +246,6 @@ mixin AccountActions on ShuiRuntimeBase {
         await secure.saveUjingToken(token);
       }
       await sessions.saveUjing(account);
-      await migration.confirmLogin('ujing');
       emit(
         state.copyWith(
           ujingAccount: account,
@@ -299,9 +267,7 @@ mixin AccountActions on ShuiRuntimeBase {
                 error is UjingException ? error.message : '登录状态保存失败，请重新登录'),
       ));
       try {
-        if (!migration.needsLogin('ujing')) {
-          await Future.wait([secure.clearUjingToken(), sessions.clearUjing()]);
-        }
+        await Future.wait([secure.clearUjingToken(), sessions.clearUjing()]);
       } catch (cleanupError) {
         diagnosticLog.log('auth', '登录失败后清理失败 type=${cleanupError.runtimeType}');
       }
@@ -309,7 +275,8 @@ mixin AccountActions on ShuiRuntimeBase {
       ujingAuthChanging = false;
     }
     if (!isDisposed && state.ujingAccount != null) {
-      await resumeUjingOrders();
+      await adoptUnownedOrders();
+      await refreshActiveOrders();
     }
   }
 

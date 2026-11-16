@@ -20,7 +20,6 @@ class MoreOptionsScreen extends StatefulWidget {
     required this.onImportDevices,
     required this.onExportDevices,
     required this.onOpenLogs,
-    this.onLegacyRecovery,
     this.checkVersion,
     this.appVersion = kCurrentAppVersion,
     super.key,
@@ -33,7 +32,6 @@ class MoreOptionsScreen extends StatefulWidget {
   final VoidCallback onExportDevices;
   final VoidCallback onOpenLogs;
   final String appVersion;
-  final VoidCallback? onLegacyRecovery;
   final Future<VersionCheckResult> Function()? checkVersion;
 
   @override
@@ -141,12 +139,6 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
 
   List<_OptionRowData> _rows() {
     return [
-      if (widget.onLegacyRecovery != null)
-        _OptionRowData(
-            icon: ShuiAssets.shuiRed3,
-            title: '旧数据保全',
-            subtitle: '查看旧记录与登录、核对进度',
-            onTap: widget.onLegacyRecovery!),
       _OptionRowData(
         icon: ShuiAssets.shuiRed1,
         title: '权限检测',

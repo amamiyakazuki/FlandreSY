@@ -18,7 +18,6 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 对齐 legacy requestShower798Captcha。
   Future<void> requestShower798Captcha() async {
     await ready;
-    if (legacyStorageBlocked) return;
     if (state.shower798Captcha.isBusy) {
       return;
     }
@@ -60,7 +59,6 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 对齐 legacy sendShower798SmsCode。
   Future<void> sendShower798SmsCode(String phone, String imageCaptcha) async {
     await ready;
-    if (legacyStorageBlocked) return;
     if (state.shower798Captcha.isBusy) {
       return;
     }
@@ -128,12 +126,6 @@ mixin Shower798Actions on ShuiRuntimeBase {
   /// 对齐 legacy loginShower798。
   Future<void> loginShower798(String phone, String smsCode) async {
     await ready;
-    if (legacyStorageBlocked) {
-      emit(state.copyWith(
-          shower798Login: const RuntimeActionStatus(
-              state: RuntimeTaskState.failure, message: '旧数据保全未完成，请先重试保全')));
-      return;
-    }
     if (hotwaterAuthChanging || hotwaterAccountWriteCount > 0 || isDisposed) {
       return;
     }
@@ -220,8 +212,6 @@ mixin Shower798Actions on ShuiRuntimeBase {
                   ? state.currentShower798DeviceId
                   : '',
         )));
-    _loginStage = '旧数据登录确认保存';
-    await migration.confirmLogin('shower798');
     if (isDisposed) return;
     emit(
       state.copyWith(
@@ -255,7 +245,6 @@ mixin Shower798Actions on ShuiRuntimeBase {
       !isDisposed &&
       !hotwaterAuthChanging &&
       epoch == hotwaterAuthEpoch &&
-      legacyServiceReady('shower798') &&
       state.shower798Account?.mobile == owner;
 
   void _deviceStatus(RuntimeTaskState task, String message) {
@@ -271,10 +260,8 @@ mixin Shower798Actions on ShuiRuntimeBase {
     await ready;
     if (isDisposed) return;
     final owner = state.shower798Account?.mobile ?? '';
-    if (hotwaterAuthChanging ||
-        !legacyServiceReady('shower798') ||
-        owner.isEmpty) {
-      _deviceStatus(RuntimeTaskState.failure, '请先完成 798 登录和旧数据保全');
+    if (hotwaterAuthChanging || owner.isEmpty) {
+      _deviceStatus(RuntimeTaskState.failure, '请先完成 798 登录');
       return;
     }
     final epoch = hotwaterAuthEpoch;

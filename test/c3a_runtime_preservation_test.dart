@@ -54,7 +54,8 @@ void main() {
             payPrice: '3',
             status: status,
             ownerAccountKey: _account.mobile);
-        final repo = InMemoryWasherHistoryRepository(currentOrder: order);
+        final repo = InMemoryWasherHistoryRepository(
+            snapshot: WasherSnapshot(orders: [order]));
         final runtime = _washerRuntime(server, repo);
         addTearDown(runtime.dispose);
         await runtime.ready;
@@ -68,11 +69,11 @@ void main() {
           case 'stop':
             await runtime.stopCurrentWasherOrder();
         }
-        final saved = (await repo.loadCurrentOrder())!;
+        final saved = (await repo.load())!.orders.single;
         expect(saved.orderId, order.orderId);
         expect(saved.ownerAccountKey, order.ownerAccountKey);
         expect(saved.status, status);
-        expect(runtime.state.washer.currentOrder?.status, status);
+        expect(runtime.state.currentWasherOrder?.status, status);
         expect(
             runtime.state.washer.washerOrder.state, RuntimeTaskState.failure);
         expect(runtime.state.washer.washerOrder.message, contains('未确认'));
@@ -81,10 +82,10 @@ void main() {
         addTearDown(restored.dispose);
         await restored.ready;
         await restored.refreshCurrentWasherOrder();
-        expect(restored.state.washer.currentOrder?.orderId, order.orderId);
-        expect(restored.state.washer.currentOrder?.ownerAccountKey,
+        expect(restored.state.currentWasherOrder?.orderId, order.orderId);
+        expect(restored.state.currentWasherOrder?.ownerAccountKey,
             order.ownerAccountKey);
-        expect(restored.state.washer.currentOrder?.status, status);
+        expect(restored.state.currentWasherOrder?.status, status);
         expect(server.paths.where((p) => !p.endsWith('/detail')), hasLength(1));
       });
     }
@@ -100,20 +101,22 @@ void main() {
           }
         : {'code': 0};
     final repo = InMemoryWasherHistoryRepository(
-        currentOrder: const WasherOrderUi(
-            orderId: 'order-a',
-            deviceNo: 'device-a',
-            statusText: '待支付',
-            payPrice: '3',
-            status: '10',
-            ownerAccountKey: 'test-account'));
+        snapshot: const WasherSnapshot(orders: [
+      WasherOrderUi(
+          orderId: 'order-a',
+          deviceNo: 'device-a',
+          statusText: '待支付',
+          payPrice: '3',
+          status: '10',
+          ownerAccountKey: 'test-account')
+    ]));
     final runtime = _washerRuntime(server, repo);
     addTearDown(runtime.dispose);
     await runtime.ready;
     await runtime.refreshCurrentWasherOrder();
     await runtime.cancelCurrentWasherOrder();
-    expect(await repo.loadCurrentOrder(), isNull);
-    expect((await repo.loadHistory())!.single.status, 'cancelled');
+    expect((await repo.load())!.orders, isEmpty);
+    expect((await repo.load())!.history.single.status, 'cancelled');
     expect(server.paths.where((p) => p.endsWith('/cancel')), hasLength(1));
   });
 

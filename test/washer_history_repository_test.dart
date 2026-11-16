@@ -11,19 +11,47 @@ void main() {
     status: '50',
     statusText: '已完成',
     payPrice: '¥3.50',
+    ownerAccountKey: 'A',
+    createdAtMillis: 1700000000000,
+  );
+  const active = WasherOrderUi(
+    orderId: 'washer-2',
+    deviceNo: 'A-09',
+    statusText: '已预约',
+    payPrice: '¥2.10',
+    status: '20',
+    ownerAccountKey: 'B',
+    createdAtMillis: 1700000001000,
+    autoStart: true,
   );
 
-  test('washer history codec preserves all displayed fields', () {
-    final decoded = WasherHistoryCodec.decode(
-      WasherHistoryCodec.encode(const [record]),
-    );
+  test('codec round-trips active orders and history', () {
+    final decoded = WasherHistoryCodec.decode(WasherHistoryCodec.encode(
+        const WasherSnapshot(orders: [active], history: [record])));
+    expect(decoded.history.single.orderId, record.orderId);
+    expect(decoded.history.single.statusText, record.statusText);
+    expect(decoded.history.single.createdAtMillis, record.createdAtMillis);
+    final order = decoded.orders.single;
+    expect(order.orderId, active.orderId);
+    expect(order.ownerAccountKey, 'B');
+    expect(order.autoStart, isTrue);
+    expect(order.createdAtMillis, active.createdAtMillis);
+  });
 
-    expect(decoded, hasLength(1));
-    expect(decoded.single.orderId, record.orderId);
-    expect(decoded.single.deviceNo, record.deviceNo);
-    expect(decoded.single.status, record.status);
-    expect(decoded.single.statusText, record.statusText);
-    expect(decoded.single.payPrice, record.payPrice);
+  test('old single currentOrder format is read as one active order', () {
+    final decoded = WasherHistoryCodec.decode(
+        '{"currentOrder":{"orderId":"old","status":"10","ownerAccountKey":"A"},'
+        '"history":[{"orderId":"h","status":"50","needsRecovery":true}]}');
+    expect(decoded.orders.single.orderId, 'old');
+    expect(decoded.history.single.orderId, 'h');
+  });
+
+  test('a damaged record is skipped instead of failing the whole snapshot', () {
+    final decoded = WasherHistoryCodec.decode(
+        '{"orders":[{"status":"10"},{"orderId":"ok","status":"10"}],'
+        '"history":[42,{"orderId":"h"}]}');
+    expect(decoded.orders.single.orderId, 'ok');
+    expect(decoded.history.single.orderId, 'h');
   });
 
   test('restored washer history survives leaving washer flow', () async {
@@ -40,30 +68,5 @@ void main() {
 
     runtime.resetWasherTransient();
     expect(runtime.state.washer.history.single.orderId, 'washer-1');
-  });
-
-  test('creating a washer order writes its history repository', () async {
-    final repository = InMemoryWasherHistoryRepository();
-    final runtime = TestRuntime(
-      washerHistory: repository,
-      initial: const PersistedSnapshot(
-        bathSystem: BathSystemPreference.none,
-      ),
-    );
-    addTearDown(runtime.dispose);
-
-    await runtime.ready;
-    await runtime.loginUjing('test-account', 'test-code');
-    await runtime.scanWasher('washer-code');
-    final model = runtime.state.washer.program!.models.first;
-    await runtime.createWasherOrder(
-      washModelId: model.id,
-      temperatureId: 1,
-    );
-
-    final saved = await repository.loadHistory();
-    expect(saved, hasLength(1));
-    expect(saved!.single.orderId, runtime.state.washer.history.single.orderId);
-    expect(saved.single.payPrice, runtime.state.washer.history.single.payPrice);
   });
 }

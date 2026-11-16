@@ -1,5 +1,7 @@
 // Routing orchestration only; visual chrome lives in shui_shell_chrome.dart (token-compliant).
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../runtime/models/account_session.dart';
 import 'package:flutter/cupertino.dart';
@@ -13,7 +15,6 @@ import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
 import '../hotwater/hotwater_detail_screen.dart';
 import '../more/more_options_screen.dart';
-import '../more/legacy_recovery_sheet.dart';
 import '../more/log_screen.dart';
 import '../orders/orders_screen.dart';
 import '../profile/account_detail_screen.dart';
@@ -156,7 +157,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     if (_routeKey(next) == _routeKey(route)) return;
     FocusManager.instance.primaryFocus?.unfocus();
     if (next is DrinkingWaterRoute) {
-      ShuiRuntimeScope.of(context).resumeWaterPolling();
+      ShuiRuntimeScope.of(context).enterDrinkingWater();
     }
     setState(() {
       _dismissOverlays();
@@ -310,26 +311,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
                             child: Stack(children: _overlays(runtime)),
                           ),
                   ),
-                  if (runtime.legacyStorageBlocked ||
-                      runtime.migration.hasPendingRecords ||
-                      (runtime.migration.hasLegacy &&
-                          ['ujing', 'zhuli', 'shower798']
-                              .any(runtime.migration.needsLogin)))
-                    Align(
-                        alignment: Alignment.topCenter,
-                        child: SafeArea(
-                          child: Material(
-                            color: Theme.of(context).colorScheme.errorContainer,
-                            child: TextButton(
-                                onPressed: () => showLegacyRecoverySheet(
-                                    context,
-                                    runtime,
-                                    () => _setRoute(const AccountHubRoute())),
-                                child: Text(runtime.legacyStorageBlocked
-                                    ? '旧数据保全未完成 · 查看与重试'
-                                    : '旧数据已保留，首次使用请重新登录 · 查看')),
-                          ),
-                        )),
                   AnimatedSwitcher(
                     duration: ShuiMotion.duration(context, ShuiMotion.normal),
                     child: openingVisible
@@ -375,7 +356,8 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           state: runtime.state,
           onBack: () => _leaveDrinkingWater(runtime),
           onReturnHome: () => _selectTab(MainTab.home),
-          onRefresh: runtime.resumeUjingOrders,
+          onRefresh: runtime.refreshCurrentDrinkingWaterOrder,
+          onRemoveLocal: runtime.removeCurrentWaterOrderLocally,
         ),
       AccountHubRoute() => AccountHubScreen(
           state: runtime.state,
@@ -422,7 +404,9 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onStart: runtime.startCurrentWasherOrder,
           onStop: runtime.stopCurrentWasherOrder,
           onCancel: runtime.cancelCurrentWasherOrder,
-          onRefresh: runtime.resumeUjingOrders,
+          onRefresh: runtime.refreshCurrentWasherOrder,
+          onRemoveLocal: runtime.removeCurrentWasherOrderLocally,
+          nowMillis: runtime.clock.nowMillis,
         ),
       HotwaterDetailRoute() => HotwaterDetailScreen(
           controlUnavailableReason: runtime.zhuliControlUnavailableReason,
@@ -438,11 +422,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onImportDevices: () => _importDevices(runtime),
           onExportDevices: () => _exportDevices(runtime),
           onOpenLogs: () => _setRoute(const DiagnosticLogRoute()),
-          onLegacyRecovery: runtime.migration.hasLegacy ||
-                  runtime.legacyStorageBlocked
-              ? () => showLegacyRecoverySheet(
-                  context, runtime, () => _setRoute(const AccountHubRoute()))
-              : null,
           appVersion: runtime.appVersion,
         ),
       DiagnosticLogRoute() => LogScreen(
@@ -510,16 +489,8 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           state: runtime.state,
           clock: runtime.clock,
           onBack: () => _selectTab(MainTab.home),
-          onOpenWasherOrder: () {
-            final order = runtime.state.washer.currentOrder;
-            if (order != null) {
-              _setRoute(WasherOrderRoute(order.deviceNo));
-            }
-          },
-          onOpenDrinking: () {
-            final cd = runtime.state.currentWaterOrder?.deviceNo ?? '';
-            _setRoute(DrinkingWaterRoute(cd));
-          },
+          onOpenWasherOrder: () => _openTask(runtime, HomeTaskTarget.washer),
+          onOpenDrinking: () => _openTask(runtime, HomeTaskTarget.drinking),
         ),
       MainTab.devices => DevicesScreen(
           state: runtime.state,
@@ -535,6 +506,24 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onOpenMore: () => _setRoute(const MoreOptionsRoute()),
         ),
     };
+  }
+
+  /// 首页「进行中」与订单页共用：打开对应任务的详情页。
+  void _openTask(ShuiRuntime runtime, HomeTaskTarget target) {
+    switch (target) {
+      case HomeTaskTarget.hotwater:
+        if (runtime.state.hotwaterControlSystem == BathSystemPreference.zhuli) {
+          runtime.loadHotwaterHistory();
+        }
+        _setRoute(const HotwaterDetailRoute());
+      case HomeTaskTarget.washer:
+        final order = runtime.state.currentWasherOrder;
+        _setRoute(WasherOrderRoute(order?.deviceNo ?? ''));
+        if (order != null) runtime.refreshCurrentWasherOrder(quiet: true);
+      case HomeTaskTarget.drinking:
+        final order = runtime.state.currentWaterOrder;
+        _setRoute(DrinkingWaterRoute(order?.deviceNo ?? ''));
+    }
   }
 
   void _openDevice(ShuiRuntime runtime, LocalDeviceShortcut device) {
@@ -655,12 +644,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   }
 
   Future<void> _clearLocalHotwater(ShuiRuntime runtime) async {
-    final session = runtime.state.hotwater.session;
-    if (session != null && runtime.pendingLegacy('hotwater', session.id)) {
-      await showLegacyRecoverySheet(
-          context, runtime, () => _setRoute(const AccountHubRoute()));
-      return;
-    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(

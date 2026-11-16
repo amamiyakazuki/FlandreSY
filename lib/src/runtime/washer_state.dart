@@ -1,18 +1,17 @@
-// Washer sub-state (no visual constants). Extracted like AccountState to keep the aggregate
-// ShuiHomeState from bloating (Grok P2 Major pattern). Holds program/order/payment/history.
+// Washer sub-state (no visual constants). Held by ShuiHomeState.washer.
 
 import 'package:flutter/foundation.dart';
 
 import 'models/washer_order.dart';
 import 'runtime_status.dart';
 
-/// 洗衣下单子状态（W1）。不可变 + copyWith。由 [ShuiHomeState.washer] 持有。
+/// 洗衣子状态。进行中的订单按账号分开保存：每个 U净 账号最多一笔，
+/// 切换账号不会互相阻塞；当前账号的订单由 [orderFor] 取出。
 @immutable
 class WasherState {
   const WasherState({
     this.program,
-    this.currentOrder,
-    this.payment,
+    this.orders = const <WasherOrderUi>[],
     this.history = const <WasherOrderHistoryUi>[],
     this.washerScan = const RuntimeActionStatus(),
     this.washerOrder = const RuntimeActionStatus(),
@@ -22,23 +21,27 @@ class WasherState {
   /// 扫码识别的洗衣程序信息（null = 未扫码）。
   final WasherProgramUi? program;
 
-  /// 当前订单（创建后存在，终态后清空）。
-  final WasherOrderUi? currentOrder;
+  /// 所有账号进行中的订单（每个账号至多一笔）。
+  final List<WasherOrderUi> orders;
 
-  /// 最近一次支付结果。
-  final WasherPaymentUi? payment;
-
-  /// 订单历史（本地累积）。
+  /// 已结束订单（本地累积，新的在前）。
   final List<WasherOrderHistoryUi> history;
 
-  /// 扫码动作状态。
   final RuntimeActionStatus washerScan;
 
-  /// 下单/刷新动作状态。
+  /// 下单 / 启动 / 停止 / 取消 / 刷新的状态提示。
   final RuntimeActionStatus washerOrder;
 
-  /// 支付动作状态（paymentInProgress 时禁用按钮）。
+  /// 支付状态提示（paymentInProgress 时禁用支付按钮）。
   final RuntimeActionStatus washerPayment;
+
+  WasherOrderUi? orderFor(String account) {
+    if (account.isEmpty) return null;
+    for (final order in orders) {
+      if (order.ownerAccountKey == account) return order;
+    }
+    return null;
+  }
 
   WasherState copyWith({
     RuntimeActionStatus? washerScan,
@@ -47,16 +50,11 @@ class WasherState {
     List<WasherOrderHistoryUi>? history,
     WasherProgramUi? program,
     bool clearProgram = false,
-    WasherOrderUi? currentOrder,
-    bool clearCurrentOrder = false,
-    WasherPaymentUi? payment,
-    bool clearPayment = false,
+    List<WasherOrderUi>? orders,
   }) {
     return WasherState(
       program: clearProgram ? null : (program ?? this.program),
-      currentOrder:
-          clearCurrentOrder ? null : (currentOrder ?? this.currentOrder),
-      payment: clearPayment ? null : (payment ?? this.payment),
+      orders: orders ?? this.orders,
       history: history ?? this.history,
       washerScan: washerScan ?? this.washerScan,
       washerOrder: washerOrder ?? this.washerOrder,

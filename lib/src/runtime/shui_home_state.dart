@@ -31,7 +31,7 @@ class ShuiHomeState {
     this.devicesSaving = false,
     this.devicesRefreshing = false,
     this.waterReady,
-    this.currentWaterOrder,
+    this.waterOrders = const <WaterOrderUi>[],
     this.waterResult,
     this.waterOrder = const RuntimeActionStatus(),
     this.waterHistory = const <WaterOrderHistoryUi>[],
@@ -86,8 +86,28 @@ class ShuiHomeState {
   /// 当前饮水机 ready 信息（扫码确认校区/余额，B2）。
   final WaterReadyUi? waterReady;
 
-  /// 当前接水订单（创建后存在，完成后清空，B2）。
-  final WaterOrderUi? currentWaterOrder;
+  /// 各账号进行中的接水订单（每个账号至多一笔）。
+  final List<WaterOrderUi> waterOrders;
+
+  /// 当前 U净 账号（手机号）；未登录为空。订单按它区分归属。
+  String get ujingAccountKey => ujingAccount?.mobile.trim() ?? '';
+
+  /// 当前账号进行中的接水订单。
+  WaterOrderUi? get currentWaterOrder {
+    final key = ujingAccountKey;
+    if (key.isEmpty) return null;
+    for (final o in waterOrders) {
+      if (o.ownerAccountKey == key) return o;
+    }
+    return null;
+  }
+
+  /// 其他账号仍在进行中的订单数量（切换账号后提示用）。
+  int get otherAccountActiveOrders {
+    final key = ujingAccountKey;
+    return washer.orders.where((o) => o.ownerAccountKey != key).length +
+        waterOrders.where((o) => o.ownerAccountKey != key).length;
+  }
 
   /// 当前流程最近一次已确认的结果，仅供接水页展示，离开流程后清理。
   final WaterOrderUi? waterResult;
@@ -126,8 +146,7 @@ class ShuiHomeState {
 
   // W1 洗衣委托 getter。
   WasherProgramUi? get washerProgram => washer.program;
-  WasherOrderUi? get currentWasherOrder => washer.currentOrder;
-  WasherPaymentUi? get currentWasherPayment => washer.payment;
+  WasherOrderUi? get currentWasherOrder => washer.orderFor(ujingAccountKey);
   List<WasherOrderHistoryUi> get washerHistory => washer.history;
   RuntimeActionStatus get washerOrder => washer.washerOrder;
   RuntimeActionStatus get washerPayment => washer.washerPayment;
@@ -214,38 +233,22 @@ class ShuiHomeState {
   }
 
   /// 洗衣任务标题：按订单 status 派生（对齐 legacy washerTaskTitle）。
-  static String _washerTaskTitle(WasherOrderUi order) {
-    switch (order.status) {
-      case '10':
-        return '洗衣待支付';
-      case '20':
-        return '洗衣已预约';
-      case '21':
-      case '40':
-        return '洗衣进行中';
-      case '50':
-        return '洗衣已完成';
-      default:
-        return '洗衣订单';
-    }
-  }
+  static String _washerTaskTitle(WasherOrderUi order) => switch (order.status) {
+        WasherStatus.unpaid => '洗衣待支付',
+        WasherStatus.reserved => '洗衣待启动',
+        WasherStatus.starting => '洗衣启动中',
+        WasherStatus.running => '洗衣中',
+        _ => '洗衣订单',
+      };
 
   /// 洗衣任务副信息：优先剩余/预约时间，否则状态文案（对齐 legacy washerTaskExtra）。
   static String _washerTaskExtra(WasherOrderUi order) {
-    if (order.remainTimeSeconds > 0) {
-      return '剩余 ${formatSeconds(order.remainTimeSeconds)}';
-    }
+    final remain = order.liveRemainSeconds(order.refreshedAtMillis);
+    if (remain > 0) return '剩余 ${formatSeconds(remain)}';
     if (order.countDownSeconds > 0) {
       return '预约 ${formatSeconds(order.countDownSeconds)}';
     }
-    switch (order.status) {
-      case '10':
-        return '待支付';
-      case '20':
-        return '待启动';
-      default:
-        return order.statusText;
-    }
+    return order.statusLabel;
   }
 
   /// 饮水任务标题：按 orderStatus 派生（对齐 legacy waterTaskTitle）。
@@ -318,15 +321,10 @@ class ShuiHomeState {
     List<WasherOrderHistoryUi>? washerHistory,
     WasherProgramUi? washerProgram,
     bool clearWasherProgram = false,
-    WasherOrderUi? currentWasherOrder,
-    bool clearCurrentWasherOrder = false,
-    WasherPaymentUi? currentWasherPayment,
-    bool clearWasherPayment = false,
     // 可空字段用显式 clear 标志清空（订单完成时 currentWaterOrder/ready -> null）。
     WaterReadyUi? waterReady,
     bool clearWaterReady = false,
-    WaterOrderUi? currentWaterOrder,
-    bool clearCurrentWaterOrder = false,
+    List<WaterOrderUi>? waterOrders,
     WaterOrderUi? waterResult,
     bool clearWaterResult = false,
   }) {
@@ -343,9 +341,7 @@ class ShuiHomeState {
       devicesSaving: devicesSaving ?? this.devicesSaving,
       devicesRefreshing: devicesRefreshing ?? this.devicesRefreshing,
       waterReady: clearWaterReady ? null : (waterReady ?? this.waterReady),
-      currentWaterOrder: clearCurrentWaterOrder
-          ? null
-          : (currentWaterOrder ?? this.currentWaterOrder),
+      waterOrders: waterOrders ?? this.waterOrders,
       waterResult: clearWaterResult ? null : (waterResult ?? this.waterResult),
       waterOrder: waterOrder ?? this.waterOrder,
       waterHistory: waterHistory ?? this.waterHistory,
@@ -384,10 +380,6 @@ class ShuiHomeState {
                 history: washerHistory,
                 program: washerProgram,
                 clearProgram: clearWasherProgram,
-                currentOrder: currentWasherOrder,
-                clearCurrentOrder: clearCurrentWasherOrder,
-                payment: currentWasherPayment,
-                clearPayment: clearWasherPayment,
               ),
     );
   }

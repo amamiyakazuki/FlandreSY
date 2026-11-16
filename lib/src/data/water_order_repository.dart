@@ -1,5 +1,3 @@
-// GAL REVIEW REQUIRED BEFORE NEXT MODULE
-// See the latest pending-review-request-*.md in P_PLAN/reviews/ and current-review-thread.md
 // Drinking-water order persistence abstraction (no visual constants). Same decoupling pattern as
 // HistoryRepository (PHIST) / LocalDeviceRepository (PDEV). PWATER (Phase 3 问题7): the current
 // water order (state.currentWaterOrder) + completed history (state.waterHistory) previously lived
@@ -10,70 +8,64 @@ import 'dart:convert';
 
 import '../runtime/models/water_order.dart';
 
-/// 饮水订单持久化的聚合快照：当前进行中订单（可空）+ 已完成历史列表。
+/// 饮水订单本地快照：各账号进行中的订单（每个账号至多一笔）+ 已完成历史。
 class WaterOrderSnapshot {
   const WaterOrderSnapshot({
-    this.currentOrder,
+    this.orders = const <WaterOrderUi>[],
     this.history = const <WaterOrderHistoryUi>[],
   });
 
-  /// 进行中的当前接水订单（创建后、完成前）。null = 无当前订单。
-  final WaterOrderUi? currentOrder;
-
-  /// 已完成的接水历史。
+  final List<WaterOrderUi> orders;
   final List<WaterOrderHistoryUi> history;
 }
 
-/// 饮水订单持久化接口（PWATER）。与 [HistoryRepository] 同构。
-///
-/// [load] 返回 null 表示「从未持久化过」（首启，无饮水数据）；返回非 null 快照表示
-/// 恢复用户上次的当前订单 + 历史。
+/// 饮水订单持久化接口。[load] 返回 null 表示从未保存过。
 abstract class WaterOrderRepository {
   Future<WaterOrderSnapshot?> load();
   Future<void> save(WaterOrderSnapshot snapshot);
 }
 
-/// 饮水订单 JSON 编解码（对齐 [WaterOrderUi] / [WaterOrderHistoryUi] 全字段）。
-/// 抽成静态供 SharedPrefs 实现 + fixture 直用。
+/// 饮水订单 JSON 编解码。兼容旧格式的单笔 `currentOrder`；
+/// 单条记录损坏只跳过该条，不让整份数据失效。
 class WaterOrderCodec {
   const WaterOrderCodec._();
 
   static String encode(WaterOrderSnapshot snapshot) {
     return jsonEncode(<String, dynamic>{
-      'currentOrder': snapshot.currentOrder == null
-          ? null
-          : orderToMap(snapshot.currentOrder!),
+      'version': 2,
+      'orders': snapshot.orders.map(orderToMap).toList(),
       'history': snapshot.history.map(historyToMap).toList(),
     });
   }
 
   static WaterOrderSnapshot decode(String json) {
-    if (json.isEmpty) throw const FormatException('饮水订单快照为空');
     final decoded = jsonDecode(json);
     if (decoded is! Map) {
       throw const FormatException('饮水订单快照不是对象');
     }
-    final map = decoded.cast<String, dynamic>();
-    final currentRaw = map['currentOrder'];
-    final historyRaw = map['history'];
-    if (historyRaw is! List || (currentRaw != null && currentRaw is! Map)) {
-      throw const FormatException('饮水订单快照字段损坏');
-    }
-    final history = <WaterOrderHistoryUi>[];
-    for (final item in historyRaw) {
-      if (item is Map) {
-        history.add(historyFromMap(item.cast<String, dynamic>()));
-      } else {
-        throw const FormatException('饮水历史记录损坏');
+    final orders = <WaterOrderUi>[];
+    final rawOrders = decoded['orders'];
+    if (rawOrders is List) {
+      for (final item in rawOrders) {
+        if (item is Map && _hasId(item)) orders.add(orderFromMap(item));
       }
     }
+    final legacyCurrent = decoded['currentOrder'];
+    if (legacyCurrent is Map && _hasId(legacyCurrent)) {
+      orders.add(orderFromMap(legacyCurrent));
+    }
+    final rawHistory = decoded['history'];
     return WaterOrderSnapshot(
-      currentOrder: currentRaw is Map
-          ? orderFromMap(currentRaw.cast<String, dynamic>())
-          : null,
-      history: history,
+      orders: orders,
+      history: [
+        if (rawHistory is List)
+          for (final item in rawHistory)
+            if (item is Map && _hasId(item)) historyFromMap(item),
+      ],
     );
   }
+
+  static bool _hasId(Map m) => '${m['orderId'] ?? ''}'.trim().isNotEmpty;
 
   static Map<String, dynamic> orderToMap(WaterOrderUi o) {
     return <String, dynamic>{
@@ -90,11 +82,11 @@ class WaterOrderCodec {
       'waterSeconds': o.waterSeconds,
       'payment': o.payment,
       'payFlag': o.payFlag,
+      'createdAtMillis': o.createdAtMillis,
     };
   }
 
-  static WaterOrderUi orderFromMap(Map<String, dynamic> m) {
-    _validateRecord(m);
+  static WaterOrderUi orderFromMap(Map m) {
     return WaterOrderUi(
       orderId: (m['orderId'] ?? '').toString(),
       ownerAccountKey: (m['ownerAccountKey'] ?? '').toString(),
@@ -109,6 +101,7 @@ class WaterOrderCodec {
       waterSeconds: _int(m['waterSeconds']),
       payment: _double(m['payment']),
       payFlag: _int(m['payFlag']),
+      createdAtMillis: _int(m['createdAtMillis']),
     );
   }
 
@@ -122,11 +115,11 @@ class WaterOrderCodec {
       'warmWaterMl': h.warmWaterMl,
       'waterSeconds': h.waterSeconds,
       'completedAt': h.completedAt,
+      'completedAtMillis': h.completedAtMillis,
     };
   }
 
-  static WaterOrderHistoryUi historyFromMap(Map<String, dynamic> m) {
-    _validateRecord(m);
+  static WaterOrderHistoryUi historyFromMap(Map m) {
     return WaterOrderHistoryUi(
       ownerAccountKey: (m['ownerAccountKey'] ?? '').toString(),
       orderId: (m['orderId'] ?? '').toString(),
@@ -136,15 +129,8 @@ class WaterOrderCodec {
       warmWaterMl: _int(m['warmWaterMl']),
       waterSeconds: _int(m['waterSeconds']),
       completedAt: (m['completedAt'] ?? '').toString(),
+      completedAtMillis: _int(m['completedAtMillis']),
     );
-  }
-
-  static void _validateRecord(Map<String, dynamic> m) {
-    if (m['orderId'] is! String ||
-        (m['orderId'] as String).trim().isEmpty ||
-        (m.containsKey('ownerAccountKey') && m['ownerAccountKey'] is! String)) {
-      throw const FormatException('饮水订单标识或归属损坏');
-    }
   }
 
   static int _int(Object? v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;

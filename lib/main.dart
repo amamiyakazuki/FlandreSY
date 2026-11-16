@@ -14,7 +14,6 @@ import 'src/data/adapters/shower798_adapter.dart';
 import 'src/data/adapters/ujing_adapter.dart';
 import 'src/data/adapters/ujing_http_adapter.dart';
 import 'src/data/app_bootstrap.dart';
-import 'src/data/legacy_data_migration.dart';
 import 'src/data/flutter_secure_session_repository.dart';
 import 'src/data/secure_session_repository.dart';
 import 'src/data/shared_prefs_account_session_repository.dart';
@@ -37,7 +36,6 @@ Future<void> main() async {
   final history = SharedPrefsHistoryRepository();
   final water = SharedPrefsWaterOrderRepository();
   final washerHistory = SharedPrefsWasherHistoryRepository();
-  final migration = LegacyDataMigration(SharedPrefsLegacyMigrationStore());
   final initial = await AppBootstrap.load(
     settings,
     sessions,
@@ -45,7 +43,6 @@ Future<void> main() async {
     history,
     water,
     washerHistory,
-    migration: migration,
   );
 
   // 与更新入口共用系统元信息读取；失败明确显示未知。
@@ -76,15 +73,11 @@ Future<void> main() async {
     }
   }
 
-  final String? ujingToken = !migration.needsLogin('ujing')
-      ? await loadCredential('U净', secure.loadUjingToken)
-      : null;
-  final ZhuliSessionData? zhuliSession = !migration.needsLogin('zhuli')
-      ? await loadCredential('住理', secure.loadZhuliSession)
-      : null;
-  final String? shower798Token = !migration.needsLogin('shower798')
-      ? await loadCredential('798', secure.loadShower798Token)
-      : null;
+  final String? ujingToken = await loadCredential('U净', secure.loadUjingToken);
+  final ZhuliSessionData? zhuliSession =
+      await loadCredential('住理', secure.loadZhuliSession);
+  final String? shower798Token =
+      await loadCredential('798', secure.loadShower798Token);
 
   // 真实模式注入真实 HTTP adapter（+ RealPaymentLauncher，支付宝 SDK 原生那一跳由用户真机验证）；
   final IUjingAdapter ujing = UjingHttpAdapter(
@@ -120,7 +113,6 @@ Future<void> main() async {
       diagnosticLog: diagnosticLog,
       appVersion: appVersion,
       initial: initial,
-      migration: migration,
     ),
   );
 }

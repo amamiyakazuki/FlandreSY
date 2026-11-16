@@ -22,7 +22,7 @@ mixin AccountAvailabilityActions on ShuiRuntimeBase {
   bool _changing(AccountKind kind) =>
       kind == AccountKind.ujing ? ujingAuthChanging : hotwaterAuthChanging;
   bool _writing(AccountKind kind) => kind == AccountKind.ujing
-      ? ujingMutationCount > 0
+      ? false
       : hotwaterOperationInFlight || hotwaterAccountWriteCount > 0;
   AuthService _service(AccountKind kind) => switch (kind) {
         AccountKind.zhuli => AuthService.zhuli,
@@ -49,10 +49,6 @@ mixin AccountAvailabilityActions on ShuiRuntimeBase {
   Future<void> checkAccountStatus(AccountKind kind) async {
     await ready;
     if (isDisposed) return;
-    if (!legacyServiceReady(_service(kind).name)) {
-      _status(kind, RuntimeTaskState.loginRequired, '旧数据已保留，请先重新登录');
-      return;
-    }
     if (_changing(kind) || _writing(kind)) {
       _status(kind, RuntimeTaskState.unavailable, '账号或设备操作正在处理，请稍后检测');
       return;
@@ -131,10 +127,6 @@ mixin AccountAvailabilityActions on ShuiRuntimeBase {
   Future<void> logoutAccount(AccountKind kind) async {
     await ready;
     if (isDisposed) return;
-    if (!legacyServiceReady(_service(kind).name)) {
-      _status(kind, RuntimeTaskState.loginRequired, '旧数据已保留，请先重新登录');
-      return;
-    }
     if (_changing(kind) || _writing(kind)) {
       _status(
           kind, RuntimeTaskState.unavailable, '账号或设备操作正在处理，请完成后再退出；不会取消已发送的操作');
