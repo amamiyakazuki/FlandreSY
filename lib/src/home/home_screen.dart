@@ -23,6 +23,8 @@ class HomeScreen extends StatelessWidget {
     required this.onWasherSummary,
     required this.onSwitchBathSystem,
     required this.onOpenHotwaterDetail,
+    this.onOpenTask,
+    this.nowMillis,
     super.key,
   });
 
@@ -35,6 +37,8 @@ class HomeScreen extends StatelessWidget {
   final VoidCallback onWasherSummary;
   final VoidCallback onSwitchBathSystem;
   final VoidCallback onOpenHotwaterDetail;
+  final ValueChanged<HomeTaskTarget>? onOpenTask;
+  final int Function()? nowMillis;
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +75,13 @@ class HomeScreen extends StatelessWidget {
                   ),
                   child: Column(
                     children: [
-                      OngoingCard(tasks: state.homeTasks),
+                      nowMillis == null
+                          ? OngoingCard(
+                              tasks: state.homeTasks, onOpenTask: onOpenTask)
+                          : OngoingCard(
+                              tasks: state.homeTasks,
+                              onOpenTask: onOpenTask,
+                              nowMillis: nowMillis!),
                       const SizedBox(height: AppCustomTokens.sectionGap),
                       HotWaterCard(
                         state: state,

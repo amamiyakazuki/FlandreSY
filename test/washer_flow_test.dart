@@ -346,6 +346,19 @@ void main() {
     expect(runtime.state.washerOrder.message, contains('洗衣中'));
   });
 
+  test('running order exposes a live end time to the home card', () async {
+    final runtime = await _runtime(_api());
+    await _createOrder(runtime);
+    await runtime.payCurrentWasherOrderWithAlipay(true);
+    await _settle();
+    final task = runtime.state.homeTasks.single;
+    expect(task.title, '洗衣中');
+    final order = runtime.state.currentWasherOrder!;
+    expect(task.endsAtMillis,
+        order.refreshedAtMillis + order.remainTimeSeconds * 1000);
+    expect(task.extra, '剩余 ${formatSeconds(order.remainTimeSeconds)}');
+  });
+
   test('orders saved without an end time get one on load', () {
     final order = WasherHistoryCodec.orderFromMap({
       'orderId': 'o',

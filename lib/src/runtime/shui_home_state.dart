@@ -201,6 +201,9 @@ class ShuiHomeState {
           title: _washerTaskTitle(washerOrder),
           extra: _washerTaskExtra(washerOrder),
           asset: 'shui_yifu.png',
+          endsAtMillis: washerOrder.status == WasherStatus.running
+              ? washerOrder.endsAtMillis
+              : 0,
         ),
       );
     }
@@ -248,7 +251,7 @@ class ShuiHomeState {
     if (order.countDownSeconds > 0) {
       return '预约 ${formatSeconds(order.countDownSeconds)}';
     }
-    return order.statusLabel;
+    return order.isUnknown ? order.statusLabel : '点击查看';
   }
 
   /// 饮水任务标题：按 orderStatus 派生（对齐 legacy waterTaskTitle）。

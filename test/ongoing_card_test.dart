@@ -152,18 +152,39 @@ void main() {
     }
   }
 
-  testWidgets('compact task exposes complete text on long press',
-      (tester) async {
-    const task = HomeTaskUi(
-        target: HomeTaskTarget.washer,
-        title: '洗衣订单状态较长等待更新',
-        extra: '剩余时间正在重新查询，请稍后核对',
-        asset: 'shui_yifu.png');
-    await _show(tester, [task], 288, scale: 2);
-    await tester.longPress(find.byType(RunningStatusCard));
-    await tester.pumpAndSettle();
-    expect(find.text('${task.title}\n${task.extra}'), findsOneWidget);
+  testWidgets('tapping a task opens its target', (tester) async {
+    final opened = <HomeTaskTarget>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: OngoingCard(tasks: _tasks, onOpenTask: opened.add))));
+    for (final card in find.byType(RunningStatusCard).evaluate().toList()) {
+      await tester.tap(find.byWidget(card.widget));
+      await tester.pumpAndSettle();
+    }
+    expect(opened, _tasks.map((t) => t.target).toList());
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a running washer counts down live on the home card',
+      (tester) async {
+    var now = 1700000000000;
+    final task = HomeTaskUi(
+        target: HomeTaskTarget.washer,
+        title: '洗衣中',
+        extra: '',
+        asset: 'shui_yifu.png',
+        endsAtMillis: now + 90 * 1000);
+    await tester.pumpWidget(MaterialApp(
+        home:
+            Scaffold(body: OngoingCard(tasks: [task], nowMillis: () => now))));
+    expect(find.text('剩余 01:30'), findsOneWidget);
+    now += 31 * 1000;
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('剩余 00:59'), findsOneWidget);
+    now += 120 * 1000;
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('即将完成'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('long labels have equal heights after task replacements settle',

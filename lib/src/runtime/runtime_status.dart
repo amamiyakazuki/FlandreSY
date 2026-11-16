@@ -43,9 +43,13 @@ class HomeTaskUi {
     required this.title,
     required this.extra,
     required this.asset,
+    this.endsAtMillis = 0,
   });
 
   final HomeTaskTarget target;
+
+  /// 预计结束时刻（毫秒）。>0 时卡片按当前时间实时显示剩余时间。
+  final int endsAtMillis;
   final String id;
   final String title;
   final String extra;

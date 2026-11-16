@@ -481,6 +481,8 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           },
           onScan: () => _scanFromHome(runtime),
           onWasherSummary: runtime.openWasherSummary,
+          onOpenTask: (target) => _openTask(runtime, target),
+          nowMillis: runtime.clock.nowMillis,
           onSwitchBathSystem: () => _setRoute(const AccountHubRoute()),
         ),
       MainTab.orders => OrdersScreen(

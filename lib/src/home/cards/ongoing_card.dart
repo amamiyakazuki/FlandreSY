@@ -1,18 +1,32 @@
 // Design tokens used: AppColors surface/service palette, AppTypography.textTheme, AppCustomTokens spacing/radius/sizing/alpha.
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../../design_tokens.dart';
+import '../../runtime/models/washer_order.dart' show formatSeconds;
 import '../../runtime/shui_runtime.dart';
 import '../../theme/shui_assets.dart';
+import '../../theme/shui_motion.dart';
 import '../../widgets/shui_components.dart';
 
+int _systemNow() => DateTime.now().millisecondsSinceEpoch;
+
 class OngoingCard extends StatelessWidget {
-  const OngoingCard({required this.tasks, super.key});
+  const OngoingCard({
+    required this.tasks,
+    this.onOpenTask,
+    this.nowMillis = _systemNow,
+    super.key,
+  });
 
   final List<HomeTaskUi> tasks;
+
+  /// 点击任务卡打开对应详情页。
+  final ValueChanged<HomeTaskTarget>? onOpenTask;
+  final int Function() nowMillis;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +66,10 @@ class OngoingCard extends StatelessWidget {
                               key: ValueKey(
                                   '${visible[i].target.name}-${visible[i].id}'),
                               task: visible[i],
+                              nowMillis: nowMillis,
+                              onTap: onOpenTask == null
+                                  ? null
+                                  : () => onOpenTask!(visible[i].target),
                             ),
                           ),
                         ],
@@ -113,20 +131,83 @@ class _EmptyRunningCard extends StatelessWidget {
   }
 }
 
-class RunningStatusCard extends StatelessWidget {
-  const RunningStatusCard({required this.task, super.key});
+class RunningStatusCard extends StatefulWidget {
+  const RunningStatusCard({
+    required this.task,
+    this.onTap,
+    this.nowMillis = _systemNow,
+    super.key,
+  });
 
   final HomeTaskUi task;
+  final VoidCallback? onTap;
+  final int Function() nowMillis;
+
+  @override
+  State<RunningStatusCard> createState() => _RunningStatusCardState();
+}
+
+class _RunningStatusCardState extends State<RunningStatusCard> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(RunningStatusCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTicker();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  /// 只有带结束时刻的任务（洗衣中）才每秒刷新剩余时间。
+  void _syncTicker() {
+    if (widget.task.endsAtMillis > 0) {
+      _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      _ticker?.cancel();
+      _ticker = null;
+    }
+  }
+
+  String get _extra {
+    final endsAt = widget.task.endsAtMillis;
+    if (endsAt <= 0) return widget.task.extra;
+    final remain = ((endsAt - widget.nowMillis()) / 1000).ceil();
+    return remain > 0 ? '剩余 ${formatSeconds(remain)}' : '即将完成';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final task = widget.task;
+    final card = _buildCard(context, task);
+    final onTap = widget.onTap;
+    if (onTap == null) return card;
+    return Semantics(
+      button: true,
+      label: '${task.title}，$_extra，点击查看',
+      child: ShuiPressable(soft: true, onTap: onTap, child: card),
+    );
+  }
+
+  Widget _buildCard(BuildContext context, HomeTaskUi task) {
     final color = switch (task.target) {
       HomeTaskTarget.drinking => AppColors.serviceBlue,
       HomeTaskTarget.washer => AppColors.serviceOrange,
       HomeTaskTarget.hotwater => AppColors.primary,
     };
-    return Tooltip(
-      message: '${task.title}\n${task.extra}',
+    return ExcludeSemantics(
+      excluding: widget.onTap != null,
       child: Container(
         height: _runningContentHeight(context),
         padding: const EdgeInsets.symmetric(
@@ -156,7 +237,7 @@ class RunningStatusCard extends StatelessWidget {
                   AppTypography.textTheme.labelMedium?.copyWith(color: color),
             ),
             Text(
-              task.extra,
+              _extra,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTypography.textTheme.bodySmall?.copyWith(
