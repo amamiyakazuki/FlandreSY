@@ -29,6 +29,7 @@ class TestRuntime extends ShuiRuntime {
     IShower798Adapter? shower798,
     super.clock,
     super.diagnosticLog,
+    super.notifier,
     super.appVersion,
     super.initial,
   }) : super(
@@ -59,6 +60,7 @@ class TestApp extends FlandreApp {
     IShower798Adapter? shower798,
     super.clock,
     super.diagnosticLog,
+    super.notifier,
     super.appVersion,
     super.initial,
     super.key,
@@ -91,6 +93,7 @@ class TestRuntimeScope extends ShuiRuntimeScope {
     IShower798Adapter? shower798,
     super.clock,
     super.diagnosticLog,
+    super.notifier,
     super.appVersion,
     super.initial,
     super.key,

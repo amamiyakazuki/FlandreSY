@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flandresy/src/data/account_session_repository.dart';
 import 'package:flandresy/src/data/adapters/ujing_adapter.dart';
 import 'package:flandresy/src/data/washer_history_repository.dart';
+import 'package:flandresy/src/notifications/order_notifier.dart';
 import 'package:flandresy/src/runtime/actions/washer_actions.dart';
 import 'package:flandresy/src/runtime/live_clock.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
@@ -31,8 +32,10 @@ class _Clock implements LiveClock {
 Future<TestRuntime> _runtime(FakeUjingAdapter api,
     {WasherHistoryRepository? repo,
     String account = _a,
-    LiveClock clock = const FixedLiveClock(_now)}) async {
+    LiveClock clock = const FixedLiveClock(_now),
+    OrderNotifier? notifier}) async {
   final runtime = TestRuntime(
+    notifier: notifier,
     ujing: api,
     washerHistory: repo ?? InMemoryWasherHistoryRepository(),
     sessions: InMemoryAccountSessionRepository(ujing: _account(account)),
@@ -116,16 +119,67 @@ void main() {
   });
 
   test(
-      'paying with auto start keeps checking in the background until the '
+      'paying with auto start runs the payment-watch service only until the '
       'washer starts', () async {
+    final notifier = RecordingNotifier();
     final api = _api()..alipayResult = null;
-    final runtime = await _runtime(api);
+    final runtime = await _runtime(api, notifier: notifier);
     await _createOrder(runtime);
     runtime.setPollingPaused(true);
     unawaited(runtime.payCurrentWasherOrderWithAlipay(true));
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
     expect(runtime.state.currentWasherOrder!.status, WasherStatus.running);
+    expect(notifier.paymentWatch, [true, false]);
+    expect(notifier.permissionRequests, greaterThan(0));
+  });
+
+  test('without auto start no payment-watch service is started', () async {
+    final notifier = RecordingNotifier();
+    final runtime = await _runtime(_api(), notifier: notifier);
+    await _createOrder(runtime);
+    await runtime.payCurrentWasherOrderWithAlipay(false);
+    expect(notifier.paymentWatch, isEmpty);
+  });
+
+  test('reminders follow the running order and are cleared when it ends',
+      () async {
+    final notifier = RecordingNotifier();
+    final api = _api();
+    final runtime = await _runtime(api, notifier: notifier);
+    await _createOrder(runtime);
+    await runtime.payCurrentWasherOrderWithAlipay(true);
+    await _settle();
+    final order = runtime.state.currentWasherOrder!;
+    expect(order.status, WasherStatus.running);
+    expect(notifier.reminderSyncs.last, [
+      WasherReminder(
+          orderId: order.orderId,
+          deviceNo: order.deviceNo,
+          endsAtMillis: _now + order.remainTimeSeconds * 1000),
+    ]);
+
+    // 再次刷新、结束时间没变：不重复预约。
+    final syncs = notifier.reminderSyncs.length;
+    await runtime.refreshCurrentWasherOrder();
+    expect(notifier.reminderSyncs.length, syncs);
+
+    api.setServerStatus(order.orderId, '50', text: '已完成');
+    await runtime.refreshCurrentWasherOrder();
+    expect(notifier.reminderSyncs.last, isEmpty);
+  });
+
+  test('switching account keeps the reminder of the order still washing',
+      () async {
+    final notifier = RecordingNotifier();
+    final runtime = await _runtime(_api(), notifier: notifier);
+    await _createOrder(runtime);
+    await runtime.payCurrentWasherOrderWithAlipay(true);
+    await _settle();
+    final id = runtime.state.currentWasherOrder!.orderId;
+
+    await runtime.loginUjing(_b, '1234');
+    expect(notifier.reminderSyncs.last.single.orderId, id);
   });
 
   test('create, pay and auto start in one flow', () async {
@@ -368,4 +422,25 @@ void main() {
     });
     expect(order.endsAtMillis, 1000 + 600 * 1000);
   });
+}
+
+class RecordingNotifier implements OrderNotifier {
+  final tapController = StreamController<NotificationTarget>();
+
+  @override
+  Stream<NotificationTarget> get taps => tapController.stream;
+
+  final reminderSyncs = <List<WasherReminder>>[];
+  final paymentWatch = <bool>[];
+  int permissionRequests = 0;
+
+  @override
+  Future<void> syncWasherReminders(List<WasherReminder> reminders) async =>
+      reminderSyncs.add(reminders);
+
+  @override
+  Future<void> setPaymentWatch(bool active) async => paymentWatch.add(active);
+
+  @override
+  Future<void> requestPermission() async => permissionRequests++;
 }

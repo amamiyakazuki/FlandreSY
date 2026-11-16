@@ -22,6 +22,7 @@ import '../data/settings_repository.dart';
 import '../data/water_order_repository.dart';
 import '../data/washer_history_repository.dart';
 import '../more/version_check.dart' show kCurrentAppVersion;
+import '../notifications/order_notifier.dart';
 import 'diagnostic_log.dart';
 import 'live_clock.dart';
 import 'models/hotwater_history.dart';
@@ -51,9 +52,11 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
     required this.hotwater,
     required this.shower798,
     DiagnosticLog? diagnosticLog,
+    OrderNotifier? notifier,
     String? appVersion,
     PersistedSnapshot? initial,
-  })  : settings = settings ?? InMemorySettingsRepository(),
+  })  : notifier = notifier ?? const NoopOrderNotifier(),
+        settings = settings ?? InMemorySettingsRepository(),
         sessions = sessions ?? InMemoryAccountSessionRepository(),
         devices = devices ?? InMemoryLocalDeviceRepository(),
         history = history ?? InMemoryHistoryRepository(),
@@ -252,6 +255,8 @@ abstract class ShuiRuntimeBase extends ChangeNotifier {
 
   final DiagnosticLog diagnosticLog;
 
+  /// 系统通知：洗衣提醒与付款跟进前台服务。默认不做任何事（测试 / 非 Android）。
+  final OrderNotifier notifier;
   final String appVersion;
 
   ShuiHomeState _state;

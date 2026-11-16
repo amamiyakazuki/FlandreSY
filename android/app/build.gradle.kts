@@ -25,12 +25,14 @@ plugins {
 
 android {
     namespace = "com.flandresy"
-    // 以 API 37 编译（新版 androidx 依赖要求）；只影响编译期可用 API，
-    // 运行行为由 targetSdk 决定（未改动）。
+    // flutter_local_notifications 23 及其 androidx 依赖要求以 API 37 编译；
+    // 只影响编译期可用 API，运行行为由 targetSdk 决定（未改动）。
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications 的定时通知依赖 Java 8+ 时间 API 脱糖。
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -88,6 +90,7 @@ dependencies {
     // Alipay SDK (for real payment with --dart-define=UJING_HTTP=true)
     // Version matches the legacy Kotlin project.
     implementation("com.alipay.sdk:alipaysdk-android:15.8.42")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 // Gate release tasks, including aggregate build/assemble, without blocking Debug CI.

@@ -24,6 +24,7 @@ import 'src/data/shared_prefs_settings_repository.dart';
 import 'src/data/shared_prefs_water_order_repository.dart';
 import 'src/data/shared_prefs_washer_history_repository.dart';
 import 'src/more/version_check.dart' show currentAppVersion;
+import 'src/notifications/local_order_notifier.dart';
 import 'src/runtime/diagnostic_log.dart';
 import 'src/runtime/live_clock.dart';
 
@@ -111,6 +112,7 @@ Future<void> main() async {
       hotwater: hotwater,
       shower798: shower798,
       diagnosticLog: diagnosticLog,
+      notifier: LocalOrderNotifier(log: diagnosticLog.sinkFor('notify')),
       appVersion: appVersion,
       initial: initial,
     ),

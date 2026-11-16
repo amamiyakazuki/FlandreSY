@@ -15,6 +15,7 @@ import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
 import '../hotwater/hotwater_detail_screen.dart';
 import '../more/more_options_screen.dart';
+import '../notifications/order_notifier.dart';
 import '../more/log_screen.dart';
 import '../orders/orders_screen.dart';
 import '../profile/account_detail_screen.dart';
@@ -126,8 +127,26 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
     });
   }
 
+  StreamSubscription<NotificationTarget>? _notificationTaps;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 点击洗衣通知（包括通知冷启动 App）直接打开洗衣订单页。
+    _notificationTaps ??= ShuiRuntimeScope.of(context).notifier.taps.listen(
+      (target) {
+        if (!mounted) return;
+        switch (target) {
+          case NotificationTarget.washer:
+            _openTask(ShuiRuntimeScope.of(context), HomeTaskTarget.washer);
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _notificationTaps?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

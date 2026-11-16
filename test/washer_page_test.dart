@@ -2,10 +2,14 @@ import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flandresy/src/runtime/models/washer_order.dart';
 import 'package:flandresy/src/runtime/washer_state.dart';
 import 'package:flandresy/src/washer/washer_order_screen.dart';
+import 'package:flandresy/src/data/app_bootstrap.dart';
+import 'package:flandresy/src/notifications/order_notifier.dart';
+import 'package:flandresy/src/shell/shui_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/test_runtime.dart';
+import 'washer_flow_test.dart' show RecordingNotifier;
 
 const _account = '13800000001';
 const _now = 1700000000000;
@@ -101,5 +105,33 @@ void main() {
     await tester.tap(find.text('移除'));
     await tester.pumpAndSettle();
     expect(calls, ['remove']);
+  });
+
+  testWidgets('tapping a washer notification opens the washer order page',
+      (tester) async {
+    final notifier = RecordingNotifier();
+    await tester.pumpWidget(MaterialApp(
+        home: TestRuntimeScope(
+      notifier: notifier,
+      initial: PersistedSnapshot(
+        bathSystem: BathSystemPreference.none,
+        permissionIntroSeen: true,
+        ujing: const UjingAccountUi(
+            mobile: _account, userId: 'u', serviceSubjectId: 's'),
+        washerOrders: [_order(WasherStatus.running, remain: 600)],
+      ),
+      child: const ShuiShell(),
+    )));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(WasherOrderScreen), findsNothing);
+
+    notifier.tapController.add(NotificationTarget.washer);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(WasherOrderScreen), findsOneWidget);
+    expect(find.text('洗衣订单'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 1));
   });
 }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知栏小图标：单色洗衣机轮廓（系统只使用 alpha 通道）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M6,2h12a2,2 0,0 1,2 2v16a2,2 0,0 1,-2 2H6a2,2 0,0 1,-2 -2V4a2,2 0,0 1,2 -2zM7,4.5a1,1 0,1 0,0 2a1,1 0,1 0,0 -2zM10,4.5a1,1 0,1 0,0 2a1,1 0,1 0,0 -2zM12,8.5a5,5 0,1 0,0 10a5,5 0,1 0,0 -10zM12,10.5a3,3 0,1 1,0 6a3,3 0,1 1,0 -6z" />
+</vector>

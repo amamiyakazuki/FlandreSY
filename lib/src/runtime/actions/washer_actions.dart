@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../data/adapters/ujing_adapter.dart';
 import '../../data/washer_history_repository.dart';
+import '../../notifications/order_notifier.dart';
 import '../models/washer_order.dart';
 import '../runtime_status.dart';
 import '../shui_runtime_base.dart';
@@ -35,6 +36,7 @@ mixin WasherActions on ShuiRuntimeBase {
   int _washerFinishAt = 0;
   Timer? _paymentWatchTimer;
   int _paymentWatchUntil = 0;
+  List<WasherReminder>? _syncedReminders;
 
   /// 当前订单仍在等待「到账后自动启动」，且在跟进时间窗口内。
   bool get _awaitingAutoStart {
@@ -215,6 +217,7 @@ mixin WasherActions on ShuiRuntimeBase {
   void syncOrderPolling() {
     super.syncOrderPolling();
     _syncPaymentWatch();
+    _syncReminders();
     final order = state.currentWasherOrder;
     final active = ordersReady && !pollingPaused && order != null;
     if (!active) {
@@ -252,10 +255,12 @@ mixin WasherActions on ShuiRuntimeBase {
       if (_paymentWatchTimer != null) {
         _paymentWatchTimer!.cancel();
         _paymentWatchTimer = null;
+        unawaited(notifier.setPaymentWatch(false));
       }
       return;
     }
     if (_paymentWatchTimer != null) return;
+    unawaited(notifier.setPaymentWatch(true));
     _paymentWatchTimer = Timer.periodic(paymentWatchInterval, (_) {
       if (!_awaitingAutoStart) {
         _syncPaymentWatch();
@@ -265,11 +270,45 @@ mixin WasherActions on ShuiRuntimeBase {
     });
   }
 
+  /// 所有账号洗衣中的订单都预约提醒（切换账号不影响已在洗的衣服）。
+  /// 只在提醒内容变化时通知系统，避免每次状态更新都重新预约。
+  void _syncReminders() {
+    if (!ordersReady) return;
+    final reminders = [
+      for (final o in state.washer.orders)
+        if (o.status == WasherStatus.running && o.endsAtMillis > 0)
+          WasherReminder(
+            orderId: o.orderId,
+            deviceNo: o.deviceNo,
+            endsAtMillis: o.endsAtMillis,
+          ),
+    ];
+    final last = _syncedReminders;
+    if (last != null && _sameReminders(last, reminders)) return;
+    _syncedReminders = reminders;
+    unawaited(notifier.syncWasherReminders(reminders));
+  }
+
+  /// 服务端剩余时间按秒取整，相差一分钟以内的刷新不重新预约。
+  static bool _sameReminders(List<WasherReminder> a, List<WasherReminder> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].orderId != b[i].orderId ||
+          (a[i].endsAtMillis - b[i].endsAtMillis).abs() > 60 * 1000) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   @override
   void dispose() {
     _washerPollTimer?.cancel();
     _washerFinishTimer?.cancel();
-    _paymentWatchTimer?.cancel();
+    if (_paymentWatchTimer != null) {
+      _paymentWatchTimer!.cancel();
+      unawaited(notifier.setPaymentWatch(false));
+    }
     super.dispose();
   }
 
@@ -408,6 +447,8 @@ mixin WasherActions on ShuiRuntimeBase {
           RuntimeTaskState.paymentInProgress, '正在等待支付宝返回；如已付款，回到这里会自动确认');
       return;
     }
+    // 付款前申请通知权限：用于付款跟进的常驻通知和之后的洗衣提醒。
+    await notifier.requestPermission();
     if (autoStartAfterPayment) {
       _paymentWatchUntil =
           clock.nowMillis() + paymentWatchWindow.inMilliseconds;
@@ -470,6 +511,7 @@ mixin WasherActions on ShuiRuntimeBase {
   }
 
   Future<void> _startOrder(WasherOrderUi order) async {
+    unawaited(notifier.requestPermission());
     await _runAction(() async {
       _orderNotice('正在启动洗衣机', status: RuntimeTaskState.loading);
       final result = await ujing.startWasherOrder(order);

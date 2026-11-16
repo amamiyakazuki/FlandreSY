@@ -31,6 +31,7 @@ import 'actions/washer_actions.dart';
 import 'actions/water_actions.dart';
 import 'live_clock.dart';
 import 'diagnostic_log.dart';
+import '../notifications/order_notifier.dart';
 import 'shui_runtime_base.dart';
 
 export 'runtime_status.dart';
@@ -60,6 +61,7 @@ class ShuiRuntime extends ShuiRuntimeBase
     required super.hotwater,
     required super.shower798,
     super.diagnosticLog,
+    super.notifier,
     super.appVersion,
     super.initial,
   });
@@ -80,6 +82,7 @@ class ShuiRuntimeScope extends StatefulWidget {
     required this.hotwater,
     required this.shower798,
     this.diagnosticLog,
+    this.notifier,
     this.appVersion,
     this.initial,
     super.key,
@@ -119,6 +122,7 @@ class ShuiRuntimeScope extends StatefulWidget {
   final IShower798Adapter shower798;
 
   final DiagnosticLog? diagnosticLog;
+  final OrderNotifier? notifier;
   final String? appVersion;
 
   /// 可选预加载的持久化快照（main() 启动前已 await 读出，消除首帧闪烁）。
@@ -158,6 +162,7 @@ class _ShuiRuntimeScopeState extends State<ShuiRuntimeScope>
       hotwater: widget.hotwater,
       shower798: widget.shower798,
       diagnosticLog: widget.diagnosticLog,
+      notifier: widget.notifier,
       appVersion: widget.appVersion,
       initial: widget.initial,
     );

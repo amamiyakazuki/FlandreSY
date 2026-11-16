@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 通知图标在运行时按名字查找，release 资源压缩看不到引用，必须显式保留，
+     否则通知会静默失败。 -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_washer" />

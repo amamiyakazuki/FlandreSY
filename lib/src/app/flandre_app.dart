@@ -14,6 +14,7 @@ import '../data/secure_session_repository.dart';
 import '../data/settings_repository.dart';
 import '../data/water_order_repository.dart';
 import '../data/washer_history_repository.dart';
+import '../notifications/order_notifier.dart';
 import '../runtime/diagnostic_log.dart';
 import '../runtime/shui_runtime.dart';
 import '../runtime/live_clock.dart';
@@ -33,6 +34,7 @@ class FlandreApp extends StatelessWidget {
     required this.hotwater,
     required this.shower798,
     this.diagnosticLog,
+    this.notifier,
     this.appVersion,
     this.initial,
     super.key,
@@ -73,6 +75,9 @@ class FlandreApp extends StatelessWidget {
   /// 可选注入的诊断日志器（M-REAL）。main() 注入持久化实现 + adapter 埋点。
   final DiagnosticLog? diagnosticLog;
 
+  /// 系统通知（洗衣提醒、付款跟进）。main() 注入 Android 实现。
+  final OrderNotifier? notifier;
+
   /// 可选注入的真实 App 版本号（M-REAL PackageInfo.version）。null → 常量兜底。
   final String? appVersion;
 
@@ -104,6 +109,7 @@ class FlandreApp extends StatelessWidget {
         hotwater: hotwater,
         shower798: shower798,
         diagnosticLog: diagnosticLog,
+        notifier: notifier,
         appVersion: appVersion,
         initial: initial,
         child: const ShuiShell(),
