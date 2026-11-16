@@ -25,7 +25,9 @@ plugins {
 
 android {
     namespace = "com.flandresy"
-    compileSdk = flutter.compileSdkVersion
+    // 以 API 37 编译（新版 androidx 依赖要求）；只影响编译期可用 API，
+    // 运行行为由 targetSdk 决定（未改动）。
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
