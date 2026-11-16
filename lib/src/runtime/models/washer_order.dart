@@ -132,6 +132,10 @@ class WasherOrderUi {
     this.endsAtMillis = 0,
   });
 
+  /// 实际洗衣通常比程序标称时间多几分钟，预计结束时间统一在服务端剩余时间上
+  /// 加这么多。只影响倒计时和提醒，下单页显示的程序时长不变。
+  static const Duration finishBuffer = Duration(minutes: 5);
+
   final String orderId;
   final String deviceNo;
 
@@ -157,8 +161,8 @@ class WasherOrderUi {
   /// 下次查询到「已支付待启动」仍会补发启动；发送一次后清除，避免重复启动。
   final bool autoStart;
 
-  /// 预计结束时刻（毫秒），由服务端剩余时间推算；不在洗衣中时为 0。
-  /// 服务端剩余归零但仍在洗时保留上一次的值。
+  /// 预计结束时刻（毫秒）= 服务端剩余时间 + [finishBuffer]；不在洗衣中时为 0。
+  /// 服务端剩余归零但仍在洗时保留上一次的值，倒计时继续走完余量。
   final int endsAtMillis;
 
   /// 洗衣中的实时剩余秒数；不在洗衣中或没有剩余时间时为 0。
@@ -173,7 +177,7 @@ class WasherOrderUi {
       String status, int remainSeconds, int atMillis, int previous) {
     if (status != WasherStatus.running) return 0;
     if (remainSeconds <= 0 || atMillis <= 0) return previous;
-    return atMillis + remainSeconds * 1000;
+    return atMillis + remainSeconds * 1000 + finishBuffer.inMilliseconds;
   }
 
   bool get isTerminal => WasherStatus.terminal.contains(status);

@@ -156,7 +156,7 @@ void main() {
       WasherReminder(
           orderId: order.orderId,
           deviceNo: order.deviceNo,
-          endsAtMillis: _now + order.remainTimeSeconds * 1000),
+          endsAtMillis: _now + order.remainTimeSeconds * 1000 + 5 * 60 * 1000),
     ]);
 
     // 再次刷新、结束时间没变：不重复预约。
@@ -409,18 +409,50 @@ void main() {
     expect(task.title, '洗衣中');
     final order = runtime.state.currentWasherOrder!;
     expect(task.endsAtMillis,
-        order.refreshedAtMillis + order.remainTimeSeconds * 1000);
-    expect(task.extra, '剩余 ${formatSeconds(order.remainTimeSeconds)}');
+        order.refreshedAtMillis + order.remainTimeSeconds * 1000 + 300 * 1000);
+    expect(task.extra, '剩余 ${formatSeconds(order.remainTimeSeconds + 300)}');
   });
 
-  test('orders saved without an end time get one on load', () {
+  test('expected end adds 5 minutes and survives the server reaching zero', () {
+    const base = WasherOrderUi(
+        orderId: 'o',
+        deviceNo: 'd',
+        statusText: '',
+        payPrice: '¥2.10',
+        status: WasherStatus.reserved);
+    const remote45 = WasherOrderUi(
+        orderId: 'o',
+        deviceNo: 'd',
+        statusText: '',
+        payPrice: '¥2.10',
+        status: WasherStatus.running,
+        remainTimeSeconds: 45 * 60);
+    final started = base.mergeRemote(remote45, 1000);
+    expect(started.endsAtMillis, 1000 + 50 * 60 * 1000);
+    expect(started.liveRemainSeconds(1000), 50 * 60);
+
+    // 标称时间走完、服务端剩余归零但仍在洗：继续倒数余下的 5 分钟。
+    final late = started.mergeRemote(
+        remote45.copyWith(remainTimeSeconds: 0), 1000 + 45 * 60 * 1000);
+    expect(late.endsAtMillis, started.endsAtMillis);
+    expect(late.liveRemainSeconds(1000 + 45 * 60 * 1000), 5 * 60);
+
+    final done = late.mergeRemote(
+        remote45.copyWith(status: WasherStatus.finished, remainTimeSeconds: 0),
+        1000 + 48 * 60 * 1000);
+    expect(done.endsAtMillis, 0);
+    expect(done.liveRemainSeconds(1000 + 48 * 60 * 1000), 0);
+  });
+
+  test('orders saved before the buffer existed get an expected end on load',
+      () {
     final order = WasherHistoryCodec.orderFromMap({
       'orderId': 'o',
       'status': WasherStatus.running,
       'remainTimeSeconds': 600,
       'refreshedAtMillis': 1000,
     });
-    expect(order.endsAtMillis, 1000 + 600 * 1000);
+    expect(order.endsAtMillis, 1000 + 900 * 1000);
   });
 }
 

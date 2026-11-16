@@ -74,10 +74,11 @@ void main() {
     expect(calls, ['pay:true']);
   });
 
-  testWidgets('running order shows a live countdown and a stop action',
+  testWidgets(
+      'running order counts down the server time plus 5 minutes, with a stop action',
       (tester) async {
     await _pump(tester, _state(_order(WasherStatus.running, remain: 35 * 60)));
-    expect(find.text('35:00'), findsOneWidget);
+    expect(find.text('40:00'), findsOneWidget);
     expect(find.text('提前停止'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
