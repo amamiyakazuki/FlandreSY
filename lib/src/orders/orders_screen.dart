@@ -12,10 +12,10 @@ import '../runtime/live_clock.dart';
 import '../runtime/models/washer_order.dart';
 import '../theme/shui_assets.dart';
 import '../theme/shui_motion.dart';
+import '../widgets/bottom_peek_character.dart';
 import '../widgets/order_list_item.dart';
 import '../widgets/shui_animated_list.dart';
 import '../stats/spending_stats.dart';
-import '../washer/washer_payment_card.dart' show formatOrderTime;
 import '../widgets/shui_components.dart';
 import '../widgets/shui_header.dart';
 import 'order_models.dart';
@@ -110,53 +110,56 @@ class _OrdersScreenState extends State<OrdersScreen> {
   @override
   Widget build(BuildContext context) {
     _syncTimers();
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final bottomPadding = AppCustomTokens.bottomBarHeight +
-        bottomInset +
-        AppCustomTokens.bottomContentExtraPadding;
+    final bottomPadding = bottomPeekReserve(context);
     return Scaffold(
-      body: Column(
+      body: Stack(
         children: [
-          TopHeader(title: '历史订单', showBack: true, onBack: widget.onBack),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                AppCustomTokens.spaceMd,
-                AppCustomTokens.spaceSm,
-                AppCustomTokens.spaceMd,
-                bottomPadding,
-              ),
-              child: Column(
-                children: [
-                  if (widget.onOpenStats != null) ...[
-                    _MonthSpendingEntry(
-                      state: widget.state,
-                      nowMillis: widget.clock.nowMillis(),
-                      onTap: widget.onOpenStats!,
-                    ),
-                    const SizedBox(height: AppCustomTokens.spaceSm),
-                  ],
-                  _buildChipRow(),
-                  const SizedBox(height: AppCustomTokens.spaceSm),
-                  if (_category != OrderCategory.hotwater &&
-                      widget.state.otherAccountActiveOrders > 0) ...[
-                    _OtherAccountHint(
-                        count: widget.state.otherAccountActiveOrders),
-                    const SizedBox(height: AppCustomTokens.spaceSm),
-                  ],
-                  AnimatedSwitcher(
-                    duration: ShuiMotion.duration(context, ShuiMotion.local),
-                    switchInCurve: ShuiMotion.easeOut,
-                    switchOutCurve: ShuiMotion.easeIn,
-                    child: Column(
-                      key: ValueKey(_category),
-                      children: _buildCategoryContent(),
-                    ),
+          Column(
+            children: [
+              TopHeader(title: '历史订单', showBack: true, onBack: widget.onBack),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    AppCustomTokens.spaceMd,
+                    AppCustomTokens.spaceSm,
+                    AppCustomTokens.spaceMd,
+                    bottomPadding,
                   ),
-                ],
+                  child: Column(
+                    children: [
+                      if (widget.onOpenStats != null) ...[
+                        _MonthSpendingEntry(
+                          state: widget.state,
+                          nowMillis: widget.clock.nowMillis(),
+                          onTap: widget.onOpenStats!,
+                        ),
+                        const SizedBox(height: AppCustomTokens.spaceSm),
+                      ],
+                      _buildChipRow(),
+                      const SizedBox(height: AppCustomTokens.spaceSm),
+                      if (_category != OrderCategory.hotwater &&
+                          widget.state.otherAccountActiveOrders > 0) ...[
+                        _OtherAccountHint(
+                            count: widget.state.otherAccountActiveOrders),
+                        const SizedBox(height: AppCustomTokens.spaceSm),
+                      ],
+                      AnimatedSwitcher(
+                        duration:
+                            ShuiMotion.duration(context, ShuiMotion.local),
+                        switchInCurve: ShuiMotion.easeOut,
+                        switchOutCurve: ShuiMotion.easeIn,
+                        child: Column(
+                          key: ValueKey(_category),
+                          children: _buildCategoryContent(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
+          const BottomPeekCharacter(),
         ],
       ),
     );
@@ -206,7 +209,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (_category == OrderCategory.hotwater) {
       return [
         HotwaterHistoryPanel(
-            state: widget.state, onRefresh: widget.onRefreshHotwater)
+            state: widget.state,
+            onRefresh: widget.onRefreshHotwater,
+            nowMillis: widget.clock.nowMillis)
       ];
     }
     final rows = switch (_category) {
@@ -249,6 +254,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return key.isEmpty || owner.isEmpty || owner == key;
   }
 
+  /// 标题优先用设备列表里的自定义名称（如「海七-五楼左」），找不到时用设备号。
+  String _deviceTitle(String deviceNo, String fallback) {
+    final no = deviceNo.trim();
+    if (no.isEmpty) return fallback;
+    for (final d in widget.state.localDevices) {
+      if (d.deviceNo?.trim() == no && d.customName.trim().isNotEmpty) {
+        return d.customName.trim();
+      }
+    }
+    return '$fallback $no';
+  }
+
   List<OrderRowUi> _drinkingRows() {
     final s = widget.state;
     final now = widget.clock.nowMillis();
@@ -258,11 +275,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
       rows.add(
         OrderRowUi(
           id: 'water-${current.orderId}',
-          type: '饮水',
-          time: current.createdAtMillis > 0
+          title: _deviceTitle(current.deviceNo, '饮水机'),
+          subtitle: current.createdAtMillis > 0
               ? formatOrderTime(current.createdAtMillis, now)
               : '进行中',
-          device: current.deviceNo.isEmpty ? '饮水机' : '饮水机 ${current.deviceNo}',
           amount: current.payment > 0
               ? formatFenAmount((current.payment * 100).round())
               : '',
@@ -278,11 +294,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
       rows.add(
         OrderRowUi(
           id: 'water-${h.orderId}',
-          type: '饮水',
-          time: h.completedAtMillis > 0
+          title: _deviceTitle(h.deviceNo, '饮水机'),
+          subtitle: h.completedAtMillis > 0
               ? formatOrderTime(h.completedAtMillis, now)
               : h.completedAt,
-          device: h.deviceNo.isEmpty ? '饮水机' : '饮水机 ${h.deviceNo}',
           amount: formatFenAmount((h.payment * 100).round()),
           status: h.status,
           statusColor: AppColors.serviceGreen,
@@ -303,13 +318,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
       rows.add(
         OrderRowUi(
           id: 'washer-${current.orderId}',
-          type: '洗衣',
-          time: remain > 0
+          title: _deviceTitle(current.deviceNo, '洗衣机'),
+          subtitle: remain > 0
               ? '剩余 ${formatSeconds(remain)}'
               : current.createdAtMillis > 0
                   ? formatOrderTime(current.createdAtMillis, now)
                   : '进行中',
-          device: current.deviceNo.isEmpty ? '洗衣机' : '洗衣机 ${current.deviceNo}',
           amount: current.payPrice,
           status: current.statusLabel,
           statusColor: _washerStatusColor(current.status),
@@ -323,11 +337,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
       rows.add(
         OrderRowUi(
           id: 'washer-${h.orderId}',
-          type: '洗衣',
-          time: h.createdAtMillis > 0
+          title: _deviceTitle(h.deviceNo, '洗衣机'),
+          subtitle: h.createdAtMillis > 0
               ? formatOrderTime(h.createdAtMillis, now)
               : '',
-          device: h.deviceNo.isEmpty ? '洗衣机' : '洗衣机 ${h.deviceNo}',
           amount: h.payPrice,
           status: h.statusText.isEmpty
               ? WasherStatus.label(h.status)

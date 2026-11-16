@@ -3,13 +3,26 @@ import 'package:flutter/material.dart';
 import '../../design_tokens.dart';
 import '../runtime/shui_runtime.dart';
 import '../runtime/models/hotwater_history.dart';
+import '../orders/order_models.dart';
+import '../theme/shui_assets.dart';
+import '../widgets/order_list_item.dart';
 import '../widgets/shui_components.dart';
 
 /// 订单页与热水详情共用的住理热水记录列表（只显示当前账号）。
 class HotwaterHistoryPanel extends StatelessWidget {
-  const HotwaterHistoryPanel({required this.state, this.onRefresh, super.key});
+  const HotwaterHistoryPanel({
+    required this.state,
+    this.onRefresh,
+    this.nowMillis = _systemNow,
+    super.key,
+  });
   final ShuiHomeState state;
   final VoidCallback? onRefresh;
+
+  /// 用于把记录时间显示成「今天 HH:mm」「M月d日 HH:mm」。
+  final int Function() nowMillis;
+
+  static int _systemNow() => DateTime.now().millisecondsSinceEpoch;
 
   @override
   Widget build(BuildContext context) {
@@ -30,10 +43,25 @@ class HotwaterHistoryPanel extends StatelessWidget {
         : !state.zhuli.isLoggedIn
             ? '请先登录住理账号后查询历史'
             : fallback;
-    Widget row(HotwaterHistoryUi h) => Padding(
-          padding: const EdgeInsets.only(bottom: AppCustomTokens.spaceSm),
-          child: _HistoryRow(time: h.time, amount: h.amount, status: h.status),
-        );
+    final now = nowMillis();
+    // 和饮水、洗衣订单用同一种卡片；同一个浴室不需要设备名，标题直接用时间。
+    Widget row(HotwaterHistoryUi h) {
+      final at = h.timeMillis;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AppCustomTokens.spaceSm),
+        child: OrderListItem(
+          order: OrderRowUi(
+            id: 'hotwater-${h.orderId}',
+            title: at == null ? h.time : formatOrderTime(at, now),
+            amount: h.amount,
+            status: h.status,
+            statusColor: AppColors.serviceGreen,
+            iconAsset: ShuiAssets.shuiReshui,
+          ),
+        ),
+      );
+    }
+
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Row(children: [
         Expanded(
@@ -54,56 +82,5 @@ class HotwaterHistoryPanel extends StatelessWidget {
       const SizedBox(height: AppCustomTokens.spaceSm),
       ...rows.map(row),
     ]);
-  }
-}
-
-class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({
-    required this.time,
-    required this.amount,
-    required this.status,
-  });
-
-  final String time;
-  final String amount;
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = AppTypography.textTheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppCustomTokens.radiusMedium,
-        vertical: AppCustomTokens.spaceSm,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppCustomTokens.radiusMedium),
-        border: Border.all(
-          color: AppColors.cardBorder
-              .withValues(alpha: AppCustomTokens.alphaOverlay),
-          width: AppCustomTokens.strokeThin,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(time,
-              style: textTheme.bodyMedium?.copyWith(color: AppColors.deepText)),
-          const SizedBox(height: AppCustomTokens.spaceXs),
-          Wrap(
-            spacing: AppCustomTokens.spaceSm,
-            runSpacing: AppCustomTokens.spaceXs,
-            children: [
-              Text(amount,
-                  style: textTheme.titleSmall
-                      ?.copyWith(color: AppColors.deepText)),
-              Text(status,
-                  style: textTheme.labelMedium
-                      ?.copyWith(color: AppColors.serviceGreen)),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -49,8 +49,12 @@ class CategoryChip extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            DecorativeImage(iconAsset,
-                size: AppCustomTokens.categoryChipIconSize),
+            // 选中时底色就是图标的颜色，图标改成白色，和文字一致。
+            DecorativeImage(
+              iconAsset,
+              size: AppCustomTokens.categoryChipIconSize,
+              color: selected ? AppColors.onPrimary : null,
+            ),
             const SizedBox(width: AppCustomTokens.spaceXs),
             Text(
               text,
@@ -66,7 +70,7 @@ class CategoryChip extends StatelessWidget {
   }
 }
 
-/// 订单列表项（图标+类型+StatusPill / 时间+设备+金额+›）。对齐 legacy OrderListItem。
+/// 订单列表项：左边图标，中间标题 + 时间，右边金额 + 状态（右对齐），可点击的带 ›。
 class OrderListItem extends StatelessWidget {
   const OrderListItem({required this.order, super.key});
 
@@ -77,65 +81,73 @@ class OrderListItem extends StatelessWidget {
     final textTheme = AppTypography.textTheme;
     return SectionCard(
       onTap: order.onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              DecorativeImage(
-                order.iconAsset,
-                size: AppCustomTokens.orderItemIconSize,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            DecorativeImage(
+              order.iconAsset,
+              size: AppCustomTokens.orderItemIconSize,
+            ),
+            const SizedBox(width: AppCustomTokens.spaceSm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    order.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.titleMedium
+                        ?.copyWith(color: AppColors.deepText),
+                  ),
+                  if (order.subtitle.isNotEmpty) ...[
+                    const SizedBox(height: AppCustomTokens.spaceXs),
+                    Text(
+                      order.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodyMedium
+                          ?.copyWith(color: AppColors.mutedText),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(width: AppCustomTokens.spaceSm),
-              // P2：type 原无 maxLines/overflow，长类型会溢出；改 Flexible + ellipsis 让位给 pill。
-              Flexible(
-                child: Text(
-                  order.type,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.titleMedium
-                      ?.copyWith(color: AppColors.deepText),
-                ),
+            ),
+            const SizedBox(width: AppCustomTokens.spaceSm),
+            // 右栏贴右边；窄屏、大字号或超长状态时最多占 45% 宽度并换行，内容完整显示。
+            ConstrainedBox(
+              constraints:
+                  BoxConstraints(maxWidth: constraints.maxWidth * 0.45),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (order.amount.isNotEmpty) ...[
+                    Text(
+                      order.amount,
+                      textAlign: TextAlign.end,
+                      style: textTheme.titleSmall
+                          ?.copyWith(color: AppColors.deepText),
+                    ),
+                    const SizedBox(height: AppCustomTokens.spaceXs),
+                  ],
+                  StatusPill(
+                    text: order.status,
+                    color: order.statusColor,
+                    filled: true,
+                    maxLines: null,
+                  ),
+                ],
               ),
-              const Spacer(),
-              StatusPill(
-                  text: order.status, color: order.statusColor, filled: true),
-            ],
-          ),
-          const SizedBox(height: AppCustomTokens.orderItemRowGap),
-          Row(
-            children: [
+            ),
+            if (order.onTap != null) ...[
+              const SizedBox(width: AppCustomTokens.spaceXs),
               Text(
-                order.time,
-                style:
-                    textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
+                '›',
+                style: textTheme.titleLarge?.copyWith(color: AppColors.primary),
               ),
-              const SizedBox(width: AppCustomTokens.spaceLg),
-              Expanded(
-                child: Text(
-                  order.device,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      textTheme.bodyMedium?.copyWith(color: AppColors.deepText),
-                ),
-              ),
-              const SizedBox(width: AppCustomTokens.spaceSm),
-              Text(
-                order.amount,
-                style:
-                    textTheme.titleSmall?.copyWith(color: AppColors.deepText),
-              ),
-              const SizedBox(width: AppCustomTokens.spaceSm),
-              if (order.onTap != null)
-                Text(
-                  '›',
-                  style:
-                      textTheme.titleLarge?.copyWith(color: AppColors.primary),
-                ),
             ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

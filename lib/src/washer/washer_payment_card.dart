@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
+import '../orders/order_models.dart' show formatOrderTime;
 import '../runtime/models/washer_order.dart';
 import '../widgets/remove_local_record.dart';
 import '../widgets/shui_components.dart';
@@ -204,18 +205,6 @@ class _AutoStartSwitch extends StatelessWidget {
       ],
     );
   }
-}
-
-/// 毫秒时间戳 → 当天显示「HH:mm」，其他日期显示「M月d日 HH:mm」。
-String formatOrderTime(int millis, int nowMillis) {
-  final t = DateTime.fromMillisecondsSinceEpoch(millis);
-  final now = DateTime.fromMillisecondsSinceEpoch(nowMillis);
-  final hm =
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  if (t.year == now.year && t.month == now.month && t.day == now.day) {
-    return '今天 $hm';
-  }
-  return '${t.month}月${t.day}日 $hm';
 }
 
 /// 底部价格栏（虚线框 + 大号预计价 + 创建按钮）。对齐 legacy PriceBar。

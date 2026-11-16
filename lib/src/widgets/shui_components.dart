@@ -37,6 +37,7 @@ class DecorativeImage extends StatelessWidget {
     this.height,
     this.opacity = 1,
     this.fit = BoxFit.contain,
+    this.color,
     super.key,
   });
 
@@ -47,6 +48,9 @@ class DecorativeImage extends StatelessWidget {
   final double opacity;
   final BoxFit fit;
 
+  /// 非空时把图标整体染成这个颜色（保留透明度轮廓），用于实色背景上的图标。
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
     return Opacity(
@@ -56,6 +60,8 @@ class DecorativeImage extends StatelessWidget {
         width: width ?? size,
         height: height ?? size,
         fit: fit,
+        color: color,
+        colorBlendMode: color == null ? null : BlendMode.srcIn,
         filterQuality: FilterQuality.high,
       ),
     );
@@ -268,12 +274,16 @@ class StatusPill extends StatelessWidget {
     required this.text,
     required this.color,
     this.filled = false,
+    this.maxLines = 2,
     super.key,
   });
 
   final String text;
   final Color color;
   final bool filled;
+
+  /// null = 不限行数，完整显示（订单记录里的状态必须看全）。
+  final int? maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -302,8 +312,8 @@ class StatusPill extends StatelessWidget {
       child: Text(
         text,
         // P2：允许两行 + softWrap，状态串通常 ≤ 8 字两行足够；仍保 ellipsis 防极端。
-        overflow: TextOverflow.ellipsis,
-        maxLines: 2,
+        overflow: maxLines == null ? null : TextOverflow.ellipsis,
+        maxLines: maxLines,
         softWrap: true,
         style: AppTypography.textTheme.labelMedium?.copyWith(color: color),
       ),
