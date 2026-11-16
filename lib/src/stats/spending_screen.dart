@@ -49,8 +49,6 @@ class _SpendingScreenState extends State<SpendingScreen> {
         _selected.compareTo(_current.shift(-(_trendMonths - 1))) < 0
             ? _selected
             : _current;
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-
     return Scaffold(
       body: Column(
         children: [
@@ -61,7 +59,10 @@ class _SpendingScreenState extends State<SpendingScreen> {
                 AppCustomTokens.spaceMd,
                 AppCustomTokens.spaceSm,
                 AppCustomTokens.spaceMd,
-                bottomInset + AppCustomTokens.spaceLg,
+                // 这页显示底栏，底部要留出底栏高度，否则最后一行会被挡住。
+                AppCustomTokens.bottomBarHeight +
+                    MediaQuery.paddingOf(context).bottom +
+                    AppCustomTokens.bottomContentExtraPadding,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -159,10 +160,13 @@ class _MonthSummary extends StatelessWidget {
                 textTheme.headlineMedium?.copyWith(color: AppColors.deepText)),
         Text(total == 0 ? '这个月没有消费记录' : '共 ${month.count} 笔',
             style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText)),
-        const SizedBox(height: AppCustomTokens.spaceMd),
-        for (final s in month.services) ...[
-          _ServiceRow(spend: s, totalFen: total),
-          const SizedBox(height: AppCustomTokens.spaceSm),
+        // 没有记录的月份不显示三行 ¥0.00。
+        if (total != 0) ...[
+          const SizedBox(height: AppCustomTokens.spaceMd),
+          for (final s in month.services) ...[
+            _ServiceRow(spend: s, totalFen: total),
+            const SizedBox(height: AppCustomTokens.spaceSm),
+          ],
         ],
       ],
     );

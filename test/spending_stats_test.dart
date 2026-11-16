@@ -1,3 +1,4 @@
+import 'package:flandresy/design_tokens.dart';
 import 'package:flandresy/src/data/app_bootstrap.dart';
 import 'package:flandresy/src/data/history_repository.dart';
 import 'package:flandresy/src/runtime/live_clock.dart';
@@ -192,4 +193,53 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('services follow the orders page order: 热水, 饮水, 洗衣',
+      (tester) async {
+    expect(SpendingService.values.map((s) => s.label), ['热水', '饮水', '洗衣']);
+    await tester.pumpWidget(MaterialApp(
+      home: SpendingScreen(state: _state(), nowMillis: _nov, onBack: () {}),
+    ));
+    await tester.pumpAndSettle();
+    final hot = tester.getTopLeft(find.textContaining('热水 ·')).dy;
+    final water = tester.getTopLeft(find.textContaining('饮水 ·')).dy;
+    final washer = tester.getTopLeft(find.textContaining('洗衣 ·')).dy;
+    expect(hot < water && water < washer, isTrue);
+  });
+
+  testWidgets('a month without records shows no rows of ¥0.00', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: SpendingScreen(
+          state: const ShuiHomeState(), nowMillis: _nov, onBack: () {}),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('这个月没有消费记录'), findsOneWidget);
+    expect(find.text('¥0.00'), findsOneWidget);
+    for (final label in ['热水', '饮水', '洗衣']) {
+      expect(find.text(label), findsNothing);
+    }
+  });
+
+  testWidgets('the last line scrolls clear of the bottom bar', (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!),
+      home: SpendingScreen(state: _state(), nowMillis: _nov, onBack: () {}),
+    ));
+    await tester.pumpAndSettle();
+    final note = find.textContaining('根据本机订单记录统计');
+    await tester.dragUntilVisible(
+        note, find.byType(SingleChildScrollView), const Offset(0, -200));
+    await tester.drag(
+        find.byType(SingleChildScrollView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    expect(tester.getBottomLeft(note).dy,
+        lessThanOrEqualTo(568 - AppCustomTokens.bottomBarHeight));
+  });
 }

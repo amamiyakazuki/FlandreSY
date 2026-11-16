@@ -5,10 +5,11 @@ import '../runtime/models/washer_order.dart';
 import '../runtime/shui_home_state.dart';
 
 /// 统计的服务，顺序固定（也决定图表颜色的分配顺序）。
+/// 顺序与订单页分类一致：热水、饮水、洗衣。
 enum SpendingService {
-  washer('洗衣'),
+  hotwater('热水'),
   drinking('饮水'),
-  hotwater('热水');
+  washer('洗衣');
 
   const SpendingService(this.label);
   final String label;
