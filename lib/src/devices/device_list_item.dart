@@ -11,7 +11,7 @@ import '../widgets/shui_components.dart';
 import '../widgets/device_status_label.dart';
 
 /// 单台本地设备列表项。对齐 legacy `DeviceListItem`：
-/// 左侧设备图 + 中间名称/设备号/短状态/类型 + 右侧操作圆点。
+/// 左侧设备图 + 中间名称 /「设备号 · 宿舍」/ 短状态 + 右侧「⋯」管理按钮。
 class DeviceListItem extends StatelessWidget {
   const DeviceListItem({
     required this.device,
@@ -28,13 +28,13 @@ class DeviceListItem extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onMenu;
 
-  String get _typeLabel {
-    return switch (device.deviceType) {
-      LocalDeviceType.drinkingWater => '饮水快捷入口',
-      LocalDeviceType.washer => device.storeName ?? '洗衣快捷入口',
-      LocalDeviceType.shower798 => '慧生活798设备',
-      LocalDeviceType.unknown => '本地快捷入口',
-    };
+  /// 「设备号 · 宿舍」。「扫码添加」只是来源说明，不算宿舍，不显示。
+  String get _infoLine {
+    final store = device.storeName?.trim() ?? '';
+    return [
+      device.deviceNo ?? _shortId(device.id),
+      if (store.isNotEmpty && store != '扫码添加') store,
+    ].join(' · ');
   }
 
   Color get _statusColor {
@@ -89,11 +89,11 @@ class DeviceListItem extends StatelessWidget {
                 ),
                 const SizedBox(height: AppCustomTokens.deviceListLineGap),
                 Text(
-                  '设备号：${device.deviceNo ?? _shortId(device.id)}',
+                  _infoLine,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: textTheme.bodySmall?.copyWith(
-                    color: AppColors.deepText,
+                    color: AppColors.mutedText,
                   ),
                 ),
                 const SizedBox(height: AppCustomTokens.deviceListLineGap),
@@ -109,37 +109,42 @@ class DeviceListItem extends StatelessWidget {
                       '$displayName\n设备号：${device.deviceNo ?? device.id}\n${device.statusQueryFailed ? '本次查询失败；上次结果：${device.lastStatus ?? '未知'}' : device.statusConfirmed ? '${device.lastStatus ?? '未知'}（查询于 ${device.statusCheckedAt}）' : device.lastStatus == null ? '状态未查询' : '上次结果：${device.lastStatus}（未核对）'}',
                   color: _statusColor,
                 ),
-                Text(
-                  _typeLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: AppColors.deepText,
-                  ),
-                ),
               ],
             ),
           ),
-          const SizedBox(width: AppCustomTokens.spaceSm),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              ShuiPressable(
-                onTap: onMenu,
-                child: Container(
-                  key: ValueKey('device-dot-$index'),
-                  width: AppCustomTokens.deviceActionDotSize,
-                  height: AppCustomTokens.deviceActionDotSize,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
+          // 红圈里放「⋯」，表明这是「更多操作」（编辑 / 删除），不是单选框。
+          // 点击区域比圆圈大一圈，方便点中。
+          Semantics(
+            button: true,
+            label: '管理设备',
+            child: ShuiPressable(
+              onTap: onMenu,
+              child: SizedBox.square(
+                key: ValueKey('device-dot-$index'),
+                dimension: AppCustomTokens.deviceActionDotSize +
+                    2 * AppCustomTokens.spaceSm,
+                child: Center(
+                  child: Container(
+                    width: AppCustomTokens.deviceActionDotSize,
+                    height: AppCustomTokens.deviceActionDotSize,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.primary,
+                        width: AppCustomTokens.deviceActionDotStroke,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.more_horiz,
+                      size: AppCustomTokens.deviceActionDotSize -
+                          2 * AppCustomTokens.deviceActionDotStroke -
+                          AppCustomTokens.spaceXs / 2,
                       color: AppColors.primary,
-                      width: AppCustomTokens.deviceActionDotStroke,
                     ),
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -150,7 +155,7 @@ class DeviceListItem extends StatelessWidget {
       id.length <= 12 ? id : '${id.substring(0, 8)}...';
 }
 
-/// 顶部刷新条。对齐 legacy `RefreshBar`：WeakPink 底 + 圆角 + 最近刷新时间 + 「↻ 刷新」。
+/// 顶部刷新条。对齐 legacy `RefreshBar`：WeakPink 底 + 圆角 + 最近刷新时间 + 「刷新」。
 class RefreshBar extends StatelessWidget {
   const RefreshBar({
     required this.lastRefreshed,
@@ -159,6 +164,7 @@ class RefreshBar extends StatelessWidget {
     super.key,
   });
 
+  /// 最近一次成功刷新的时间（HH:mm）；空串表示还没刷新过。
   final String lastRefreshed;
   final VoidCallback onRefresh;
   final bool busy;
@@ -197,7 +203,7 @@ class RefreshBar extends StatelessWidget {
             const SizedBox(width: AppCustomTokens.spaceSm),
             Expanded(
               child: Text(
-                '最近成功查询：$lastRefreshed',
+                lastRefreshed.isEmpty ? '尚未刷新' : '最近刷新：$lastRefreshed',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: textTheme.bodySmall?.copyWith(
@@ -206,7 +212,7 @@ class RefreshBar extends StatelessWidget {
               ),
             ),
             Text(
-              busy ? '刷新中…' : '↻ 刷新',
+              busy ? '刷新中…' : '刷新',
               style: textTheme.labelMedium?.copyWith(color: AppColors.primary),
             ),
           ],
@@ -216,22 +222,40 @@ class RefreshBar extends StatelessWidget {
   }
 }
 
-/// 列表内空态卡（设备数为 0 但仍展示列表骨架时使用）。
+/// 列表内空态：空箱子插画 +「暂无设备」+ 添加提示（与独立空设备页一致）。
 class EmptyDeviceRuntimeCard extends StatelessWidget {
   const EmptyDeviceRuntimeCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      padding: const EdgeInsets.all(AppCustomTokens.spaceContent),
+    final textTheme = AppTypography.textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppCustomTokens.spaceLg),
       child: SizedBox(
         width: double.infinity,
-        child: Text(
-          '暂无设备，点击右上角 + 添加设备',
-          textAlign: TextAlign.center,
-          style: AppTypography.textTheme.bodyLarge?.copyWith(
-            color: AppColors.mutedText,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DecorativeImage(
+              ShuiAssets.emptyBox,
+              size: AppCustomTokens.emptyBoxSize,
+            ),
+            Text(
+              '暂无设备',
+              textAlign: TextAlign.center,
+              style: textTheme.titleMedium?.copyWith(
+                color: AppColors.deepText,
+              ),
+            ),
+            const SizedBox(height: AppCustomTokens.spaceSm),
+            Text(
+              '点击右上角 + 添加设备',
+              textAlign: TextAlign.center,
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.mutedText,
+              ),
+            ),
+          ],
         ),
       ),
     );

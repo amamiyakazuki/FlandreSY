@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../design_tokens.dart';
 import '../runtime/shui_runtime.dart';
 import '../runtime/models/local_device.dart';
-import '../theme/shui_assets.dart';
 import '../widgets/bottom_peek_character.dart';
 import '../widgets/shui_animated_list.dart';
 import '../widgets/shui_components.dart';
@@ -73,9 +72,7 @@ class DevicesScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       RefreshBar(
-                        lastRefreshed: state.localDevicesLastRefreshed.isEmpty
-                            ? '未刷新'
-                            : state.localDevicesLastRefreshed,
+                        lastRefreshed: state.localDevicesLastRefreshed,
                         busy: busy,
                         onRefresh: onRefresh,
                       ),
@@ -135,7 +132,6 @@ class EmptyDevicesView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = AppTypography.textTheme;
     return Scaffold(
       body: Stack(
         children: [
@@ -159,36 +155,12 @@ class EmptyDevicesView extends StatelessWidget {
                   child: Column(
                     children: [
                       RefreshBar(
-                        lastRefreshed: '未刷新',
+                        lastRefreshed: '',
                         onRefresh: onBack,
                       ),
-                      const SizedBox(height: AppCustomTokens.spaceLg),
-                      SizedBox(
+                      const SizedBox(
                         height: AppCustomTokens.emptyStateHeight,
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              DecorativeImage(
-                                ShuiAssets.emptyBox,
-                                size: AppCustomTokens.emptyBoxSize,
-                              ),
-                              Text(
-                                '暂无设备',
-                                style: textTheme.titleMedium?.copyWith(
-                                  color: AppColors.deepText,
-                                ),
-                              ),
-                              const SizedBox(height: AppCustomTokens.spaceSm),
-                              Text(
-                                '点击右上角 + 添加设备',
-                                style: textTheme.bodyMedium?.copyWith(
-                                  color: AppColors.mutedText,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        child: Center(child: EmptyDeviceRuntimeCard()),
                       ),
                     ],
                   ),

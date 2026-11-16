@@ -81,7 +81,7 @@ void main() {
           await showCard(tester, item(device), width: width, scale: scale);
           final rect = tester.getRect(find.byType(DeviceListItem));
           final name = tester.getRect(find.text(washer.customName));
-          final number = tester.getRect(find.text('设备号：5008913'));
+          final number = tester.getRect(find.text('5008913'));
           baseline ??= rect;
           nameBounds ??= name;
           numberBounds ??= number;
@@ -100,7 +100,7 @@ void main() {
                 isFalse);
             expect(
                 tester
-                    .renderObject<RenderParagraph>(find.text('设备号：5008913'))
+                    .renderObject<RenderParagraph>(find.text('5008913'))
                     .didExceedMaxLines,
                 isFalse);
           }
