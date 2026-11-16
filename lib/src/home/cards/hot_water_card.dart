@@ -109,7 +109,9 @@ class HotWaterCard extends StatelessWidget {
               ])),
               if (imageSize > 0)
                 ShadowedImage(
-                    asset: ShuiAssets.hotWaterCharacter, size: imageSize),
+                    asset: ShuiAssets.hotWaterCharacter,
+                    size: imageSize,
+                    footprint: CharacterFootprint.hotWater),
             ]);
           }),
           const SizedBox(height: AppCustomTokens.spaceSm),

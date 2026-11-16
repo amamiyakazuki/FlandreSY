@@ -396,29 +396,71 @@ class InfoLine extends StatelessWidget {
   }
 }
 
+/// 人物在图片里的落脚位置（按图片宽高的比例），用来把地面影子放到脚下。
+/// 数值按图片里双脚的实际像素位置测得。
+@immutable
+class CharacterFootprint {
+  const CharacterFootprint({
+    required this.centerX,
+    required this.feetY,
+    required this.width,
+  });
+
+  /// 双脚中点的横向位置。
+  final double centerX;
+
+  /// 鞋底所在的纵向位置。
+  final double feetY;
+
+  /// 影子宽度（含双脚两侧的余量）。
+  final double width;
+
+  /// 热水人物：左侧是水龙头，脚在偏右的位置。
+  static const hotWater =
+      CharacterFootprint(centerX: 0.59, feetY: 0.96, width: 0.44);
+
+  /// 扫码人物：脚在偏左的位置，图片底部留有空白。
+  static const scan =
+      CharacterFootprint(centerX: 0.446, feetY: 0.918, width: 0.42);
+}
+
+/// 带地面影子的人物图：影子是脚下的扁椭圆，双脚踩在影子中间。
 class ShadowedImage extends StatelessWidget {
-  const ShadowedImage({required this.asset, required this.size, super.key});
+  const ShadowedImage({
+    required this.asset,
+    required this.size,
+    required this.footprint,
+    super.key,
+  });
 
   final String asset;
   final double size;
+  final CharacterFootprint footprint;
 
   @override
   Widget build(BuildContext context) {
+    final shadowWidth = size * footprint.width;
+    final shadowHeight = size * 0.11;
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
-        alignment: Alignment.bottomCenter,
+        clipBehavior: Clip.none,
         children: [
-          Container(
-            width: size * 0.72,
-            height: AppCustomTokens.spaceMd,
-            margin: const EdgeInsets.only(bottom: AppCustomTokens.spaceXs),
-            decoration: BoxDecoration(
-              color: AppColors.cardBorder.withValues(
-                alpha: AppCustomTokens.alphaShadow,
+          Positioned(
+            left: size * footprint.centerX - shadowWidth / 2,
+            // 影子中线略高于鞋底，鞋子看起来踩在影子上。
+            top: size * footprint.feetY - shadowHeight * 0.6,
+            width: shadowWidth,
+            height: shadowHeight,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.cardBorder.withValues(
+                  alpha: AppCustomTokens.alphaShadow,
+                ),
+                borderRadius: BorderRadius.all(
+                    Radius.elliptical(shadowWidth / 2, shadowHeight / 2)),
               ),
-              borderRadius: BorderRadius.circular(AppCustomTokens.radiusLarge),
             ),
           ),
           DecorativeImage(asset, size: size),

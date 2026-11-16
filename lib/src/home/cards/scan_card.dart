@@ -83,6 +83,7 @@ class ScanCard extends StatelessWidget {
                   top: -AppCustomTokens.spaceLg,
                   child: ShadowedImage(
                     asset: ShuiAssets.scanCharacter,
+                    footprint: CharacterFootprint.scan,
                     size: AppCustomTokens.scanCharacterHeroSize,
                   ),
                 ),
