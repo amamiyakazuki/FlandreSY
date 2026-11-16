@@ -32,6 +32,17 @@ class DrinkingWaterScreen extends StatelessWidget {
   final VoidCallback onRemoveLocal;
   final VoidCallback? onReturnHome;
 
+  /// 识别结果只在没有订单提示时才单独显示：订单提示里已经包含下一步怎么做，
+  /// 校区在下面的饮水机卡片里也有。识别失败总是显示；空闲时的默认提示不显示。
+  bool get _showScanBanner {
+    final scan = state.waterScan;
+    if (scan.message == null || scan.state == RuntimeTaskState.idle) {
+      return false;
+    }
+    if (scan.state == RuntimeTaskState.failure) return true;
+    return state.waterOrder.message == null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ready = state.waterReady;
@@ -52,7 +63,7 @@ class DrinkingWaterScreen extends StatelessWidget {
     return Scaffold(
       body: Column(
         children: [
-          TopHeader(title: '饮水接单', showBack: true, onBack: onBack),
+          TopHeader(title: '饮水', showBack: true, onBack: onBack),
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(
@@ -64,7 +75,7 @@ class DrinkingWaterScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (state.waterScan.message != null) ...[
+                  if (_showScanBanner) ...[
                     RuntimeStatusBanner(status: state.waterScan),
                     const SizedBox(height: AppCustomTokens.drinkingCardGap),
                   ],
@@ -204,11 +215,6 @@ class _InfoCard extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: AppCustomTokens.spaceSm),
-          Text(
-            '扫码后会自动创建接水订单；请在饮水机上按按钮开始或停止接水。',
-            style: textTheme.bodySmall?.copyWith(color: AppColors.mutedText),
-          ),
         ],
       ),
     );
@@ -251,11 +257,6 @@ class _StatusCard extends StatelessWidget {
             InfoLine(label: '状态', value: order!.statusLabel),
             const SizedBox(height: AppCustomTokens.spaceXs),
             InfoLine(
-              label: '设备',
-              value: order!.deviceNo.isEmpty ? '未知' : order!.deviceNo,
-            ),
-            const SizedBox(height: AppCustomTokens.spaceXs),
-            InfoLine(
               label: '用水量',
               value: order!.warmWaterMl > 0
                   ? '${order!.warmWaterMl} ml'
@@ -269,30 +270,40 @@ class _StatusCard extends StatelessWidget {
                   : '等待机器上报',
             ),
             const SizedBox(height: AppCustomTokens.spaceXs),
-            InfoLine(label: '扣费', value: formatYuanAmount(order!.payment)),
-          ],
-          const SizedBox(height: AppCustomTokens.spaceMd),
-          PrimaryGradientButton(
-            label: busy ? '刷新中…' : '刷新状态',
-            enabled: !busy && order != null,
-            onTap: onRefresh,
-          ),
-          if (order != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () async {
-                  if (await confirmRemoveLocalRecord(context,
-                      detail: '只会从本 App 中移除这笔接水订单，不会影响饮水机或扣费。'
-                          '适用于已在机器上结束、但这里一直没有更新的情况。')) {
-                    onRemoveLocal();
-                  }
-                },
-                child: Text('移除本机记录',
-                    style: textTheme.bodySmall
-                        ?.copyWith(color: AppColors.mutedText)),
-              ),
+            InfoLine(
+              label: '扣费',
+              // 没结束时服务端还没结算，¥0.00 看起来像免费。
+              value: !order!.isTerminal && order!.payment == 0
+                  ? '结束后结算'
+                  : formatYuanAmount(order!.payment),
             ),
+            const SizedBox(height: AppCustomTokens.spaceMd),
+            PrimaryGradientButton(
+              label: busy ? '刷新中…' : '刷新状态',
+              enabled: !busy,
+              onTap: onRefresh,
+            ),
+            const SizedBox(height: AppCustomTokens.spaceXs),
+            // 与上面各行左对齐，不留按钮默认的内边距。
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, AppCustomTokens.spaceXl),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                alignment: Alignment.centerLeft,
+              ),
+              onPressed: () async {
+                if (await confirmRemoveLocalRecord(context,
+                    detail: '只会从本 App 中移除这笔接水订单，不会影响饮水机或扣费。'
+                        '适用于已在机器上结束、但这里一直没有更新的情况。')) {
+                  onRemoveLocal();
+                }
+              },
+              child: Text('移除本机记录',
+                  style: textTheme.bodySmall
+                      ?.copyWith(color: AppColors.mutedText)),
+            ),
+          ],
         ],
       ),
     );
