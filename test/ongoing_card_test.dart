@@ -107,7 +107,7 @@ void main() {
         expect(tester.takeException(), isNull);
       }
       await _show(tester, [], width);
-      expect(find.text('无任务'), findsOneWidget);
+      expect(find.text('暂无任务'), findsOneWidget);
       expect(tester.getSize(find.byType(OngoingCard)).height,
           closeTo(baseline, .01));
       expect(tester.takeException(), isNull);

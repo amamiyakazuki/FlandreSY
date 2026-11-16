@@ -86,6 +86,9 @@ class OngoingCard extends StatelessWidget {
 class _EmptyRunningCard extends StatelessWidget {
   const _EmptyRunningCard();
 
+  /// sleep.png 的宽高比（734×568）。
+  static const double _sleepAspect = 734 / 568;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -94,7 +97,12 @@ class _EmptyRunningCard extends StatelessWidget {
       constraints: const BoxConstraints(
         minHeight: AppCustomTokens.runningCardMinHeight,
       ),
-      padding: const EdgeInsets.all(AppCustomTokens.spaceMd),
+      padding: const EdgeInsets.fromLTRB(
+        AppCustomTokens.spaceXs,
+        AppCustomTokens.spaceXs,
+        AppCustomTokens.spaceMd,
+        AppCustomTokens.spaceXs,
+      ),
       decoration: BoxDecoration(
         color: AppColors.surface.withValues(alpha: AppCustomTokens.alphaPanel),
         borderRadius: BorderRadius.circular(AppCustomTokens.radiusMedium),
@@ -104,29 +112,44 @@ class _EmptyRunningCard extends StatelessWidget {
           width: AppCustomTokens.strokeThin,
         ),
       ),
-      child: Row(
-        children: [
-          DecorativeImage(
-            ShuiAssets.shuiThreeStar,
-            size: AppCustomTokens.statusIconSize,
-            opacity: AppCustomTokens.alphaMuted,
-          ),
-          const SizedBox(width: AppCustomTokens.spaceSm),
-          Expanded(
-            child: Text(
-              '无任务',
-              style: AppTypography.textTheme.titleMedium?.copyWith(
-                color: AppColors.mutedText,
+      // 没有任务时芙兰在睡觉。图片高度跟随卡片，卡片高度与有任务时一致；
+      // 大字号时文字整体缩小，不撑开卡片。
+      child: LayoutBuilder(builder: (context, constraints) {
+        final imageHeight = constraints.maxHeight;
+        return Row(
+          children: [
+            DecorativeImage(
+              ShuiAssets.sleep,
+              width: imageHeight * _sleepAspect,
+              height: imageHeight,
+            ),
+            const SizedBox(width: AppCustomTokens.spaceSm),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '暂无任务',
+                      style: AppTypography.textTheme.titleMedium?.copyWith(
+                        color: AppColors.deepText,
+                      ),
+                    ),
+                    Text(
+                      '扫码开始洗衣或接水',
+                      style: AppTypography.textTheme.bodySmall?.copyWith(
+                        color: AppColors.mutedText,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          DecorativeImage(
-            ShuiAssets.shuiCloud,
-            size: AppCustomTokens.compactActionHeight,
-            opacity: AppCustomTokens.alphaDisabled,
-          ),
-        ],
-      ),
+          ],
+        );
+      }),
     );
   }
 }

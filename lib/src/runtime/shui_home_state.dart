@@ -175,7 +175,7 @@ class ShuiHomeState {
       .length;
 
   /// Home「进行中」任务，完全从真实运行态/订单派生（对齐 legacy ShuiUiModels.kt homeTasks）。
-  /// 首启无运行态、无订单 → 空列表 → OngoingCard 渲染「无任务」空态（不再伪造 3 张 demo 卡）。
+  /// 首启无运行态、无订单 → 空列表 → OngoingCard 渲染「暂无任务」空态（不再伪造 3 张 demo 卡）。
   List<HomeTaskUi> get homeTasks {
     final tasks = <HomeTaskUi>[];
     // 热水：开热水成功且未关闭（对齐 legacy hotwaterActive 判据）。
