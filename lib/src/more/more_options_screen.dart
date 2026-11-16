@@ -138,7 +138,7 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
     );
   }
 
-  // 图标按功能选：盾牌=权限，清单=日志，刷新=检查版本，上下箭头=导入导出，i=关于。
+  // 图标按功能选：盾牌=权限，清单=日志，刷新=检查版本，向上=导出，向下=导入，i=关于。
   List<_OptionRowData> _rows() {
     return [
       _OptionRowData(
@@ -162,13 +162,13 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
         onTap: _checkVersion,
       ),
       _OptionRowData(
-        iconAsset: ShuiAssets.shuiRed3,
+        icon: Icons.file_upload_outlined,
         title: '导出洗衣机设备列表',
         subtitle: '复制本地设备 JSON 到剪贴板',
         onTap: widget.onExportDevices,
       ),
       _OptionRowData(
-        iconAsset: ShuiAssets.shuiRed3,
+        icon: Icons.file_download_outlined,
         title: '导入洗衣机设备列表',
         subtitle: '从剪贴板恢复本地设备 JSON',
         onTap: widget.onImportDevices,
