@@ -150,7 +150,9 @@ void main() {
       isDefault: false,
       onDefaultChanged: (_) {},
     )))));
-    expect(find.text('登录成功'), findsOneWidget);
+    // 已登录时登录成功提示由「已登录：手机号」代替；列表错误仍单独显示。
+    expect(find.text('登录成功'), findsNothing);
+    expect(find.textContaining('已登录：'), findsOneWidget);
     expect(find.text('列表保存失败'), findsOneWidget);
     final input = find.byType(TextField).last;
     await tester.enterText(input, 'retry-device');

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../design_tokens.dart';
 import '../runtime/shui_runtime.dart';
+import '../runtime/account_state.dart';
 import '../runtime/models/account_session.dart';
 import '../widgets/shui_header.dart';
 import '../widgets/shui_components.dart';
@@ -77,6 +78,37 @@ class AccountDetailScreen extends StatefulWidget {
   @override
   State<AccountDetailScreen> createState() => _AccountDetailScreenState();
 
+  /// 顶部「检测账号状态 / 退出本机登录」卡。从没登录过（或早已正常退出）时没有可检测、
+  /// 可退出的东西，不显示；登录失效、登录卡在进行中、检测或退出失败时仍显示，
+  /// 「退出本机登录」可能是清掉手机上残留凭据的唯一入口。
+  bool get _showAccountActions {
+    final signedIn = switch (kind) {
+      AccountKind.zhuli => state.zhuli.isLoggedIn,
+      AccountKind.ujing => state.ujingAccount != null,
+      AccountKind.shower798 => state.shower798Account != null,
+    };
+    if (signedIn) return true;
+    const pristine = AccountState();
+    final (login, initial) = switch (kind) {
+      AccountKind.zhuli => (
+          state.account.hotwaterLogin,
+          pristine.hotwaterLogin
+        ),
+      AccountKind.ujing => (state.account.washerLogin, pristine.washerLogin),
+      AccountKind.shower798 => (
+          state.account.shower798Login,
+          pristine.shower798Login
+        ),
+    };
+    if (login.state != initial.state || login.message != initial.message) {
+      return true;
+    }
+    final availability = state.account.availability[kind]?.state;
+    return availability == RuntimeTaskState.failure ||
+        availability == RuntimeTaskState.unavailable ||
+        availability == RuntimeTaskState.loading;
+  }
+
   String get _title => switch (kind) {
         AccountKind.zhuli => '住理生活',
         AccountKind.ujing => 'U净账号',
@@ -101,7 +133,8 @@ class AccountDetailScreen extends StatefulWidget {
                 bottomPadding,
               ),
               child: Column(children: [
-                if (onCheckAccount != null || onLogout != null) ...[
+                if ((onCheckAccount != null || onLogout != null) &&
+                    _showAccountActions) ...[
                   SectionCard(
                       child: Column(children: [
                     RuntimeStatusBanner(

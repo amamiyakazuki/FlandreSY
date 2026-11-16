@@ -38,6 +38,21 @@ Widget _page(AccountKind kind,
       onSetDefaultSystem: (_) {},
     ));
 
+const _signedIn = ShuiHomeState(
+    account: AccountState(
+  zhuli: ZhuliSession(phone: '13800000000'),
+  hotwaterLogin: RuntimeActionStatus(
+      state: RuntimeTaskState.success, message: '住理生活已登录：13800000000'),
+  ujingAccount:
+      UjingAccountUi(mobile: '13800000001', userId: 'u', serviceSubjectId: 's'),
+  washerLogin:
+      RuntimeActionStatus(state: RuntimeTaskState.success, message: 'U净已登录'),
+  shower798Account:
+      Shower798AccountUi(mobile: '13800000002', uid: 'u', eid: 'e'),
+  shower798Login: RuntimeActionStatus(
+      state: RuntimeTaskState.success, message: '慧生活798已登录'),
+));
+
 void main() {
   testWidgets(
       'same service account replacement or new login epoch invalidates logout confirmation',
@@ -80,11 +95,11 @@ void main() {
       (tester) async {
     final checks = <AccountKind>[];
     for (final kind in AccountKind.values) {
-      await tester.pumpWidget(_page(kind, check: checks.add));
+      await tester.pumpWidget(_page(kind, state: _signedIn, check: checks.add));
       await tester.pumpAndSettle();
       final expected = checks.length;
       expect(checks.last, kind);
-      await tester.pumpWidget(_page(kind, check: checks.add));
+      await tester.pumpWidget(_page(kind, state: _signedIn, check: checks.add));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(minutes: 1));
       expect(checks.length, expected);
@@ -139,13 +154,13 @@ void main() {
   testWidgets('confirmation for a previous service cannot log out the new kind',
       (tester) async {
     final logouts = <AccountKind>[];
-    await tester.pumpWidget(
-        _page(AccountKind.zhuli, check: (_) {}, logout: logouts.add));
+    await tester.pumpWidget(_page(AccountKind.zhuli,
+        state: _signedIn, check: (_) {}, logout: logouts.add));
     await tester.pumpAndSettle();
     await tester.tap(find.text('退出本机登录'));
     await tester.pumpAndSettle();
-    await tester.pumpWidget(
-        _page(AccountKind.ujing, check: (_) {}, logout: logouts.add));
+    await tester.pumpWidget(_page(AccountKind.ujing,
+        state: _signedIn, check: (_) {}, logout: logouts.add));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认退出'));
     await tester.pumpAndSettle();
@@ -213,5 +228,38 @@ void main() {
     await tester.tap(find.text('查看状态'));
     await tester.pump();
     expect(legacy, 1);
+  });
+
+  testWidgets(
+      'account actions hide only when the service was never signed in here',
+      (tester) async {
+    for (final kind in AccountKind.values) {
+      // 从没登录：没有可检测、可退出的账号。
+      await tester.pumpWidget(_page(kind, check: (_) {}, logout: (_) {}));
+      await tester.pumpAndSettle();
+      expect(find.text('检测账号状态'), findsNothing);
+      expect(find.text('退出本机登录'), findsNothing);
+
+      // 登录失效：账号已清掉，但手机上可能残留凭据，仍要能退出。
+      const expired = RuntimeActionStatus(
+          state: RuntimeTaskState.loginRequired, message: '登录已失效，请重新登录');
+      await tester.pumpWidget(_page(kind,
+          state: const ShuiHomeState(
+              account: AccountState(
+                  hotwaterLogin: expired,
+                  washerLogin: expired,
+                  shower798Login: expired)),
+          check: (_) {},
+          logout: (_) {}));
+      await tester.pumpAndSettle();
+      expect(find.text('退出本机登录'), findsOneWidget);
+
+      // 已登录：账号只在卡片里显示一次「已登录：手机号」。
+      await tester.pumpWidget(
+          _page(kind, state: _signedIn, check: (_) {}, logout: (_) {}));
+      await tester.pumpAndSettle();
+      expect(find.text('退出本机登录'), findsOneWidget);
+      expect(find.textContaining('已登录：'), findsOneWidget);
+    }
   });
 }

@@ -194,13 +194,18 @@ class _LoginCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = AppTypography.textTheme;
+    final loggedIn = state.shower798Account != null &&
+        state.shower798Login.state != RuntimeTaskState.loginRequired;
     return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SectionTitle(icon: ShuiAssets.shuiHuisheng798, title: '慧生活798登录'),
           const SizedBox(height: AppCustomTokens.formFieldGap),
-          RuntimeStatusBanner(status: state.shower798Login),
+          // 已登录时下面有「已登录：手机号」，成功提示不再重复显示。
+          if (!(loggedIn &&
+              state.shower798Login.state == RuntimeTaskState.success))
+            RuntimeStatusBanner(status: state.shower798Login),
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('设为默认洗浴系统'),
@@ -216,11 +221,11 @@ class _LoginCard extends StatelessWidget {
             duration: ShuiMotion.duration(context, ShuiMotion.local),
             child: AnimatedSwitcher(
               duration: ShuiMotion.duration(context, ShuiMotion.local),
-              child: state.shower798Account != null &&
-                      state.shower798Login.state !=
-                          RuntimeTaskState.loginRequired
+              child: loggedIn
                   ? Text('已登录：${state.shower798Account!.mobile}',
-                      key: const ValueKey('798-account'))
+                      key: const ValueKey('798-account'),
+                      style: textTheme.bodyMedium
+                          ?.copyWith(color: AppColors.serviceGreen))
                   : Column(
                       key: const ValueKey('798-form'),
                       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -115,7 +115,10 @@ class _UjingAccountDetailState extends State<UjingAccountDetail> {
             children: [
               SectionTitle(icon: ShuiAssets.shuiU, title: 'U净账号'),
               const SizedBox(height: AppCustomTokens.formFieldGap),
-              RuntimeStatusBanner(status: s.washerLogin),
+              // 已登录时下面有「已登录：手机号」，成功提示不再重复显示。
+              if (!(loggedIn &&
+                  s.washerLogin.state == RuntimeTaskState.success))
+                RuntimeStatusBanner(status: s.washerLogin),
               if (s.ujingCaptcha.message != null) ...[
                 const SizedBox(height: AppCustomTokens.spaceXs),
                 RuntimeStatusBanner(status: s.ujingCaptcha),
@@ -130,7 +133,11 @@ class _UjingAccountDetailState extends State<UjingAccountDetail> {
                           key: const ValueKey('ujing-account'),
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text('已登录：${account!.mobile}'),
+                            Text(
+                              '已登录：${account!.mobile}',
+                              style: AppTypography.textTheme.bodyMedium
+                                  ?.copyWith(color: AppColors.serviceGreen),
+                            ),
                             if (widget.showCheckStatus)
                               PrimaryGradientButton(
                                   label: '查看状态',
@@ -201,21 +208,6 @@ class _UjingAccountDetailState extends State<UjingAccountDetail> {
                             ],
                           ),
                         ]),
-                ),
-              ),
-              const SizedBox(height: AppCustomTokens.spaceSm),
-              AnimatedSwitcher(
-                duration: ShuiMotion.duration(context, ShuiMotion.local),
-                child: Text(
-                  key: ValueKey(account?.userId ?? 'signed-out'),
-                  account != null
-                      ? '账号：${account.mobile} / 用户 ${account.userId}'
-                      : '暂无已登录账号',
-                  maxLines: 2,
-                  softWrap: true,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTypography.textTheme.bodySmall
-                      ?.copyWith(color: AppColors.mutedText),
                 ),
               ),
             ],

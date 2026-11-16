@@ -73,7 +73,10 @@ class _ZhuliAccountDetailState extends State<ZhuliAccountDetail> {
             children: [
               SectionTitle(icon: ShuiAssets.shuiZhuli, title: '住理生活'),
               const SizedBox(height: AppCustomTokens.formFieldGap),
-              RuntimeStatusBanner(status: s.hotwaterLogin),
+              // 已登录时下面有「已登录：手机号」，成功提示不再重复显示。
+              if (!(loggedIn &&
+                  s.hotwaterLogin.state == RuntimeTaskState.success))
+                RuntimeStatusBanner(status: s.hotwaterLogin),
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('设为默认洗浴系统'),
