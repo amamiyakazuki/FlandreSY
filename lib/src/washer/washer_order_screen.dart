@@ -62,12 +62,6 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
   bool _autoStart = true;
   Timer? _ticker;
 
-  static final _modelColors = <Color>[
-    AppColors.primary,
-    AppColors.serviceBlue,
-    AppColors.serviceOrange,
-    AppColors.serviceViolet,
-  ];
   static final _modelIcons = <String>[
     ShuiAssets.washerModelStrong,
     ShuiAssets.washerModelShirt,
@@ -244,11 +238,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
   Widget _buildModelSection(List<WasherModelUi> models) {
     final items = models.isEmpty
         ? [
-            const OptionItem(
-              title: '待扫码',
-              iconAsset: null,
-              iconColor: AppColors.primary,
-            ),
+            const OptionItem(title: '待扫码'),
           ]
         : [
             for (var i = 0; i < models.length; i++)
@@ -256,7 +246,6 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
                 title: models[i].name,
                 subtitle: formatFenAmount(models[i].priceFen),
                 iconAsset: _modelIcons[i % _modelIcons.length],
-                iconColor: _modelColors[i % _modelColors.length],
               ),
           ];
     var selected = 0;
@@ -289,8 +278,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
       (4, '60°C', ShuiAssets.temp60),
     ];
     final items = [
-      for (final t in temps)
-        OptionItem(title: t.$2, iconAsset: t.$3, iconColor: AppColors.primary),
+      for (final t in temps) OptionItem(title: t.$2, iconAsset: t.$3),
     ];
     var selected = 0;
     for (var i = 0; i < temps.length; i++) {
@@ -315,6 +303,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
         ..add(const SizedBox(height: AppCustomTokens.spaceSm))
         ..add(
           _buildAdditionSection(
+            sectionIcon: ShuiAssets.detergentLow,
             title: '洗衣液选择',
             tail: '请选择洗衣液用量',
             noneIcon: ShuiAssets.detergentNo,
@@ -331,6 +320,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
         ..add(const SizedBox(height: AppCustomTokens.spaceSm))
         ..add(
           _buildAdditionSection(
+            sectionIcon: ShuiAssets.disinfectLow,
             title: '除菌液选择',
             tail: '请选择除菌液用量',
             noneIcon: ShuiAssets.disinfectNo,
@@ -346,6 +336,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
   }
 
   Widget _buildAdditionSection({
+    required String sectionIcon,
     required String title,
     required String tail,
     required String noneIcon,
@@ -355,14 +346,14 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
     required ValueChanged<int?> onSelected,
   }) {
     final items = <OptionItem>[
+      // 「不添加」也带价格行，和同一行的「标准 / 加量」一样高。
       OptionItem(
-          title: '不添加', iconAsset: noneIcon, iconColor: AppColors.primary),
+          title: '不添加', subtitle: formatFenAmount(0), iconAsset: noneIcon),
       for (var i = 0; i < options.length; i++)
         OptionItem(
           title: options[i].name,
           subtitle: formatFenAmount(options[i].priceFen),
           iconAsset: addedIcons[i % addedIcons.length],
-          iconColor: AppColors.serviceBlue,
         ),
     ];
     var selected = 0;
@@ -370,7 +361,7 @@ class _WasherOrderScreenState extends State<WasherOrderScreen> {
       if (options[i].id == selectedId) selected = i + 1;
     }
     return OptionSection(
-      iconAsset: ShuiAssets.shuiYifu,
+      iconAsset: sectionIcon,
       title: title,
       tail: tail,
       options: items,

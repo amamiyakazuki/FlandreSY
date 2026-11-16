@@ -7,22 +7,20 @@ import '../../design_tokens.dart';
 import '../theme/shui_motion.dart';
 import 'shui_components.dart';
 
-/// 单个选项模型：标题 + 可选副标题（价格）+ 图标资产 + 图标色。
+/// 单个选项模型：标题 + 可选副标题（价格）+ 图标资产。
 class OptionItem {
   const OptionItem({
     required this.title,
     this.subtitle,
     this.iconAsset,
-    required this.iconColor,
   });
 
   final String title;
   final String? subtitle;
   final String? iconAsset;
-  final Color iconColor;
 }
 
-/// 通用选项卡（对齐 legacy OptionCard）。选中蓝/主色边 + 右下 ✓ 角标（带副标题时）。
+/// 通用选项卡（对齐 legacy OptionCard）。选中淡粉底 + 主色边 + 右下 ✓ 角标。
 /// 供套餐/温度/洗衣液/除菌液等多处复用。
 class OptionCard extends StatelessWidget {
   const OptionCard({
@@ -41,6 +39,9 @@ class OptionCard extends StatelessWidget {
     final textTheme = AppTypography.textTheme;
     final hasSubtitle = item.subtitle != null;
     final labelColor = selected ? accent : AppColors.deepText;
+    final checkSize = hasSubtitle
+        ? AppCustomTokens.optionCheckSize
+        : AppCustomTokens.optionCheckSize - AppCustomTokens.spaceXs;
     return AnimatedContainer(
       duration: ShuiMotion.duration(context, ShuiMotion.local),
       curve: ShuiMotion.easeOut,
@@ -134,33 +135,34 @@ class OptionCard extends StatelessWidget {
                     ),
             ),
           ),
-          if (hasSubtitle)
-            AnimatedSwitcher(
-              duration: ShuiMotion.duration(context, ShuiMotion.quick),
-              child: selected
-                  ? Align(
-                      key: const ValueKey('selected'),
-                      alignment: Alignment.bottomRight,
-                      child: Container(
-                        width: AppCustomTokens.optionCheckSize,
-                        height: AppCustomTokens.optionCheckSize,
-                        decoration: BoxDecoration(
-                          color: accent,
-                          borderRadius: const BorderRadius.only(
-                            topLeft:
-                                Radius.circular(AppCustomTokens.radiusMedium),
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '✓',
-                          style: textTheme.labelSmall
-                              ?.copyWith(color: AppColors.onPrimary),
+          AnimatedSwitcher(
+            duration: ShuiMotion.duration(context, ShuiMotion.quick),
+            child: selected
+                ? Align(
+                    key: const ValueKey('selected'),
+                    alignment: Alignment.bottomRight,
+                    child: Container(
+                      // 单行矮格子角标小一号，不压到文字。
+                      width: checkSize,
+                      height: checkSize,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: const BorderRadius.only(
+                          topLeft:
+                              Radius.circular(AppCustomTokens.radiusMedium),
                         ),
                       ),
-                    )
-                  : const SizedBox(key: ValueKey('unselected')),
-            ),
+                      alignment: Alignment.center,
+                      // 用图标字体画勾：「✓」字符不是每种字体都有，缺字时角标只剩红块。
+                      child: Icon(
+                        Icons.check_rounded,
+                        size: checkSize - AppCustomTokens.spaceXs * 1.5,
+                        color: AppColors.onPrimary,
+                      ),
+                    ),
+                  )
+                : const SizedBox(key: ValueKey('unselected')),
+          ),
         ],
       ),
     );
@@ -209,7 +211,8 @@ class OptionSection extends StatelessWidget {
                     child: OptionCard(
                       item: options[i],
                       selected: i == selectedIndex,
-                      accent: options[i].iconColor,
+                      // 选中颜色统一用主色，不跟着选项图标变。
+                      accent: AppColors.primary,
                     ),
                   ),
                 ),
