@@ -1,7 +1,7 @@
 name: flandresy
 description: FlandreSY 2.0 Flutter rewrite.
 publish_to: none
-version: 2.2.0+5000
+version: 2.2.1+5004
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
