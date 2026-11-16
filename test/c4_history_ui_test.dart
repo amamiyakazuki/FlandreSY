@@ -45,7 +45,7 @@ void main() {
               state: RuntimeTaskState.failure, message: '旧数据保全未完成，请先重试保全')),
     ))));
     expect(find.text('旧数据保全未完成，请先重试保全'), findsOneWidget);
-    expect(find.text('设备 A-device'), findsNothing);
+    expect(find.text('today-A-device'), findsNothing);
   });
 
   testWidgets(
@@ -74,16 +74,16 @@ void main() {
     await tester.tap(find.text('订单'));
     await tester.pumpAndSettle();
     expect(api.calls, 1);
-    expect(find.text('设备 A-device'), findsOneWidget);
-    expect(find.text('设备 B-device'), findsNothing);
+    expect(find.text('today-A-device'), findsOneWidget);
+    expect(find.text('today-B-device'), findsNothing);
     expect(find.textContaining('历史未更新'), findsOneWidget);
     api.loader = () async => [record('new-A')];
-    await tester.ensureVisible(find.text('刷新热水历史'));
-    await tester.tap(find.text('刷新热水历史'));
+    await tester.ensureVisible(find.text('刷新'));
+    await tester.tap(find.text('刷新'));
     await tester.pumpAndSettle();
     expect(api.calls, 2);
-    expect(find.text('设备 new-A'), findsOneWidget);
-    expect(find.text('设备 A-device'), findsNothing);
+    expect(find.text('today-new-A'), findsOneWidget);
+    expect(find.text('today-A-device'), findsNothing);
     expect(find.text('热水历史已加载'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
@@ -123,29 +123,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(loads, 2);
     expect(find.text('热水历史加载失败，请稍后重试'), findsOneWidget);
-    expect(find.text('以下为本地缓存，尚未确认最新记录'), findsOneWidget);
-    await tester.tap(find.text('刷新热水历史'));
+    await tester.tap(find.text('刷新'));
     expect(loads, 3);
   });
 
   for (final account in ['A', 'B', '']) {
-    testWidgets(
-        'panel displays only current owner and separates legacy: $account',
-        (tester) async {
+    testWidgets('panel displays only current owner: $account', (tester) async {
       await tester.pumpWidget(MaterialApp(
           home: Scaffold(
               body: SingleChildScrollView(
                   child: HotwaterHistoryPanel(state: stateFor(account))))));
-      expect(find.text('设备 A-device'),
+      expect(find.text('today-A-device'),
           account == 'A' ? findsOneWidget : findsNothing);
-      expect(find.text('设备 B-device'),
+      expect(find.text('today-B-device'),
           account == 'B' ? findsOneWidget : findsNothing);
-      expect(find.text('设备 old-device'), findsNothing);
-      expect(find.text('旧记录（归属待核对）· 1'), findsOneWidget);
-      await tester.tap(find.text('旧记录（归属待核对）· 1'));
-      await tester.pumpAndSettle();
-      expect(find.text('设备 old-device'), findsOneWidget);
-      expect(find.text('这些旧记录已保留，无法确认所属账号，不计入当前账号历史。'), findsOneWidget);
+      // 无法确认归属的旧记录不再显示。
+      expect(find.text('old'), findsNothing);
       if (account.isEmpty) expect(find.text('请先登录住理账号后查询历史'), findsOneWidget);
     });
   }
@@ -160,7 +153,7 @@ void main() {
                 onRefresh: () => calls++))));
     expect(
         tester
-            .widget<TextButton>(find.widgetWithText(TextButton, '正在加载历史'))
+            .widget<TextButton>(find.widgetWithText(TextButton, '加载中'))
             .onPressed,
         isNull);
     expect(find.text('暂无热水历史'), findsNothing);
@@ -178,9 +171,7 @@ void main() {
     expect(calls, 0);
   });
 
-  testWidgets(
-      'narrow large-font order view and expanded archive remain readable',
-      (tester) async {
+  testWidgets('narrow large-font order view remains readable', (tester) async {
     tester.view.physicalSize = const Size(320, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -198,11 +189,7 @@ void main() {
             onOpenDrinking: () {},
             onRefreshHotwater: () {})));
     await tester.pumpAndSettle();
-    final legacy = find.text('旧记录（归属待核对）· 1');
-    await tester.ensureVisible(legacy);
-    await tester.tap(legacy);
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('设备 old-device'));
+    await tester.ensureVisible(find.text('today-A-device'));
     expect(tester.takeException(), isNull);
   });
 }

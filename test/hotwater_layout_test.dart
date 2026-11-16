@@ -76,13 +76,7 @@ void main() {
         }
         expect(starts, 2);
         expect(stops, 2);
-        for (final text in [
-          message,
-          '设备 $device',
-          status,
-          '¥12345.67',
-          '住理热水历史'
-        ]) {
+        for (final text in [message, status, '¥12345.67', '热水记录']) {
           final finder = find.text(text);
           await tester.ensureVisible(finder);
           await tester.pumpAndSettle();

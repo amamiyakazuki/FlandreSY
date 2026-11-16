@@ -215,14 +215,14 @@ void main() {
     for (final status in RuntimeTaskState.values) {
       await _detail(tester,
           _state(history: status, records: true, historyMessage: '保留具体原因'));
-      expect(find.text('设备 旧设备'), findsOneWidget);
+      expect(find.text('12:00'), findsOneWidget);
       expect(find.text('保留具体原因'), findsOneWidget);
       expect(find.text('暂无热水历史'), findsNothing);
     }
     await _detail(
         tester, _state(history: RuntimeTaskState.failure, records: true));
     expect(find.text('热水历史加载失败，请稍后重试'), findsOneWidget);
-    expect(find.text('设备 旧设备'), findsOneWidget);
+    expect(find.text('12:00'), findsOneWidget);
     expect(find.text('暂无热水历史'), findsNothing);
   });
 
@@ -237,7 +237,7 @@ void main() {
             records: true,
             historyMessage: '住理失败原因'));
     expect(find.text('慧生活798暂不提供账号历史，本页不会混入住理订单。'), findsOneWidget);
-    expect(find.text('设备 旧设备'), findsNothing);
+    expect(find.text('12:00'), findsNothing);
     expect(find.text('住理失败原因'), findsNothing);
     expect(find.text('暂无热水历史'), findsNothing);
     expect(find.text('启动洗浴'), findsOneWidget);
