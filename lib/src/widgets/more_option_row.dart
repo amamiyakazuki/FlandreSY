@@ -11,7 +11,8 @@ import 'shui_components.dart';
 /// [trailing] 非空时替代默认 `›`（如放置开关 Switch）；此时 [onTap] 可为 null（整行不可点）。
 class MoreOptionRow extends StatelessWidget {
   const MoreOptionRow({
-    required this.iconAsset,
+    this.iconAsset,
+    this.icon,
     required this.title,
     required this.subtitle,
     this.onTap,
@@ -19,7 +20,9 @@ class MoreOptionRow extends StatelessWidget {
     super.key,
   });
 
-  final String iconAsset;
+  /// 红色线条图标素材；没有合适素材时用 [icon]（系统图标，按同色绘制）。
+  final String? iconAsset;
+  final IconData? icon;
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
@@ -38,7 +41,12 @@ class MoreOptionRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          DecorativeImage(iconAsset, size: AppCustomTokens.navIconSize),
+          if (iconAsset != null)
+            DecorativeImage(iconAsset!, size: AppCustomTokens.navIconSize)
+          else
+            Icon(icon,
+                size: AppCustomTokens.navIconSize,
+                color: AppColors.primaryDark),
           const SizedBox(width: AppCustomTokens.radiusCompact),
           Expanded(
             child: Column(

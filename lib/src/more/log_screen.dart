@@ -119,7 +119,7 @@ class _LogScreenState extends State<LogScreen> {
     return Scaffold(
       body: Column(
         children: [
-          TopHeader(title: '运行日志', showBack: true, onBack: widget.onBack),
+          TopHeader(title: '日志与诊断', showBack: true, onBack: widget.onBack),
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
@@ -132,7 +132,7 @@ class _LogScreenState extends State<LogScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    '主界面已隐藏日志，后台组件的结果也会记录在这里',
+                    '这里记录 App 的运行情况，遇到问题时可以复制发给开发者',
                     style: textTheme.bodyMedium
                         ?.copyWith(color: AppColors.mutedText),
                   ),

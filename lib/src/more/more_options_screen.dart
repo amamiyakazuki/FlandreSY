@@ -99,7 +99,8 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
                       children: [
                         for (final row in _rows()) ...[
                           MoreOptionRow(
-                            iconAsset: row.icon,
+                            iconAsset: row.iconAsset,
+                            icon: row.icon,
                             title: row.title,
                             subtitle: row.subtitle,
                             onTap: row.onTap,
@@ -137,22 +138,23 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
     );
   }
 
+  // 图标按功能选：盾牌=权限，清单=日志，刷新=检查版本，上下箭头=导入导出，i=关于。
   List<_OptionRowData> _rows() {
     return [
       _OptionRowData(
-        icon: ShuiAssets.shuiRed1,
+        iconAsset: ShuiAssets.shuiRed1,
         title: '权限检测',
         subtitle: '查看权限状态，按需申请或前往设置',
         onTap: _checkPermissions,
       ),
       _OptionRowData(
-        icon: ShuiAssets.shuiRed2,
+        iconAsset: ShuiAssets.shuiRed2,
         title: '日志与诊断',
         subtitle: '查看本地运行日志',
         onTap: widget.onOpenLogs,
       ),
       _OptionRowData(
-        icon: ShuiAssets.shuiRed3,
+        icon: Icons.sync_rounded,
         title: '检查版本',
         subtitle: _checkingVersion
             ? '正在检查更新…'
@@ -160,19 +162,19 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
         onTap: _checkVersion,
       ),
       _OptionRowData(
-        icon: ShuiAssets.shuiRed4,
+        iconAsset: ShuiAssets.shuiRed3,
         title: '导出洗衣机设备列表',
         subtitle: '复制本地设备 JSON 到剪贴板',
         onTap: widget.onExportDevices,
       ),
       _OptionRowData(
-        icon: ShuiAssets.shuiRed5,
+        iconAsset: ShuiAssets.shuiRed3,
         title: '导入洗衣机设备列表',
         subtitle: '从剪贴板恢复本地设备 JSON',
         onTap: widget.onImportDevices,
       ),
       _OptionRowData(
-        icon: ShuiAssets.shuiRed1,
+        iconAsset: ShuiAssets.shuiRed5,
         title: '关于',
         subtitle: '版本、说明与支持范围',
         onTap: () => setState(() => _overlay = _Overlay.about),
@@ -183,13 +185,15 @@ class _MoreOptionsScreenState extends State<MoreOptionsScreen> {
 
 class _OptionRowData {
   const _OptionRowData({
-    required this.icon,
+    this.iconAsset,
+    this.icon,
     required this.title,
     required this.subtitle,
     required this.onTap,
   });
 
-  final String icon;
+  final String? iconAsset;
+  final IconData? icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;

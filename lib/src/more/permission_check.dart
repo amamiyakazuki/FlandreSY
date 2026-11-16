@@ -75,7 +75,7 @@ class _PermissionCheckScreenState extends State<PermissionCheckScreen>
   Widget build(BuildContext context) => Scaffold(
           body: Column(children: [
         TopHeader(
-            title: '权限与功能',
+            title: '权限检测',
             showBack: true,
             onBack: () => Navigator.of(context).pop()),
         Expanded(
