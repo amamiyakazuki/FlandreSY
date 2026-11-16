@@ -17,7 +17,8 @@ class HotWaterCard extends StatelessWidget {
     required this.onStartHotwater,
     required this.onStopHotwater,
     required this.onSwitchBathSystem,
-    required this.onOpenDetail,
+    required this.onOpenHistory,
+    this.onClearLocal,
     super.key,
   });
 
@@ -25,7 +26,12 @@ class HotWaterCard extends StatelessWidget {
   final VoidCallback onStartHotwater;
   final VoidCallback onStopHotwater;
   final VoidCallback onSwitchBathSystem;
-  final VoidCallback onOpenDetail;
+
+  /// 跳到订单页「热水」分类。
+  final VoidCallback onOpenHistory;
+
+  /// 会话卡住（未确认已开启）时，在状态说明弹窗里提供「仅清除本地状态」。
+  final VoidCallback? onClearLocal;
 
   @override
   Widget build(BuildContext context) {
@@ -59,11 +65,11 @@ class HotWaterCard extends StatelessWidget {
         children: [
           ShuiPressable(
             soft: true,
-            onTap: onOpenDetail,
+            onTap: onOpenHistory,
             child: SectionTitle(
               icon: ShuiAssets.shuiFire,
-              title: '热水控制页',
-              trailing: '查看详情 ›',
+              title: '热水控制',
+              trailing: '热水记录 ›',
             ),
           ),
           const SizedBox(height: AppCustomTokens.spaceXs),
@@ -189,6 +195,13 @@ class HotWaterCard extends StatelessWidget {
   void _showStatusDetails(BuildContext context, HotwaterStatusCopy copy) {
     final start = state.hotwaterStart.message?.trim();
     final stop = state.hotwaterStop.message?.trim();
+    final session = state.hotwater.session;
+    final busy = state.hotwaterStart.isBusy || state.hotwaterStop.isBusy;
+    final clearLocal = onClearLocal;
+    final canClearLocal = clearLocal != null &&
+        !busy &&
+        session != null &&
+        session.phase != HotwaterSessionPhase.active;
     showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -212,6 +225,13 @@ class HotWaterCard extends StatelessWidget {
                 ],
               )),
               actions: [
+                if (canClearLocal)
+                  TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        clearLocal();
+                      },
+                      child: const Text('仅清除本地状态')),
                 TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('知道了'))

@@ -22,7 +22,8 @@ class HomeScreen extends StatelessWidget {
     required this.onScan,
     required this.onWasherSummary,
     required this.onSwitchBathSystem,
-    required this.onOpenHotwaterDetail,
+    required this.onOpenHotwaterHistory,
+    this.onClearLocalHotwater,
     this.onOpenTask,
     this.nowMillis,
     super.key,
@@ -36,7 +37,8 @@ class HomeScreen extends StatelessWidget {
   final VoidCallback onScan;
   final VoidCallback onWasherSummary;
   final VoidCallback onSwitchBathSystem;
-  final VoidCallback onOpenHotwaterDetail;
+  final VoidCallback onOpenHotwaterHistory;
+  final VoidCallback? onClearLocalHotwater;
   final ValueChanged<HomeTaskTarget>? onOpenTask;
   final int Function()? nowMillis;
 
@@ -88,7 +90,8 @@ class HomeScreen extends StatelessWidget {
                         onStartHotwater: onStartHotwater,
                         onStopHotwater: onStopHotwater,
                         onSwitchBathSystem: onSwitchBathSystem,
-                        onOpenDetail: onOpenHotwaterDetail,
+                        onOpenHistory: onOpenHotwaterHistory,
+                        onClearLocal: onClearLocalHotwater,
                       ),
                       const SizedBox(height: AppCustomTokens.sectionGap),
                       ScanCard(onScan: onScan),

@@ -41,7 +41,7 @@ Future<void> mount(
                       onStartHotwater: start ?? () {},
                       onStopHotwater: stop ?? () {},
                       onSwitchBathSystem: change ?? () {},
-                      onOpenDetail: () {}))))));
+                      onOpenHistory: () {}))))));
   await tester.pumpAndSettle();
 }
 

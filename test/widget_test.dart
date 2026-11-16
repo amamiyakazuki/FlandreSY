@@ -1,7 +1,9 @@
 // Design tokens used indirectly via FlandreApp; this smoke test verifies the current bounded module shell.
 
 import 'support/test_runtime.dart';
+import 'package:flandresy/src/orders/orders_screen.dart';
 import 'package:flandresy/src/profile/account_detail_screen.dart';
+import 'package:flandresy/src/widgets/order_list_item.dart';
 import 'package:flandresy/src/runtime/models/account_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +15,7 @@ void main() {
 
     expect(find.text('芙兰水衣'), findsWidgets);
     expect(find.text('进行中'), findsOneWidget);
-    expect(find.text('热水控制页'), findsOneWidget);
+    expect(find.text('热水控制'), findsOneWidget);
     expect(find.text('扫码使用'), findsOneWidget);
     expect(find.text('洗衣设备'), findsOneWidget);
   });
@@ -72,5 +74,31 @@ void main() {
               .kind,
           kind);
     }
+  });
+
+  testWidgets('home hot water records link opens the orders hot water list',
+      (tester) async {
+    await tester.pumpWidget(TestApp());
+    await tester.pumpAndSettle(const Duration(milliseconds: 700));
+    await tester.tap(find.text('知道了，继续'));
+    await tester.pumpAndSettle();
+
+    bool hotwaterSelected() => tester
+        .widget<CategoryChip>(find.widgetWithText(CategoryChip, '热水'))
+        .selected;
+
+    // 先在订单页切到别的分类，确认跳转会切回「热水」。
+    await tester.tap(find.text('订单').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(CategoryChip, '洗衣'));
+    await tester.pumpAndSettle();
+    expect(hotwaterSelected(), isFalse);
+    await tester.tap(find.text('功能').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('热水记录 ›'));
+    await tester.pumpAndSettle();
+    expect(find.byType(OrdersScreen), findsOneWidget);
+    expect(hotwaterSelected(), isTrue);
   });
 }

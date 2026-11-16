@@ -31,6 +31,7 @@ class OrdersScreen extends StatefulWidget {
     this.active = true,
     this.onRefreshHotwater,
     this.onOpenStats,
+    this.hotwaterFocusRequest = 0,
     super.key,
   });
 
@@ -42,6 +43,9 @@ class OrdersScreen extends StatefulWidget {
   final bool active;
   final VoidCallback? onRefreshHotwater;
   final VoidCallback? onOpenStats;
+
+  /// 每次加一都切到「热水」分类（首页热水卡「热水记录 ›」、进行中的热水任务）。
+  final int hotwaterFocusRequest;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -60,6 +64,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
   @override
   void didUpdateWidget(covariant OrdersScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.hotwaterFocusRequest != widget.hotwaterFocusRequest &&
+        _category != OrderCategory.hotwater) {
+      setState(() => _category = OrderCategory.hotwater);
+      _scheduleHistoryLoad();
+    }
     if ((!oldWidget.active && widget.active) ||
         oldWidget.state.zhuli.phone != widget.state.zhuli.phone ||
         oldWidget.state.hotwaterLogin.state !=

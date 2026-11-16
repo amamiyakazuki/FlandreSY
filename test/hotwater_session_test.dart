@@ -15,7 +15,6 @@ import 'package:flandresy/src/home/cards/hot_water_card.dart';
 import 'package:flandresy/src/data/secure_session_repository.dart';
 import 'package:flandresy/src/data/settings_repository.dart';
 import 'package:flandresy/src/data/shared_prefs_settings_repository.dart';
-import 'package:flandresy/src/hotwater/hotwater_detail_screen.dart';
 import 'support/test_runtime.dart';
 import 'package:flandresy/src/runtime/hotwater_state.dart';
 import 'package:flandresy/src/runtime/live_clock.dart';
@@ -693,8 +692,7 @@ void main() {
 
     for (final busy in [false, true]) {
       for (final running in [false, true]) {
-        testWidgets(
-            'both home and detail buttons accept taps: busy=$busy running=$running',
+        testWidgets('home buttons accept taps: busy=$busy running=$running',
             (tester) async {
           final state = ShuiHomeState(
             bathSystemPreference: BathSystemPreference.zhuli,
@@ -708,33 +706,24 @@ void main() {
           );
           var starts = 0;
           var stops = 0;
-          for (final detail in [false, true]) {
-            await tester.pumpWidget(MaterialApp(
-                home: detail
-                    ? HotwaterDetailScreen(
-                        state: state,
-                        onBack: () {},
-                        onStart: () => starts++,
-                        onStop: () => stops++)
-                    : Scaffold(
-                        body: HotWaterCard(
-                            state: state,
-                            onStartHotwater: () => starts++,
-                            onStopHotwater: () => stops++,
-                            onSwitchBathSystem: () {},
-                            onOpenDetail: () {}))));
-            await tester.tap(find.text('启动热水'));
-            await tester.tap(find.text('停止热水'));
-          }
-          expect(starts, 2);
-          expect(stops, 2);
+          await tester.pumpWidget(MaterialApp(
+              home: Scaffold(
+                  body: HotWaterCard(
+                      state: state,
+                      onStartHotwater: () => starts++,
+                      onStopHotwater: () => stops++,
+                      onSwitchBathSystem: () {},
+                      onOpenHistory: () {}))));
+          await tester.tap(find.text('启动热水'));
+          await tester.tap(find.text('停止热水'));
+          expect(starts, 1);
+          expect(stops, 1);
         });
       }
     }
   });
 
-  testWidgets(
-      'detail exposes a neutral local-clear result only for unreconciled state',
+  testWidgets('status dialog offers local clear only for unreconciled state',
       (tester) async {
     final session = HotwaterSession(
       id: 'session-widget',
@@ -747,51 +736,69 @@ void main() {
       phase: HotwaterSessionPhase.uncertain,
     );
     var clearCalls = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HotwaterDetailScreen(
-          state: ShuiHomeState(
-            bathSystemPreference: BathSystemPreference.zhuli,
-            hotwater: HotwaterState(
-              running: true,
-              session: session,
-              start: const RuntimeActionStatus(
-                state: RuntimeTaskState.unavailable,
-                message: '热水状态待确认',
+    Future<void> pumpCard(ShuiHomeState state) => tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: HotWaterCard(
+                state: state,
+                onStartHotwater: () {},
+                onStopHotwater: () {},
+                onSwitchBathSystem: () {},
+                onOpenHistory: () {},
+                onClearLocal: () => clearCalls++,
               ),
             ),
           ),
-          onBack: () {},
-          onStart: () {},
-          onStop: () {},
-          onClearLocal: () => clearCalls++,
+        );
+
+    await pumpCard(ShuiHomeState(
+      bathSystemPreference: BathSystemPreference.zhuli,
+      hotwater: HotwaterState(
+        running: true,
+        session: session,
+        start: const RuntimeActionStatus(
+          state: RuntimeTaskState.unavailable,
+          message: '热水状态待确认',
         ),
       ),
-    );
-
-    expect(find.text('仅清除本地状态'), findsOneWidget);
+    ));
+    await tester.tap(find.byKey(const ValueKey('hotwater-status-details')));
+    await tester.pumpAndSettle();
     expect(find.text('热水状态待确认'), findsOneWidget);
     await tester.tap(find.text('仅清除本地状态'));
+    await tester.pumpAndSettle();
     expect(clearCalls, 1);
+    expect(find.byType(AlertDialog), findsNothing);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: HotwaterDetailScreen(
-          state: const ShuiHomeState(
-            bathSystemPreference: BathSystemPreference.zhuli,
-            hotwater: HotwaterState(
-              start: RuntimeActionStatus(
-                state: RuntimeTaskState.success,
-                message: '已清除本地热水状态，设备状态仍需现场确认',
-              ),
-            ),
-          ),
-          onBack: () {},
-          onStart: () {},
-          onStop: () {},
+    // 已确认开启（active）时不提供本地清除，避免误删可用的关水凭据。
+    await pumpCard(ShuiHomeState(
+      bathSystemPreference: BathSystemPreference.zhuli,
+      hotwater: HotwaterState(
+        running: true,
+        session: session.copyWith(phase: HotwaterSessionPhase.active),
+        start: const RuntimeActionStatus(
+          state: RuntimeTaskState.success,
+          message: '热水使用中',
         ),
       ),
-    );
+    ));
+    await tester.tap(find.byKey(const ValueKey('hotwater-status-details')));
+    await tester.pumpAndSettle();
+    expect(find.text('仅清除本地状态'), findsNothing);
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
+
+    await pumpCard(const ShuiHomeState(
+      bathSystemPreference: BathSystemPreference.zhuli,
+      hotwater: HotwaterState(
+        start: RuntimeActionStatus(
+          state: RuntimeTaskState.success,
+          message: '已清除本地热水状态，设备状态仍需现场确认',
+        ),
+      ),
+    ));
+    await tester.tap(find.byKey(const ValueKey('hotwater-status-details')));
+    await tester.pumpAndSettle();
     expect(find.text('已清除本地热水状态，设备状态仍需现场确认'), findsOneWidget);
     expect(find.text('仅清除本地状态'), findsNothing);
   });
@@ -837,8 +844,12 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 1));
 
-    await tester.tap(find.text('查看详情 ›'));
-    await tester.pumpAndSettle();
+    Future<void> openStatusDialog() async {
+      await tester.tap(find.byKey(const ValueKey('hotwater-status-details')));
+      await tester.pumpAndSettle();
+    }
+
+    await openStatusDialog();
     expect(find.text('仅清除本地状态'), findsOneWidget);
 
     await tester.tap(find.text('仅清除本地状态'));
@@ -849,6 +860,7 @@ void main() {
     expect(find.text('清除本地热水状态'), findsNothing);
     expect(await settings.loadHotwaterSession(), isNotNull);
 
+    await openStatusDialog();
     await tester.tap(find.text('仅清除本地状态'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('确认清除'));

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flandresy/design_tokens.dart';
 import 'package:flandresy/src/home/cards/hot_water_card.dart';
-import 'package:flandresy/src/hotwater/hotwater_detail_screen.dart';
+import 'package:flandresy/src/hotwater/hotwater_history_panel.dart';
 import 'package:flandresy/src/runtime/shui_runtime.dart';
 import 'package:flandresy/src/runtime/hotwater_state.dart';
 import 'package:flandresy/src/runtime/account_state.dart';
@@ -67,14 +67,16 @@ Future<void> _home(WidgetTester tester, ShuiHomeState state,
                           onStartHotwater: start ?? () {},
                           onStopHotwater: stop ?? () {},
                           onSwitchBathSystem: () {},
-                          onOpenDetail: () {})))))));
+                          onOpenHistory: () {})))))));
   await tester.pumpAndSettle();
 }
 
-Future<void> _detail(WidgetTester tester, ShuiHomeState state) async {
+/// 热水记录面板（订单页「热水」分类）。
+Future<void> _history(WidgetTester tester, ShuiHomeState state) async {
   await tester.pumpWidget(MaterialApp(
-      home: HotwaterDetailScreen(
-          state: state, onBack: () {}, onStart: () {}, onStop: () {})));
+      home: Scaffold(
+          body: SingleChildScrollView(
+              child: HotwaterHistoryPanel(state: state, onRefresh: () {})))));
   await tester.pumpAndSettle();
 }
 
@@ -197,7 +199,8 @@ void main() {
     };
     for (final status in RuntimeTaskState.values) {
       for (final message in [null, '', '   ']) {
-        await _detail(tester, _state(history: status, historyMessage: message));
+        await _history(
+            tester, _state(history: status, historyMessage: message));
         if (status == RuntimeTaskState.success) {
           expect(find.text('暂无热水历史'), findsOneWidget);
         } else {
@@ -213,34 +216,16 @@ void main() {
       'history failure/loading keeps old rows and specific error messages',
       (tester) async {
     for (final status in RuntimeTaskState.values) {
-      await _detail(tester,
+      await _history(tester,
           _state(history: status, records: true, historyMessage: '保留具体原因'));
       expect(find.text('12:00'), findsOneWidget);
       expect(find.text('保留具体原因'), findsOneWidget);
       expect(find.text('暂无热水历史'), findsNothing);
     }
-    await _detail(
+    await _history(
         tester, _state(history: RuntimeTaskState.failure, records: true));
     expect(find.text('热水历史加载失败，请稍后重试'), findsOneWidget);
     expect(find.text('12:00'), findsOneWidget);
     expect(find.text('暂无热水历史'), findsNothing);
-  });
-
-  testWidgets(
-      '798 retains its explanation without Zhuli history or query state',
-      (tester) async {
-    await _detail(
-        tester,
-        _state(
-            system: BathSystemPreference.shower798,
-            history: RuntimeTaskState.failure,
-            records: true,
-            historyMessage: '住理失败原因'));
-    expect(find.text('慧生活798暂不提供账号历史，本页不会混入住理订单。'), findsOneWidget);
-    expect(find.text('12:00'), findsNothing);
-    expect(find.text('住理失败原因'), findsNothing);
-    expect(find.text('暂无热水历史'), findsNothing);
-    expect(find.text('启动洗浴'), findsOneWidget);
-    expect(find.text('停止洗浴'), findsOneWidget);
   });
 }

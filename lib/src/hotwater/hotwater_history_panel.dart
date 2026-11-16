@@ -8,7 +8,7 @@ import '../theme/shui_assets.dart';
 import '../widgets/order_list_item.dart';
 import '../widgets/shui_components.dart';
 
-/// 订单页与热水详情共用的住理热水记录列表（只显示当前账号）。
+/// 订单页「热水」分类的住理热水记录列表（只显示当前账号）。
 class HotwaterHistoryPanel extends StatelessWidget {
   const HotwaterHistoryPanel({
     required this.state,

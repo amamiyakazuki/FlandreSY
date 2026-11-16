@@ -13,7 +13,6 @@ import '../devices/device_import_dialog.dart';
 import '../devices/devices_screen.dart';
 import '../devices/drinking_water_screen.dart';
 import '../home/home_screen.dart';
-import '../hotwater/hotwater_detail_screen.dart';
 import '../more/more_options_screen.dart';
 import '../notifications/order_notifier.dart';
 import '../more/log_screen.dart';
@@ -160,6 +159,14 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   void _confirmPermissionIntro() {
     setState(() => permissionVisible = false);
     ShuiRuntimeScope.of(context).markPermissionIntroSeen();
+  }
+
+  int _hotwaterFocusRequest = 0;
+
+  /// 热水没有单独的详情页：记录在订单页「热水」分类，开关在首页热水卡。
+  void _openHotwaterHistory() {
+    setState(() => _hotwaterFocusRequest++);
+    _selectTab(MainTab.orders);
   }
 
   void _selectTab(MainTab tab) {
@@ -428,15 +435,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onRemoveLocal: runtime.removeCurrentWasherOrderLocally,
           nowMillis: runtime.clock.nowMillis,
         ),
-      HotwaterDetailRoute() => HotwaterDetailScreen(
-          controlUnavailableReason: runtime.zhuliControlUnavailableReason,
-          onRefreshHistory: runtime.loadHotwaterHistory,
-          state: runtime.state,
-          onBack: _handlePop,
-          onStart: () => _startHotwater(runtime),
-          onStop: () => _stopHotwater(runtime),
-          onClearLocal: () => _clearLocalHotwater(runtime),
-        ),
       MoreOptionsRoute() => MoreOptionsScreen(
           onBack: _handlePop,
           onImportDevices: () => _importDevices(runtime),
@@ -465,7 +463,6 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
       AccountHubRoute() => 'account-hub',
       AccountDetailRoute(:final kind) => 'account-${kind.name}',
       WasherOrderRoute(:final qr) => 'washer-$qr',
-      HotwaterDetailRoute() => 'hotwater-detail',
       MoreOptionsRoute() => 'more-options',
       DiagnosticLogRoute() => 'diagnostic-log',
       SpendingRoute() => 'spending',
@@ -498,13 +495,8 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onOpenDevices: () => _selectTab(MainTab.devices),
           onStartHotwater: () => _startHotwater(runtime),
           onStopHotwater: () => _stopHotwater(runtime),
-          onOpenHotwaterDetail: () {
-            if (runtime.state.hotwaterControlSystem ==
-                BathSystemPreference.zhuli) {
-              runtime.loadHotwaterHistory();
-            }
-            _setRoute(const HotwaterDetailRoute());
-          },
+          onOpenHotwaterHistory: _openHotwaterHistory,
+          onClearLocalHotwater: () => _clearLocalHotwater(runtime),
           onScan: () => _scanFromHome(runtime),
           onWasherSummary: runtime.openWasherSummary,
           onOpenTask: (target) => _openTask(runtime, target),
@@ -520,6 +512,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
           onOpenWasherOrder: () => _openTask(runtime, HomeTaskTarget.washer),
           onOpenDrinking: () => _openTask(runtime, HomeTaskTarget.drinking),
           onOpenStats: () => _setRoute(const SpendingRoute()),
+          hotwaterFocusRequest: _hotwaterFocusRequest,
         ),
       MainTab.devices => DevicesScreen(
           state: runtime.state,
@@ -541,10 +534,7 @@ class _ShuiShellState extends State<ShuiShell> with WidgetsBindingObserver {
   void _openTask(ShuiRuntime runtime, HomeTaskTarget target) {
     switch (target) {
       case HomeTaskTarget.hotwater:
-        if (runtime.state.hotwaterControlSystem == BathSystemPreference.zhuli) {
-          runtime.loadHotwaterHistory();
-        }
-        _setRoute(const HotwaterDetailRoute());
+        _openHotwaterHistory();
       case HomeTaskTarget.washer:
         final order = runtime.state.currentWasherOrder;
         _setRoute(WasherOrderRoute(order?.deviceNo ?? ''));
