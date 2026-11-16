@@ -90,9 +90,11 @@ class ProfileScreen extends StatelessWidget {
 class _ProfileBottomDecor extends StatelessWidget {
   const _ProfileBottomDecor();
 
+  /// 原设计 258dp 太抢眼，用一半宽度。
+  static const double _width = AppCustomTokens.profileBottomDecorSize / 2;
+
   /// shui_wode_bottom.png 960×555，内容从 x=155 开始。
-  static const double _contentShift =
-      AppCustomTokens.profileBottomDecorSize * 155 / 960 / 2;
+  static const double _contentShift = _width * 155 / 960 / 2;
 
   @override
   Widget build(BuildContext context) {
@@ -110,8 +112,8 @@ class _ProfileBottomDecor extends StatelessWidget {
             offset: const Offset(-_contentShift, 0),
             child: DecorativeImage(
               ShuiAssets.profileBottom,
-              width: AppCustomTokens.profileBottomDecorSize,
-              height: AppCustomTokens.profileBottomDecorSize * 555 / 960,
+              width: _width,
+              height: _width * 555 / 960,
               opacity: AppCustomTokens.alphaNearOpaque,
             ),
           ),
